@@ -1,0 +1,870 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: AI Readiness Analyzer API for Shopify stores
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: stores
+    description: Store management
+  - name: products
+    description: Product analysis
+  - name: analysis
+    description: AI analysis and scoring
+  - name: fixes
+    description: Fix generation and application
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /stores:
+    get:
+      operationId: listStores
+      tags: [stores]
+      summary: List all connected stores
+      responses:
+        "200":
+          description: List of stores
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Store"
+    post:
+      operationId: connectStore
+      tags: [stores]
+      summary: Connect a Shopify store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectStoreBody"
+      responses:
+        "201":
+          description: Store connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        "400":
+          description: Invalid store URL or credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stores/{storeId}:
+    get:
+      operationId: getStore
+      tags: [stores]
+      summary: Get a store by ID
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Store details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Store"
+        "404":
+          description: Store not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteStore
+      tags: [stores]
+      summary: Disconnect a store
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Store disconnected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /stores/{storeId}/analyze:
+    post:
+      operationId: analyzeStore
+      tags: [analysis]
+      summary: Trigger full store analysis
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Analysis started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisJob"
+        "404":
+          description: Store not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stores/{storeId}/summary:
+    get:
+      operationId: getStoreSummary
+      tags: [analysis]
+      summary: Get store AI readiness summary and scores
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Store summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoreSummary"
+        "404":
+          description: Store not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stores/{storeId}/products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products with their AI scores
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of products with scores
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+  /stores/{storeId}/products/{productId}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a product with detailed analysis
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Product with full analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductDetail"
+        "404":
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stores/{storeId}/gaps:
+    get:
+      operationId: listGaps
+      tags: [analysis]
+      summary: Get all detected gaps ranked by severity
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of gaps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Gap"
+
+  /stores/{storeId}/consistency:
+    get:
+      operationId: getConsistencyReport
+      tags: [analysis]
+      summary: Get store-wide consistency report
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consistency report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsistencyReport"
+
+  /stores/{storeId}/benchmark:
+    get:
+      operationId: getBenchmark
+      tags: [analysis]
+      summary: Compare store against ideal AI-ready benchmark
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Benchmark comparison
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BenchmarkReport"
+
+  /stores/{storeId}/fixes:
+    get:
+      operationId: listFixes
+      tags: [fixes]
+      summary: List all generated fixes for the store
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of fixes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Fix"
+
+  /stores/{storeId}/fixes/{fixId}/apply:
+    post:
+      operationId: applyFix
+      tags: [fixes]
+      summary: Apply a specific fix to the store
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: fixId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Fix applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixResult"
+        "404":
+          description: Fix not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /stores/{storeId}/fixes/bulk-apply:
+    post:
+      operationId: bulkApplyFixes
+      tags: [fixes]
+      summary: Apply multiple fixes at once
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkApplyBody"
+      responses:
+        "200":
+          description: Fixes applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkFixResult"
+
+  /stores/{storeId}/activity:
+    get:
+      operationId: getStoreActivity
+      tags: [stores]
+      summary: Get recent analysis and fix activity for a store
+      parameters:
+        - name: storeId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityItem"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
+
+    Store:
+      type: object
+      properties:
+        id:
+          type: string
+        domain:
+          type: string
+        name:
+          type: string
+        accessToken:
+          type: string
+        status:
+          type: string
+          enum: [connected, analyzing, analyzed, error]
+        lastAnalyzed:
+          type: ["string", "null"]
+        overallScore:
+          type: ["number", "null"]
+        productCount:
+          type: ["integer", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - domain
+        - name
+        - accessToken
+        - status
+        - createdAt
+
+    ConnectStoreBody:
+      type: object
+      properties:
+        domain:
+          type: string
+          description: Shopify store domain (e.g., mystore.myshopify.com)
+        accessToken:
+          type: string
+          description: Shopify Admin API access token
+        name:
+          type: string
+          description: Display name for the store
+      required:
+        - domain
+        - accessToken
+        - name
+
+    AnalysisJob:
+      type: object
+      properties:
+        jobId:
+          type: string
+        storeId:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        startedAt:
+          type: string
+        message:
+          type: string
+      required:
+        - jobId
+        - storeId
+        - status
+        - startedAt
+        - message
+
+    StoreSummary:
+      type: object
+      properties:
+        storeId:
+          type: string
+        storeName:
+          type: string
+        overallScore:
+          type: number
+        clarityScore:
+          type: number
+        completenessScore:
+          type: number
+        trustScore:
+          type: number
+        tagScore:
+          type: number
+        consistencyScore:
+          type: number
+        policyScore:
+          type: number
+        totalProducts:
+          type: integer
+        analyzedProducts:
+          type: integer
+        criticalIssues:
+          type: integer
+        mediumIssues:
+          type: integer
+        lowIssues:
+          type: integer
+        pendingFixes:
+          type: integer
+        appliedFixes:
+          type: integer
+        lastAnalyzed:
+          type: ["string", "null"]
+      required:
+        - storeId
+        - storeName
+        - overallScore
+        - clarityScore
+        - completenessScore
+        - trustScore
+        - tagScore
+        - consistencyScore
+        - policyScore
+        - totalProducts
+        - analyzedProducts
+        - criticalIssues
+        - mediumIssues
+        - lowIssues
+        - pendingFixes
+        - appliedFixes
+
+    ProductScore:
+      type: object
+      properties:
+        clarity:
+          type: number
+        completeness:
+          type: number
+        trust:
+          type: number
+        tags:
+          type: number
+        overall:
+          type: number
+      required:
+        - clarity
+        - completeness
+        - trust
+        - tags
+        - overall
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        storeId:
+          type: string
+        shopifyProductId:
+          type: string
+        title:
+          type: string
+        productType:
+          type: ["string", "null"]
+        vendor:
+          type: ["string", "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        imageUrl:
+          type: ["string", "null"]
+        price:
+          type: ["string", "null"]
+        score:
+          $ref: "#/components/schemas/ProductScore"
+        issueCount:
+          type: integer
+        hasAppliedFixes:
+          type: boolean
+        analyzedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - storeId
+        - shopifyProductId
+        - title
+        - tags
+        - score
+        - issueCount
+        - hasAppliedFixes
+
+    ProductDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        storeId:
+          type: string
+        shopifyProductId:
+          type: string
+        title:
+          type: string
+        description:
+          type: ["string", "null"]
+        productType:
+          type: ["string", "null"]
+        vendor:
+          type: ["string", "null"]
+        tags:
+          type: array
+          items:
+            type: string
+        imageUrl:
+          type: ["string", "null"]
+        price:
+          type: ["string", "null"]
+        score:
+          $ref: "#/components/schemas/ProductScore"
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/Gap"
+        fixes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fix"
+        aiPerceptionSummary:
+          type: ["string", "null"]
+        suggestedTags:
+          type: array
+          items:
+            type: string
+        analyzedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - storeId
+        - shopifyProductId
+        - title
+        - tags
+        - score
+        - issues
+        - fixes
+        - suggestedTags
+
+    Gap:
+      type: object
+      properties:
+        id:
+          type: string
+        storeId:
+          type: string
+        productId:
+          type: ["string", "null"]
+        productTitle:
+          type: ["string", "null"]
+        category:
+          type: string
+          enum: [clarity, completeness, trust, tags, policy, consistency]
+        severity:
+          type: string
+          enum: [high, medium, low]
+        title:
+          type: string
+        description:
+          type: string
+        suggestion:
+          type: string
+        isFixed:
+          type: boolean
+      required:
+        - id
+        - storeId
+        - category
+        - severity
+        - title
+        - description
+        - suggestion
+        - isFixed
+
+    ConsistencyIssue:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [tone, structure, formatting, missing_section]
+        description:
+          type: string
+        affectedProductCount:
+          type: integer
+        examples:
+          type: array
+          items:
+            type: string
+      required:
+        - type
+        - description
+        - affectedProductCount
+        - examples
+
+    ConsistencyReport:
+      type: object
+      properties:
+        storeId:
+          type: string
+        overallConsistencyScore:
+          type: number
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsistencyIssue"
+        suggestedStructure:
+          type: array
+          items:
+            type: string
+        analyzedAt:
+          type: ["string", "null"]
+      required:
+        - storeId
+        - overallConsistencyScore
+        - issues
+        - suggestedStructure
+
+    BenchmarkDimension:
+      type: object
+      properties:
+        name:
+          type: string
+        storeScore:
+          type: number
+        benchmarkScore:
+          type: number
+        gap:
+          type: number
+        priority:
+          type: string
+          enum: [high, medium, low]
+      required:
+        - name
+        - storeScore
+        - benchmarkScore
+        - gap
+        - priority
+
+    BenchmarkReport:
+      type: object
+      properties:
+        storeId:
+          type: string
+        overallStoreScore:
+          type: number
+        overallBenchmarkScore:
+          type: number
+        overallGap:
+          type: number
+        dimensions:
+          type: array
+          items:
+            $ref: "#/components/schemas/BenchmarkDimension"
+        topImprovements:
+          type: array
+          items:
+            type: string
+      required:
+        - storeId
+        - overallStoreScore
+        - overallBenchmarkScore
+        - overallGap
+        - dimensions
+        - topImprovements
+
+    Fix:
+      type: object
+      properties:
+        id:
+          type: string
+        storeId:
+          type: string
+        productId:
+          type: ["string", "null"]
+        productTitle:
+          type: ["string", "null"]
+        type:
+          type: string
+          enum: [description, tags, title, policy, structure]
+        status:
+          type: string
+          enum: [pending, applied, rejected]
+        title:
+          type: string
+        originalContent:
+          type: string
+        improvedContent:
+          type: string
+        explanation:
+          type: string
+        estimatedScoreImprovement:
+          type: number
+        createdAt:
+          type: string
+        appliedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - storeId
+        - type
+        - status
+        - title
+        - originalContent
+        - improvedContent
+        - explanation
+        - estimatedScoreImprovement
+        - createdAt
+
+    FixResult:
+      type: object
+      properties:
+        fixId:
+          type: string
+        success:
+          type: boolean
+        message:
+          type: string
+        newScore:
+          type: ["number", "null"]
+      required:
+        - fixId
+        - success
+        - message
+
+    BulkApplyBody:
+      type: object
+      properties:
+        fixIds:
+          type: array
+          items:
+            type: string
+      required:
+        - fixIds
+
+    BulkFixResult:
+      type: object
+      properties:
+        applied:
+          type: integer
+        failed:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/FixResult"
+      required:
+        - applied
+        - failed
+        - results
+
+    ActivityItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [analysis_started, analysis_completed, fix_applied, store_connected, gap_detected]
+        message:
+          type: string
+        timestamp:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required:
+        - id
+        - type
+        - message
+        - timestamp

@@ -1,0 +1,213 @@
+import { Router, type IRouter } from "express";
+import { eq, and } from "drizzle-orm";
+import { db, productsTable, gapsTable, fixesTable } from "@workspace/db";
+import { generateFix } from "../lib/ai-analyzer";
+import { generateId } from "../lib/id";
+
+const router: IRouter = Router();
+
+router.get("/stores/:storeId/products", async (req, res): Promise<void> => {
+  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
+  res.json(products.map(p => ({
+    id: p.id,
+    storeId: p.storeId,
+    shopifyProductId: p.shopifyProductId,
+    title: p.title,
+    productType: p.productType,
+    vendor: p.vendor,
+    tags: p.tags,
+    imageUrl: p.imageUrl,
+    price: p.price,
+    score: {
+      clarity: p.clarityScore,
+      completeness: p.completenessScore,
+      trust: p.trustScore,
+      tags: p.tagScore,
+      overall: p.overallScore,
+    },
+    issueCount: p.issueCount,
+    hasAppliedFixes: p.hasAppliedFixes,
+    analyzedAt: p.analyzedAt?.toISOString() ?? null,
+  })));
+});
+
+router.get("/stores/:storeId/products/:productId", async (req, res): Promise<void> => {
+  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
+
+  const [product] = await db
+    .select()
+    .from(productsTable)
+    .where(and(eq(productsTable.id, productId), eq(productsTable.storeId, storeId)));
+
+  if (!product) {
+    res.status(404).json({ error: "Product not found" });
+    return;
+  }
+
+  const issues = await db
+    .select()
+    .from(gapsTable)
+    .where(and(eq(gapsTable.productId, productId), eq(gapsTable.storeId, storeId)));
+
+  const fixes = await db
+    .select()
+    .from(fixesTable)
+    .where(and(eq(fixesTable.productId, productId), eq(fixesTable.storeId, storeId)));
+
+  res.json({
+    id: product.id,
+    storeId: product.storeId,
+    shopifyProductId: product.shopifyProductId,
+    title: product.title,
+    description: product.description,
+    productType: product.productType,
+    vendor: product.vendor,
+    tags: product.tags,
+    imageUrl: product.imageUrl,
+    price: product.price,
+    score: {
+      clarity: product.clarityScore,
+      completeness: product.completenessScore,
+      trust: product.trustScore,
+      tags: product.tagScore,
+      overall: product.overallScore,
+    },
+    issues: issues.map(g => ({
+      id: g.id,
+      storeId: g.storeId,
+      productId: g.productId,
+      productTitle: null,
+      category: g.category,
+      severity: g.severity,
+      title: g.title,
+      description: g.description,
+      suggestion: g.suggestion,
+      isFixed: g.isFixed,
+    })),
+    fixes: fixes.map(f => ({
+      id: f.id,
+      storeId: f.storeId,
+      productId: f.productId,
+      productTitle: null,
+      type: f.type,
+      status: f.status,
+      title: f.title,
+      originalContent: f.originalContent,
+      improvedContent: f.improvedContent,
+      explanation: f.explanation,
+      estimatedScoreImprovement: f.estimatedScoreImprovement,
+      createdAt: f.createdAt.toISOString(),
+      appliedAt: f.appliedAt?.toISOString() ?? null,
+    })),
+    aiPerceptionSummary: product.aiPerceptionSummary,
+    suggestedTags: product.suggestedTags,
+    analyzedAt: product.analyzedAt?.toISOString() ?? null,
+  });
+});
+
+router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res): Promise<void> => {
+  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
+  const { type } = req.body as { type?: string };
+
+  const validTypes = ["description", "tags", "title", "structure"] as const;
+  if (!type || !validTypes.includes(type as typeof validTypes[number])) {
+    res.status(400).json({ error: "type must be one of: description, tags, title, structure" });
+    return;
+  }
+  const fixType = type as typeof validTypes[number];
+
+  const [product] = await db
+    .select()
+    .from(productsTable)
+    .where(and(eq(productsTable.id, productId), eq(productsTable.storeId, storeId)));
+
+  if (!product) {
+    res.status(404).json({ error: "Product not found" });
+    return;
+  }
+
+  // Return existing pending fix of this type if one exists (avoid duplicate generation)
+  const [existing] = await db
+    .select()
+    .from(fixesTable)
+    .where(and(
+      eq(fixesTable.productId, productId),
+      eq(fixesTable.storeId, storeId),
+      eq(fixesTable.type, fixType),
+      eq(fixesTable.status, "pending"),
+    ));
+
+  if (existing) {
+    res.json({
+      fix: {
+        id: existing.id,
+        storeId: existing.storeId,
+        productId: existing.productId,
+        type: existing.type,
+        status: existing.status,
+        title: existing.title,
+        originalContent: existing.originalContent,
+        improvedContent: existing.editedContent ?? existing.improvedContent,
+        explanation: existing.explanation,
+        estimatedScoreImprovement: existing.estimatedScoreImprovement,
+        shopifySynced: existing.shopifySynced,
+        shopifyError: existing.shopifyError ?? null,
+        createdAt: existing.createdAt.toISOString(),
+        appliedAt: existing.appliedAt?.toISOString() ?? null,
+      },
+      generated: false,
+    });
+    return;
+  }
+
+  const originalContent = fixType === "tags"
+    ? product.tags.join(", ")
+    : product.description ?? product.title;
+
+  req.log.info({ storeId, productId, fixType }, "Generating on-demand fix");
+
+  const result = await generateFix(fixType, originalContent, {
+    productTitle: product.title,
+    productType: product.productType,
+    vendor: product.vendor,
+  });
+
+  const fixId = generateId();
+  const [inserted] = await db.insert(fixesTable).values({
+    id: fixId,
+    storeId,
+    productId,
+    type: fixType,
+    status: "pending",
+    title: `Improve ${fixType}: ${product.title}`,
+    originalContent,
+    improvedContent: result.improvedContent,
+    explanation: result.explanation,
+    estimatedScoreImprovement: result.estimatedScoreImprovement,
+  }).returning();
+
+  res.json({
+    fix: {
+      id: inserted.id,
+      storeId: inserted.storeId,
+      productId: inserted.productId,
+      type: inserted.type,
+      status: inserted.status,
+      title: inserted.title,
+      originalContent: inserted.originalContent,
+      improvedContent: inserted.improvedContent,
+      explanation: inserted.explanation,
+      estimatedScoreImprovement: inserted.estimatedScoreImprovement,
+      shopifySynced: inserted.shopifySynced,
+      shopifyError: inserted.shopifyError ?? null,
+      createdAt: inserted.createdAt.toISOString(),
+      appliedAt: null,
+    },
+    generated: true,
+  });
+});
+
+export default router;
