@@ -7,36 +7,53 @@ on:
 
 permissions:
   contents: read
-  security-events: write   
+  security-events: write
 
 jobs:
   secret-scan:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
+      # 📥 Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # 🔍 TruffleHog - Git history scan
       - name: TruffleHog Scan (Git History)
         uses: trufflesecurity/trufflehog@main
         with:
           scan: git
 
+      # 🔍 TruffleHog - Filesystem scan
       - name: TruffleHog Scan (Filesystem)
         uses: trufflesecurity/trufflehog@main
         with:
           scan: filesystem
           path: .
 
-      - name: Gitleaks Scan
+      # 🔍 Gitleaks with SARIF output
+      - name: Gitleaks Scan (SARIF)
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: detect --report-format sarif --report-path results.sarif
 
+      # 🧪 Debug (optional but useful)
+      - name: Verify SARIF file
+        run: |
+          echo "Checking SARIF file..."
+          ls -la
+
+      # 📤 Upload SARIF (ONLY on push to avoid permission errors)
       - name: Upload SARIF Report
-        if: github.event_name != 'pull_request'   
+        if: github.event_name == 'push'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: results.sarif
