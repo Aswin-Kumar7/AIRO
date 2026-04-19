@@ -13,6 +13,7 @@ export const storesTable = pgTable("stores", {
   lastAnalyzed: timestamp("last_analyzed", { withTimezone: true }),
   overallScore: real("overall_score"),
   productCount: integer("product_count"),
+  userId: text("user_id"), // nullable — null for legacy stores pre-auth
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
-import { db, storesTable, productsTable, perceptionReportsTable } from "@workspace/db";
+import { db, storesTable, productsTable, storeSummariesTable, perceptionReportsTable } from "@workspace/db";
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 import {
   runQuerySimulation,
   analyzeTopicalAuthority,
@@ -53,6 +55,17 @@ router.get("/stores/:storeId/query-simulation", async (req, res): Promise<void> 
     return;
   }
 
+  const [summary] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
+  if (summary?.querySimulationCachedAt && summary.querySimulationResults) {
+    const age = Date.now() - summary.querySimulationCachedAt.getTime();
+    if (age < CACHE_TTL_MS) {
+      const cached = summary.querySimulationResults as Array<{ wouldRecommend: boolean }>;
+      const successCount = cached.filter(r => r.wouldRecommend).length;
+      res.json({ storeId, results: cached, successCount, totalQueries: cached.length, generatedAt: summary.querySimulationCachedAt.toISOString(), cached: true });
+      return;
+    }
+  }
+
   req.log.info({ storeId, productCount: products.length }, "Running query simulation");
   const results = await runQuerySimulation(
     store.name ?? store.domain,
@@ -67,8 +80,12 @@ router.get("/stores/:storeId/query-simulation", async (req, res): Promise<void> 
     }))
   );
 
+  await db.update(storeSummariesTable)
+    .set({ querySimulationResults: results, querySimulationCachedAt: new Date() })
+    .where(eq(storeSummariesTable.storeId, storeId));
+
   const successCount = results.filter(r => r.wouldRecommend).length;
-  res.json({ storeId, results, successCount, totalQueries: results.length, generatedAt: new Date().toISOString() });
+  res.json({ storeId, results, successCount, totalQueries: results.length, generatedAt: new Date().toISOString(), cached: false });
 });
 
 // ─── Topical Authority ────────────────────────────────────────────────────────
@@ -85,6 +102,17 @@ router.get("/stores/:storeId/topical-authority", async (req, res): Promise<void>
     return;
   }
 
+  const [summary2] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
+  if (summary2?.topicalAuthorityCachedAt && summary2.topicalAuthorityResults) {
+    const age = Date.now() - summary2.topicalAuthorityCachedAt.getTime();
+    if (age < CACHE_TTL_MS) {
+      const cached = summary2.topicalAuthorityResults as Array<{ coverageScore: number }>;
+      const avgCoverage = cached.length ? Math.round(cached.reduce((s, c) => s + c.coverageScore, 0) / cached.length) : 0;
+      res.json({ storeId, clusters: cached, totalProducts: products.length, averageCoverageScore: avgCoverage, generatedAt: summary2.topicalAuthorityCachedAt.toISOString(), cached: true });
+      return;
+    }
+  }
+
   req.log.info({ storeId, productCount: products.length }, "Analyzing topical authority");
   const clusters = await analyzeTopicalAuthority(
     products.map(p => ({
@@ -96,11 +124,15 @@ router.get("/stores/:storeId/topical-authority", async (req, res): Promise<void>
     }))
   );
 
+  await db.update(storeSummariesTable)
+    .set({ topicalAuthorityResults: clusters, topicalAuthorityCachedAt: new Date() })
+    .where(eq(storeSummariesTable.storeId, storeId));
+
   const avgCoverage = clusters.length
     ? Math.round(clusters.reduce((s, c) => s + c.coverageScore, 0) / clusters.length)
     : 0;
 
-  res.json({ storeId, clusters, totalProducts: products.length, averageCoverageScore: avgCoverage, generatedAt: new Date().toISOString() });
+  res.json({ storeId, clusters, totalProducts: products.length, averageCoverageScore: avgCoverage, generatedAt: new Date().toISOString(), cached: false });
 });
 
 // ─── Internal Link Audit ──────────────────────────────────────────────────────
@@ -117,6 +149,15 @@ router.get("/stores/:storeId/internal-links", async (req, res): Promise<void> =>
     return;
   }
 
+  const [summary3] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
+  if (summary3?.internalLinksCachedAt && summary3.internalLinksResults) {
+    const age = Date.now() - summary3.internalLinksCachedAt.getTime();
+    if (age < CACHE_TTL_MS) {
+      res.json({ storeId, suggestions: summary3.internalLinksResults, totalProducts: products.length, generatedAt: summary3.internalLinksCachedAt.toISOString(), cached: true });
+      return;
+    }
+  }
+
   req.log.info({ storeId, productCount: products.length }, "Analyzing internal links");
   const suggestions = await analyzeInternalLinks(
     products.map(p => ({
@@ -128,7 +169,11 @@ router.get("/stores/:storeId/internal-links", async (req, res): Promise<void> =>
     }))
   );
 
-  res.json({ storeId, suggestions, totalProducts: products.length, generatedAt: new Date().toISOString() });
+  await db.update(storeSummariesTable)
+    .set({ internalLinksResults: suggestions, internalLinksCachedAt: new Date() })
+    .where(eq(storeSummariesTable.storeId, storeId));
+
+  res.json({ storeId, suggestions, totalProducts: products.length, generatedAt: new Date().toISOString(), cached: false });
 });
 
 // ─── FAQ Schema Generator ─────────────────────────────────────────────────────
@@ -168,6 +213,22 @@ router.get("/stores/:storeId/products/:productId/ai-qa", async (req, res): Promi
     return;
   }
 
+  // Serve from cache if fresh
+  if (product.aiQaCachedAt && product.aiQaResults) {
+    const age = Date.now() - product.aiQaCachedAt.getTime();
+    if (age < CACHE_TTL_MS) {
+      const cached = product.aiQaResults as Array<{ canAnswer: boolean }>;
+      const answerable = cached.filter(r => r.canAnswer).length;
+      res.json({
+        storeId, productId, productTitle: product.title,
+        results: cached, answerableCount: answerable, totalQuestions: cached.length,
+        answerabilityScore: Math.round((answerable / cached.length) * 100),
+        generatedAt: product.aiQaCachedAt.toISOString(), cached: true,
+      });
+      return;
+    }
+  }
+
   req.log.info({ storeId, productId }, "Running product AI Q&A test");
   const results = await runProductAiQa({
     title: product.title,
@@ -177,6 +238,10 @@ router.get("/stores/:storeId/products/:productId/ai-qa", async (req, res): Promi
     vendor: product.vendor,
     price: product.price,
   });
+
+  await db.update(productsTable)
+    .set({ aiQaResults: results, aiQaCachedAt: new Date() })
+    .where(eq(productsTable.id, productId));
 
   const answerable = results.filter(r => r.canAnswer).length;
   res.json({
@@ -188,6 +253,7 @@ router.get("/stores/:storeId/products/:productId/ai-qa", async (req, res): Promi
     totalQuestions: results.length,
     answerabilityScore: Math.round((answerable / results.length) * 100),
     generatedAt: new Date().toISOString(),
+    cached: false,
   });
 });
 

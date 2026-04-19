@@ -1,5 +1,5 @@
 async function requestJson<T>(input: string): Promise<T> {
-  const res = await fetch(input);
+  const res = await fetch(input, { credentials: "include" });
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {

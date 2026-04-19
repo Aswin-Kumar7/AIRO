@@ -28,6 +28,9 @@ const nodeEnv = sharedEnv.NODE_ENV ?? "development";
 sharedEnv.API_PORT = String(apiPort);
 sharedEnv.BASE_PATH ??= "/";
 sharedEnv.NODE_ENV = nodeEnv;
+// Ensure inter-service URLs are set so OAuth redirects work correctly
+sharedEnv.FRONTEND_URL ??= `http://localhost:${frontendPort}`;
+sharedEnv.APP_BASE_URL ??= `http://localhost:${apiPort}`;
 
 const processes: ChildProcess[] = [];
 let shuttingDown = false;

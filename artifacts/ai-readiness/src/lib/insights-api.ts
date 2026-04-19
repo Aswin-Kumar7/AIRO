@@ -47,7 +47,7 @@ export type TagOptimizerResponse = {
 };
 
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init);
+  const response = await fetch(input, { credentials: "include", ...init });
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {

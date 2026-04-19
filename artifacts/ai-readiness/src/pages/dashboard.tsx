@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useStore } from "@/context/store-context";
+import { useListStores, getListStoresQueryKey } from "@workspace/api-client-react";
+import { OnboardingModal } from "@/components/onboarding-modal";
 import {
   getGetStoreActivityQueryKey,
   getGetStoreQueryKey,
@@ -246,6 +248,13 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const [analyzing, setAnalyzing] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const { data: allStores = [] } = useListStores({ query: { staleTime: 30_000, queryKey: getListStoresQueryKey() } });
+
+  useEffect(() => {
+    if ((allStores as unknown[]).length === 0) setShowOnboarding(true);
+  }, [(allStores as unknown[]).length]);
 
   const { data: store } = useGetStore(activeStoreId!, {
     query: {
@@ -264,8 +273,22 @@ export default function Dashboard() {
   const analyzeStore = useAnalyzeStore();
 
   if (!activeStoreId) {
-    navigate("/");
-    return null;
+    return (
+      <>
+        <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-sm text-slate-400 mb-3">No store connected yet</p>
+            <button
+              className="text-xs text-indigo-600 underline"
+              onClick={() => setShowOnboarding(true)}
+            >
+              Connect a store
+            </button>
+          </div>
+        </div>
+      </>
+    );
   }
 
   async function handleAnalyze() {
@@ -317,6 +340,7 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
+      <OnboardingModal open={showOnboarding} onClose={() => setShowOnboarding(false)} />
       <div className="p-6 max-w-6xl mx-auto space-y-6">
 
         {/* Zone 1: Store Health Bar */}

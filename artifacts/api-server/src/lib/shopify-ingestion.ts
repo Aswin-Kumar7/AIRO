@@ -356,13 +356,21 @@ async function fetchAllProducts(domain: string, accessToken: string): Promise<In
   return capped;
 }
 
+function isPolicySubstantive(body: string | null | undefined, keywords: string[], minWords = 50): boolean {
+  if (!body) return false;
+  const text = body.toLowerCase();
+  const wordCount = text.trim().split(/\s+/).length;
+  if (wordCount < minWords) return false;
+  return keywords.some((kw) => text.includes(kw));
+}
+
 async function fetchPolicyCoverage(domain: string, accessToken: string): Promise<PolicyCoverage> {
   const result = await shopifyGraphQL<PoliciesQueryResult>(domain, accessToken, POLICIES_QUERY);
   return {
-    refund: !!result.shop.refundPolicy?.body,
-    shipping: !!result.shop.shippingPolicy?.body,
-    privacy: !!result.shop.privacyPolicy?.body,
-    terms: !!result.shop.termsOfService?.body,
+    refund: isPolicySubstantive(result.shop.refundPolicy?.body, ["refund", "return", "days", "exchange", "credit"]),
+    shipping: isPolicySubstantive(result.shop.shippingPolicy?.body, ["ship", "deliver", "transit", "order", "dispatch"]),
+    privacy: isPolicySubstantive(result.shop.privacyPolicy?.body, ["data", "information", "collect", "privacy", "personal"]),
+    terms: isPolicySubstantive(result.shop.termsOfService?.body, ["terms", "service", "agreement", "use", "conditions"]),
   };
 }
 

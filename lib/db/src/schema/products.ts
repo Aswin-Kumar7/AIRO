@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, real, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, real, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -26,6 +26,8 @@ export const productsTable = pgTable("products", {
   hasAppliedFixes: boolean("has_applied_fixes").notNull().default(false),
   aiPerceptionSummary: text("ai_perception_summary"),
   suggestedTags: text("suggested_tags").array().notNull().default([]),
+  aiQaResults: jsonb("ai_qa_results"),
+  aiQaCachedAt: timestamp("ai_qa_cached_at", { withTimezone: true }),
   analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -8,7 +8,7 @@ import {
   isHttpsRequest,
   verifyShopifyOAuthCallback,
 } from "../lib/shopify-oauth";
-import { normalizeShopifyDomain, validateShopifyToken } from "../lib/shopify-client";
+import { normalizeShopifyDomain, validateShopifyToken, registerStoreWebhooks } from "../lib/shopify-client";
 import { upsertConnectedStore } from "../lib/store-connection";
 import { fetchAndUpsertProducts } from "../lib/fetch-products";
 
@@ -120,12 +120,21 @@ router.get("/shopify/callback", async (req, res): Promise<void> => {
     res.clearCookie(cookieNames.shop, { path: "/api/shopify", httpOnly: true, sameSite: "lax", secure });
     res.redirect(buildFrontendRedirectUrl({ status: "success", storeId: store.id }));
 
-    // Auto-fetch products so the dashboard shows them immediately after OAuth
+    // Auto-fetch products + register webhooks so the dashboard shows them immediately after OAuth
     setImmediate(async () => {
       try {
         await fetchAndUpsertProducts(store);
       } catch {
         // non-critical — user can trigger manually
+      }
+
+      const appBaseUrl = process.env.APP_BASE_URL ?? "";
+      if (appBaseUrl) {
+        try {
+          await registerStoreWebhooks(store.domain, store.accessToken, appBaseUrl);
+        } catch {
+          // non-critical — webhooks are best-effort
+        }
       }
     });
   } catch (err) {

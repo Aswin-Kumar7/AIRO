@@ -182,6 +182,93 @@ export async function updateShopifyProduct(
 }
 
 /**
+ * Re-fetch a product from Shopify Admin API and verify the applied field matches.
+ * Uses Admin API (no CDN caching), so result is authoritative.
+ */
+export async function verifyShopifyUpdate(
+  domain: string,
+  accessToken: string,
+  shopifyProductId: string,
+  update: { type: "description" | "tags" | "title"; content: string },
+): Promise<{ verified: boolean; reason?: string }> {
+  try {
+    const result = await shopifyGraphQL<{
+      product: { title: string; descriptionHtml: string; tags: string[] } | null;
+    }>(
+      domain,
+      accessToken,
+      `query GetProduct($id: ID!) {
+        product(id: $id) { title descriptionHtml tags }
+      }`,
+      { id: shopifyProductId },
+    );
+
+    const product = result.product;
+    if (!product) return { verified: false, reason: "Product not found on Shopify after write" };
+
+    switch (update.type) {
+      case "title":
+        return product.title.trim() === update.content.trim()
+          ? { verified: true }
+          : { verified: false, reason: "Title on Shopify does not match applied content" };
+
+      case "description": {
+        // Strip HTML and compare first 100 chars of plain text
+        const shopifyPlain = product.descriptionHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+        const appliedPlain = update.content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+        return shopifyPlain === appliedPlain
+          ? { verified: true }
+          : { verified: false, reason: "Description on Shopify does not match applied content" };
+      }
+
+      case "tags": {
+        const appliedTags = update.content.split(",").map(t => t.trim().toLowerCase()).filter(Boolean).sort();
+        const shopifyTags = product.tags.map(t => t.toLowerCase()).sort();
+        const match = appliedTags.every(t => shopifyTags.includes(t));
+        return match
+          ? { verified: true }
+          : { verified: false, reason: "Tags on Shopify do not match applied tags" };
+      }
+    }
+  } catch {
+    return { verified: false, reason: "Could not reach Shopify Admin API to verify" };
+  }
+}
+
+/**
+ * Register product webhook subscriptions for a store.
+ * Idempotent — Shopify deduplicates by topic+address.
+ */
+export async function registerStoreWebhooks(
+  domain: string,
+  accessToken: string,
+  appBaseUrl: string,
+): Promise<void> {
+  const topics: Array<{ topic: string; path: string }> = [
+    { topic: "PRODUCTS_UPDATE", path: "/api/shopify/webhooks/products-update" },
+    { topic: "PRODUCTS_DELETE", path: "/api/shopify/webhooks/products-delete" },
+  ];
+
+  for (const { topic, path } of topics) {
+    try {
+      await shopifyGraphQL(
+        domain,
+        accessToken,
+        `mutation CreateWebhook($topic: WebhookSubscriptionTopic!, $url: URL!) {
+          webhookSubscriptionCreate(topic: $topic, webhookSubscription: { format: JSON, callbackUrl: $url }) {
+            webhookSubscription { id }
+            userErrors { field message }
+          }
+        }`,
+        { topic, url: `${appBaseUrl}${path}` },
+      );
+    } catch {
+      // Non-fatal — webhooks are best-effort; manual re-analysis is the fallback
+    }
+  }
+}
+
+/**
  * Validate a Shopify Admin API access token by fetching the shop name.
  * Returns the shop name on success, throws on failure.
  */

@@ -19,6 +19,12 @@ export const storeSummariesTable = pgTable("store_summaries", {
   pendingFixes: integer("pending_fixes").notNull().default(0),
   appliedFixes: integer("applied_fixes").notNull().default(0),
   prioritizedActionPlan: jsonb("prioritized_action_plan").notNull().default([]),
+  querySimulationResults: jsonb("query_simulation_results"),
+  querySimulationCachedAt: timestamp("query_simulation_cached_at", { withTimezone: true }),
+  topicalAuthorityResults: jsonb("topical_authority_results"),
+  topicalAuthorityCachedAt: timestamp("topical_authority_cached_at", { withTimezone: true }),
+  internalLinksResults: jsonb("internal_links_results"),
+  internalLinksCachedAt: timestamp("internal_links_cached_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

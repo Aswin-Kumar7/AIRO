@@ -6,6 +6,7 @@ import {
   normalizeShopifyDomain,
   SHOPIFY_ENV_ACCESS_TOKEN_SENTINEL,
   validateShopifyToken,
+  registerStoreWebhooks,
 } from "../lib/shopify-client";
 import { getConnectionMode, maskStoredAccessToken, upsertConnectedStore } from "../lib/store-connection";
 import { fetchAndUpsertProducts } from "../lib/fetch-products";
@@ -95,12 +96,21 @@ router.post("/stores", async (req, res): Promise<void> => {
     createdAt: store.createdAt.toISOString(),
   });
 
-  // Auto-fetch products in background so dashboard can show them before analysis
+  // Auto-fetch products + register webhooks in background
   setImmediate(async () => {
     try {
       await fetchAndUpsertProducts(store);
     } catch (err) {
       logger.warn({ err, storeId: store.id }, "Auto product fetch after manual connect failed");
+    }
+
+    const appBaseUrl = process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "";
+    if (appBaseUrl) {
+      try {
+        await registerStoreWebhooks(store.domain, store.accessToken, appBaseUrl);
+      } catch (err) {
+        logger.warn({ err, storeId: store.id }, "Webhook registration after manual connect failed");
+      }
     }
   });
 });

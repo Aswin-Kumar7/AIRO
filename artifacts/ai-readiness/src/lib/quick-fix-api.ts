@@ -3,7 +3,7 @@ export function deleteStore(storeId: string): Promise<{ success: boolean }> {
 }
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, init);
+  const res = await fetch(input, { credentials: "include", ...init });
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {

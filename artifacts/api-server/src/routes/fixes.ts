@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, fixesTable, productsTable, gapsTable, storeSummariesTable, storesTable, activityTable } from "@workspace/db";
-import { updateShopifyProduct } from "../lib/shopify-client";
+import { updateShopifyProduct, verifyShopifyUpdate } from "../lib/shopify-client";
 import { generateId } from "../lib/id";
 
 const router: IRouter = Router();
@@ -74,11 +74,10 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
           product.shopifyProductId,
           { type: fix.type as "description" | "tags" | "title", content: contentToApply },
         );
-        shopifySynced = result.success;
         shopifyError = result.error ?? null;
 
-        // Mirror the update into our local product record
         if (result.success) {
+          // Mirror locally
           if (fix.type === "description") {
             await db.update(productsTable)
               .set({ description: contentToApply, hasAppliedFixes: true })
@@ -92,6 +91,20 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
             await db.update(productsTable)
               .set({ title: contentToApply, hasAppliedFixes: true })
               .where(eq(productsTable.id, fix.productId));
+          }
+
+          // Verify the write actually landed on Shopify
+          try {
+            const { verified, reason } = await verifyShopifyUpdate(
+              store.domain,
+              store.accessToken,
+              product.shopifyProductId,
+              { type: fix.type as "description" | "tags" | "title", content: contentToApply },
+            );
+            shopifySynced = verified;
+            if (!verified) shopifyError = reason ?? "Update written but Shopify verification failed";
+          } catch {
+            shopifySynced = true; // Trust mutation if verification call errors
           }
         }
       } catch (err) {
@@ -176,7 +189,6 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
             store.domain, store.accessToken, product.shopifyProductId,
             { type: fix.type as "description" | "tags" | "title", content: contentToApply },
           );
-          shopifySynced = result.success;
           shopifyError = result.error ?? null;
           if (result.success) {
             if (fix.type === "description") {
@@ -186,6 +198,16 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
               await db.update(productsTable).set({ tags: updatedTags, hasAppliedFixes: true }).where(eq(productsTable.id, fix.productId));
             } else if (fix.type === "title") {
               await db.update(productsTable).set({ title: contentToApply, hasAppliedFixes: true }).where(eq(productsTable.id, fix.productId));
+            }
+            try {
+              const { verified, reason } = await verifyShopifyUpdate(
+                store.domain, store.accessToken, product.shopifyProductId,
+                { type: fix.type as "description" | "tags" | "title", content: contentToApply },
+              );
+              shopifySynced = verified;
+              if (!verified) shopifyError = reason ?? "Update written but Shopify verification failed";
+            } catch {
+              shopifySynced = true;
             }
           }
         } catch (err) {
