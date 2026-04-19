@@ -1,14 +1,8 @@
 import { chatCompletion } from "./ai-client";
 import { logger } from "./logger";
+import { runRuleEngine, type ProductInput, type RuleViolation } from "./rule-engine";
 
-export interface ProductData {
-  title: string;
-  description: string | null;
-  tags: string[];
-  productType: string | null;
-  vendor: string | null;
-  price: string | null;
-}
+export type { ProductInput as ProductData };
 
 export interface ProductAnalysisResult {
   clarityScore: number;
@@ -24,6 +18,10 @@ export interface ProductAnalysisResult {
     title: string;
     description: string;
     suggestion: string;
+    evidence?: string;
+    impactScore?: number;
+    effortLevel?: "low" | "medium" | "high";
+    ruleId?: string;
   }>;
 }
 
@@ -50,65 +48,81 @@ const BENCHMARK_SCORES = {
 
 export const BENCHMARK = BENCHMARK_SCORES;
 
-export async function analyzeProduct(product: ProductData): Promise<ProductAnalysisResult> {
-  const prompt = `You are an AI readiness expert. Analyze this Shopify product to determine how well AI shopping assistants (like ChatGPT, Perplexity) can understand and recommend it.
+export async function analyzeProduct(product: ProductInput): Promise<ProductAnalysisResult> {
+  // Step 1: deterministic rule engine — fast, evidence-backed, no AI
+  const { ruleScores, violations } = runRuleEngine(product);
 
-Product Data:
-- Title: ${product.title}
-- Description: ${product.description || "(none)"}
-- Tags: ${product.tags.join(", ") || "(none)"}
-- Product Type: ${product.productType || "(none)"}
-- Vendor: ${product.vendor || "(none)"}
-- Price: ${product.price || "(none)"}
+  // Step 2: AI layer — only NLP clarity nuance + perception summary + tag suggestions
+  const plain = (product.description ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const descWordCount = plain.split(/\s+/).filter(Boolean).length;
 
-Evaluate and return a JSON object with these exact fields:
+  const aiPrompt = `You are an AI shopping assistant evaluating a Shopify product. Return a JSON object with exactly these three fields:
 {
-  "clarityScore": <0-100, how clearly the product is described for AI understanding>,
-  "completenessScore": <0-100, how complete the product information is>,
-  "trustScore": <0-100, presence of trust signals like guarantees, materials, specs>,
-  "tagScore": <0-100, quality and relevance of tags for AI retrieval>,
-  "overallScore": <0-100, weighted average>,
-  "aiPerceptionSummary": "<2-3 sentence summary of how an AI agent would perceive this product>",
-  "suggestedTags": ["tag1", "tag2", "tag3", ...up to 8 relevant tags],
-  "issues": [
-    {
-      "category": "<one of: clarity, completeness, trust, tags, policy, consistency>",
-      "severity": "<one of: high, medium, low>",
-      "title": "<short issue title>",
-      "description": "<what the problem is>",
-      "suggestion": "<specific actionable fix>"
-    }
-  ]
+  "clarityScore": <0-100, how naturally a human or voice AI could understand this product from title + description alone>,
+  "aiPerceptionSummary": "<2 sentences describing how a voice AI assistant would describe this product to a shopper>",
+  "suggestedTags": ["tag1", "tag2", ...up to 8 semantic retrieval tags]
 }
 
-Be specific and actionable. Focus on what prevents AI agents from confidently recommending this product.
+Product snapshot:
+- Title: ${product.title}
+- Description (${descWordCount} words): ${plain.slice(0, 400)}${plain.length > 400 ? "…" : ""}
+- Current tags: ${product.tags.slice(0, 10).join(", ") || "(none)"}
+- Type: ${product.productType ?? "unknown"} | Vendor: ${product.vendor ?? "unknown"}
+
 Return ONLY valid JSON, no markdown.`;
 
+  let aiClarityScore = ruleScores.clarity; // fallback if AI call fails
+  let aiPerceptionSummary = "Limited product information makes it difficult for AI assistants to confidently recommend this product.";
+  let suggestedTags: string[] = [];
+
   try {
-    const content = await chatCompletion([{ role: "user", content: prompt }], 2000);
-    const parsed = JSON.parse(content) as ProductAnalysisResult;
-    return parsed;
-  } catch (err) {
-    logger.error({ err, productTitle: product.title }, "Failed to analyze product with AI");
-    return {
-      clarityScore: 40,
-      completenessScore: 35,
-      trustScore: 30,
-      tagScore: 35,
-      overallScore: 35,
-      aiPerceptionSummary: "This product has limited information available for AI analysis.",
-      suggestedTags: [],
-      issues: [
-        {
-          category: "completeness",
-          severity: "high",
-          title: "Insufficient product information",
-          description: "The product lacks enough detail for AI agents to confidently recommend it.",
-          suggestion: "Add a detailed description including materials, dimensions, use cases, and target audience.",
-        },
-      ],
+    const content = await chatCompletion([{ role: "user", content: aiPrompt }], 800);
+    const parsed = JSON.parse(content) as {
+      clarityScore?: number;
+      aiPerceptionSummary?: string;
+      suggestedTags?: string[];
     };
+    if (typeof parsed.clarityScore === "number") aiClarityScore = Math.max(0, Math.min(100, parsed.clarityScore));
+    if (typeof parsed.aiPerceptionSummary === "string" && parsed.aiPerceptionSummary.trim()) {
+      aiPerceptionSummary = parsed.aiPerceptionSummary.trim();
+    }
+    if (Array.isArray(parsed.suggestedTags)) {
+      suggestedTags = parsed.suggestedTags.filter((t): t is string => typeof t === "string").slice(0, 8);
+    }
+  } catch (err) {
+    logger.warn({ err, productTitle: product.title }, "AI layer failed — using rule-only scores");
   }
+
+  // Step 3: deterministic score blending (AI only influences clarity)
+  const clarityScore  = Math.round(0.4 * aiClarityScore + 0.6 * ruleScores.clarity);
+  const completenessScore = ruleScores.completeness;
+  const trustScore    = ruleScores.trust;
+  const tagScore      = ruleScores.tags;
+  const overallScore  = Math.round((clarityScore + completenessScore + trustScore + tagScore) / 4);
+
+  // Step 4: rule violations become the canonical issue list
+  const issues = violations.map((v: RuleViolation) => ({
+    category: v.category,
+    severity: v.severity,
+    title: v.title,
+    description: v.description,
+    suggestion: v.suggestion,
+    evidence: v.evidence,
+    impactScore: v.impactScore,
+    effortLevel: v.effortLevel,
+    ruleId: v.ruleId,
+  }));
+
+  return {
+    clarityScore,
+    completenessScore,
+    trustScore,
+    tagScore,
+    overallScore,
+    aiPerceptionSummary,
+    suggestedTags,
+    issues,
+  };
 }
 
 export async function analyzeStoreConsistency(
@@ -172,9 +186,9 @@ Return ONLY valid JSON, no markdown.`;
 }
 
 export async function generateFix(
-  type: "description" | "tags" | "title" | "structure",
+  type: "description" | "tags" | "title" | "structure" | "schema",
   originalContent: string,
-  context: { productTitle: string; productType?: string | null; vendor?: string | null }
+  context: { productTitle: string; productType?: string | null; vendor?: string | null; price?: string | null; imageUrl?: string | null }
 ): Promise<{ improvedContent: string; explanation: string; estimatedScoreImprovement: number }> {
   const typeInstructions: Record<string, string> = {
     description:
@@ -182,13 +196,13 @@ export async function generateFix(
     tags: "Improve these product tags to be semantic, relevant, and optimized for AI retrieval. Include category, use case, material, audience, and feature tags.",
     title: "Improve this product title to be clear, specific, and include key identifying information.",
     structure: "Restructure this product description with clear sections: Overview, Features, Specifications, Use Cases.",
+    schema: `Generate a complete, valid Product JSON-LD structured data block for this product. Return ONLY the raw JSON object (no <script> tags, no markdown). Use schema.org/Product. Include: @context ("https://schema.org"), @type ("Product"), name, description (plain text, max 200 chars), brand (@type: Brand, name: vendor), offers (@type: Offer, price, priceCurrency "USD", availability "https://schema.org/InStock"), and image (if imageUrl provided). Use actual product values.`,
   };
 
   const prompt = `You are an AI readiness expert for Shopify stores.
 
 Product: ${context.productTitle}
-Type: ${context.productType || "General"}
-Vendor: ${context.vendor || "Unknown"}
+Type: ${context.productType ?? "General"} | Vendor: ${context.vendor ?? "Unknown"}${context.price ? ` | Price: $${context.price}` : ""}${context.imageUrl ? ` | Image: ${context.imageUrl}` : ""}
 
 Task: ${typeInstructions[type]}
 

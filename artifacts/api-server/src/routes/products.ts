@@ -1,10 +1,31 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, productsTable, gapsTable, fixesTable } from "@workspace/db";
+import { db, productsTable, gapsTable, fixesTable, storesTable } from "@workspace/db";
 import { generateFix } from "../lib/ai-analyzer";
+import { fetchAndUpsertProducts } from "../lib/fetch-products";
 import { generateId } from "../lib/id";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+router.post("/stores/:storeId/fetch-products", async (req, res): Promise<void> => {
+  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  if (!store) {
+    res.status(404).json({ error: "Store not found" });
+    return;
+  }
+
+  res.json({ status: "fetching", storeId, message: "Fetching products from Shopify in the background" });
+
+  setImmediate(async () => {
+    try {
+      await fetchAndUpsertProducts(store);
+    } catch (err) {
+      logger.error({ err, storeId }, "Background product fetch failed");
+    }
+  });
+});
 
 router.get("/stores/:storeId/products", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
@@ -84,6 +105,10 @@ router.get("/stores/:storeId/products/:productId", async (req, res): Promise<voi
       title: g.title,
       description: g.description,
       suggestion: g.suggestion,
+      evidence: g.evidence ?? null,
+      impactScore: g.impactScore ?? 50,
+      effortLevel: g.effortLevel ?? "medium",
+      ruleId: g.ruleId ?? null,
       isFixed: g.isFixed,
     })),
     fixes: fixes.map(f => ({
@@ -112,9 +137,9 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
   const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
   const { type } = req.body as { type?: string };
 
-  const validTypes = ["description", "tags", "title", "structure"] as const;
+  const validTypes = ["description", "tags", "title", "structure", "schema"] as const;
   if (!type || !validTypes.includes(type as typeof validTypes[number])) {
-    res.status(400).json({ error: "type must be one of: description, tags, title, structure" });
+    res.status(400).json({ error: "type must be one of: description, tags, title, structure, schema" });
     return;
   }
   const fixType = type as typeof validTypes[number];
@@ -165,6 +190,8 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
 
   const originalContent = fixType === "tags"
     ? product.tags.join(", ")
+    : fixType === "schema"
+    ? JSON.stringify({ title: product.title, description: product.description, vendor: product.vendor, price: product.price })
     : product.description ?? product.title;
 
   req.log.info({ storeId, productId, fixType }, "Generating on-demand fix");
@@ -173,6 +200,8 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
     productTitle: product.title,
     productType: product.productType,
     vendor: product.vendor,
+    price: product.price,
+    imageUrl: product.imageUrl,
   });
 
   const fixId = generateId();

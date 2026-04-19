@@ -161,6 +161,7 @@ export const FixType = {
   title: "title",
   policy: "policy",
   structure: "structure",
+  schema: "schema",
 } as const;
 
 export type FixStatus = (typeof FixStatus)[keyof typeof FixStatus];

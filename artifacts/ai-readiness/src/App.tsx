@@ -12,6 +12,16 @@ import Gaps from "@/pages/gaps";
 import Fixes from "@/pages/fixes";
 import Consistency from "@/pages/consistency";
 import Benchmark from "@/pages/benchmark";
+import Perception from "@/pages/perception";
+import FaqHealth from "@/pages/faq-health";
+import StructuredData from "@/pages/structured-data";
+import Tags from "@/pages/tags";
+import ActionPlan from "@/pages/action-plan";
+import LlmsTxt from "@/pages/llms-txt";
+import QueryTest from "@/pages/query-test";
+import TopicalAuthority from "@/pages/topical-authority";
+import InternalLinks from "@/pages/internal-links";
+import FaqSchema from "@/pages/faq-schema";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -30,6 +40,16 @@ function Router() {
       <Route path="/fixes" component={Fixes} />
       <Route path="/consistency" component={Consistency} />
       <Route path="/benchmark" component={Benchmark} />
+      <Route path="/perception" component={Perception} />
+      <Route path="/faq-health" component={FaqHealth} />
+      <Route path="/structured-data" component={StructuredData} />
+      <Route path="/tags" component={Tags} />
+      <Route path="/action-plan" component={ActionPlan} />
+      <Route path="/llms-txt" component={LlmsTxt} />
+      <Route path="/query-test" component={QueryTest} />
+      <Route path="/topical-authority" component={TopicalAuthority} />
+      <Route path="/internal-links" component={InternalLinks} />
+      <Route path="/faq-schema" component={FaqSchema} />
       <Route component={NotFound} />
     </Switch>
   );

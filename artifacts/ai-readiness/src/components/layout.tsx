@@ -3,28 +3,58 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Package,
-  AlertTriangle,
   CheckSquare,
   BarChart3,
   Shuffle,
   Store,
-  ChevronRight,
+  AlertTriangle,
+  Eye,
+  FileQuestion,
+  Layers,
+  Tag,
+  ChevronDown,
+  ListChecks,
+  Zap,
+  BookOpen,
+  Link2,
+  HelpCircle,
+  FileText,
 } from "lucide-react";
 import { useStore } from "@/context/store-context";
 import { Badge } from "@/components/ui/badge";
 import { useGetStoreSummary, getGetStoreSummaryQueryKey } from "@workspace/api-client-react";
 import type { ReactNode } from "react";
+import { useState } from "react";
 
-const navItems = [
+const mainNav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/products", label: "Products", icon: Package },
-  { href: "/gaps", label: "Gap Analysis", icon: AlertTriangle },
   { href: "/fixes", label: "Quick Fixes", icon: CheckSquare },
+];
+
+const analysisNav = [
+  { href: "/action-plan", label: "Action Plan", icon: ListChecks },
+  { href: "/gaps", label: "Gap Analysis", icon: AlertTriangle },
   { href: "/consistency", label: "Consistency", icon: Shuffle },
   { href: "/benchmark", label: "Benchmark", icon: BarChart3 },
 ];
 
-function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
+const insightsNav = [
+  { href: "/perception", label: "AI Perception", icon: Eye },
+  { href: "/faq-health", label: "FAQ & Policies", icon: FileQuestion },
+  { href: "/structured-data", label: "Structured Data", icon: Layers },
+  { href: "/tags", label: "Tag Optimizer", icon: Tag },
+];
+
+const toolsNav = [
+  { href: "/query-test", label: "Query Simulation", icon: Zap },
+  { href: "/topical-authority", label: "Topical Authority", icon: BookOpen },
+  { href: "/internal-links", label: "Internal Links", icon: Link2 },
+  { href: "/faq-schema", label: "FAQ Schema", icon: HelpCircle },
+  { href: "/llms-txt", label: "LLMs.txt", icon: FileText },
+];
+
+function ScoreRing({ score, size = 44 }: { score: number; size?: number }) {
   const radius = (size - 8) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (score / 100) * circumference;
@@ -38,8 +68,44 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
   );
 }
 
-export function AppLayout({ children }: { children: ReactNode }) {
+function NavItem({ href, label, icon: Icon, badge }: { href: string; label: string; icon: React.FC<{ className?: string }>; badge?: number }) {
   const [location] = useLocation();
+  const isActive = location === href || (href !== "/dashboard" && location.startsWith(href));
+  return (
+    <Link href={href}>
+      <div className={cn(
+        "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer",
+        isActive
+          ? "bg-primary text-primary-foreground"
+          : "text-sidebar-foreground hover:bg-sidebar-accent"
+      )}>
+        <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+        <span>{label}</span>
+        {badge !== undefined && badge > 0 && !isActive && (
+          <Badge variant="destructive" className="ml-auto text-[10px] h-4 px-1.5">{badge}</Badge>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+function NavSection({ title, children, defaultOpen = true }: { title: string; children: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="mb-1">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+      >
+        {title}
+        <ChevronDown className={cn("w-3 h-3 transition-transform", open ? "" : "-rotate-90")} />
+      </button>
+      {open && <div className="space-y-0.5">{children}</div>}
+    </div>
+  );
+}
+
+export function AppLayout({ children }: { children: ReactNode }) {
   const { activeStoreId } = useStore();
   const { data: summary } = useGetStoreSummary(activeStoreId!, {
     query: { enabled: !!activeStoreId, queryKey: getGetStoreSummaryQueryKey(activeStoreId!) },
@@ -48,71 +114,83 @@ export function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-sidebar flex flex-col">
+      <aside className="w-56 border-r border-border bg-sidebar flex flex-col flex-shrink-0">
         {/* Brand */}
-        <div className="px-5 py-4 border-b border-sidebar-border">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <BarChart3 className="w-4 h-4 text-primary-foreground" />
+        <div className="px-4 py-3.5 border-b border-sidebar-border">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
+              <BarChart3 className="w-3.5 h-3.5 text-primary-foreground" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-sidebar-foreground">AI Readiness</p>
-              <p className="text-xs text-muted-foreground">Shopify Analyzer</p>
+              <p className="text-xs font-semibold text-sidebar-foreground leading-none">AI Readiness</p>
+              <p className="text-[10px] text-muted-foreground">Shopify Analyzer</p>
             </div>
           </div>
         </div>
 
         {/* Store Score Widget */}
         {summary && (
-          <div className="mx-4 mt-4 p-3 rounded-xl bg-sidebar-accent border border-sidebar-border">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <ScoreRing score={Math.round(summary.overallScore)} size={44} />
-                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-foreground" style={{ transform: "translate(-50%, -50%)", position: "absolute", top: "50%", left: "50%" }}>
+          <div className="mx-3 mt-3 p-2.5 rounded-lg bg-sidebar-accent border border-sidebar-border">
+            <div className="flex items-center gap-2.5">
+              <div className="relative flex-shrink-0">
+                <ScoreRing score={Math.round(summary.overallScore)} size={40} />
+                <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-foreground">
                   {Math.round(summary.overallScore)}
                 </span>
               </div>
-              <div>
-                <p className="text-xs font-semibold text-sidebar-foreground">AI Readiness</p>
-                <p className="text-[11px] text-muted-foreground">{summary.criticalIssues} critical issues</p>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-sidebar-foreground leading-none mb-0.5">AI Readiness</p>
+                <p className="text-[10px] text-muted-foreground">{summary.criticalIssues} critical · {summary.pendingFixes} fixes</p>
               </div>
             </div>
           </div>
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.startsWith(item.href);
-            return (
-              <Link key={item.href} href={item.href}>
-                <div className={cn(
-                  "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer",
-                  isActive
-                    ? "bg-primary text-primary-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent"
-                )}>
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span>{item.label}</span>
-                  {isActive && <ChevronRight className="w-3 h-3 ml-auto opacity-60" />}
-                  {item.href === "/fixes" && summary && summary.pendingFixes > 0 && !isActive && (
-                    <Badge variant="destructive" className="ml-auto text-[10px] h-4 px-1.5">{summary.pendingFixes}</Badge>
-                  )}
-                  {item.href === "/gaps" && summary && summary.criticalIssues > 0 && !isActive && (
-                    <Badge variant="destructive" className="ml-auto text-[10px] h-4 px-1.5">{summary.criticalIssues}</Badge>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+        <nav className="flex-1 px-2 py-3 space-y-3 overflow-y-auto">
+          {/* Main */}
+          <div className="space-y-0.5">
+            {mainNav.map((item) => (
+              <NavItem
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                badge={item.href === "/fixes" ? summary?.pendingFixes : undefined}
+              />
+            ))}
+          </div>
+
+          <NavSection title="Analysis">
+            {analysisNav.map((item) => (
+              <NavItem
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                badge={item.href === "/gaps" ? summary?.criticalIssues : undefined}
+              />
+            ))}
+          </NavSection>
+
+          <NavSection title="Insights" defaultOpen={false}>
+            {insightsNav.map((item) => (
+              <NavItem key={item.href} href={item.href} label={item.label} icon={item.icon} />
+            ))}
+          </NavSection>
+
+          <NavSection title="Tools" defaultOpen={false}>
+            {toolsNav.map((item) => (
+              <NavItem key={item.href} href={item.href} label={item.label} icon={item.icon} />
+            ))}
+          </NavSection>
         </nav>
 
         {/* Store Switcher */}
-        <div className="px-3 py-3 border-t border-sidebar-border">
+        <div className="px-2 py-2.5 border-t border-sidebar-border">
           <Link href="/">
-            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer transition-colors">
-              <Store className="w-4 h-4" />
+            <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer transition-colors">
+              <Store className="w-3.5 h-3.5" />
               <span>Switch Store</span>
             </div>
           </Link>

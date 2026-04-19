@@ -8,6 +8,8 @@ import {
   validateShopifyToken,
 } from "../lib/shopify-client";
 import { getConnectionMode, maskStoredAccessToken, upsertConnectedStore } from "../lib/store-connection";
+import { fetchAndUpsertProducts } from "../lib/fetch-products";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -23,6 +25,7 @@ router.get("/stores", async (req, res): Promise<void> => {
     connectionMode: getConnectionMode(s.accessToken),
     desiredPositioning: s.desiredPositioning ?? null,
     status: s.status,
+    productsFetched: s.productsFetched,
     lastAnalyzed: s.lastAnalyzed?.toISOString() ?? null,
     overallScore: s.overallScore,
     productCount: s.productCount,
@@ -91,6 +94,15 @@ router.post("/stores", async (req, res): Promise<void> => {
     productCount: null,
     createdAt: store.createdAt.toISOString(),
   });
+
+  // Auto-fetch products in background so dashboard can show them before analysis
+  setImmediate(async () => {
+    try {
+      await fetchAndUpsertProducts(store);
+    } catch (err) {
+      logger.warn({ err, storeId: store.id }, "Auto product fetch after manual connect failed");
+    }
+  });
 });
 
 router.get("/stores/:storeId", async (req, res): Promise<void> => {
@@ -109,6 +121,7 @@ router.get("/stores/:storeId", async (req, res): Promise<void> => {
     connectionMode: getConnectionMode(store.accessToken),
     desiredPositioning: store.desiredPositioning ?? null,
     status: store.status,
+    productsFetched: store.productsFetched,
     lastAnalyzed: store.lastAnalyzed?.toISOString() ?? null,
     overallScore: store.overallScore,
     productCount: store.productCount,

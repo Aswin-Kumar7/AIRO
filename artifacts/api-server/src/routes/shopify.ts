@@ -10,6 +10,7 @@ import {
 } from "../lib/shopify-oauth";
 import { normalizeShopifyDomain, validateShopifyToken } from "../lib/shopify-client";
 import { upsertConnectedStore } from "../lib/store-connection";
+import { fetchAndUpsertProducts } from "../lib/fetch-products";
 
 const router: IRouter = Router();
 
@@ -118,6 +119,15 @@ router.get("/shopify/callback", async (req, res): Promise<void> => {
     res.clearCookie(cookieNames.state, { path: "/api/shopify", httpOnly: true, sameSite: "lax", secure });
     res.clearCookie(cookieNames.shop, { path: "/api/shopify", httpOnly: true, sameSite: "lax", secure });
     res.redirect(buildFrontendRedirectUrl({ status: "success", storeId: store.id }));
+
+    // Auto-fetch products so the dashboard shows them immediately after OAuth
+    setImmediate(async () => {
+      try {
+        await fetchAndUpsertProducts(store);
+      } catch {
+        // non-critical — user can trigger manually
+      }
+    });
   } catch (err) {
     req.log.error({ err }, "Shopify OAuth callback failed");
     res.clearCookie(cookieNames.state, { path: "/api/shopify", httpOnly: true, sameSite: "lax", secure });

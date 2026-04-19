@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,6 +11,10 @@ export const gapsTable = pgTable("gaps", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   suggestion: text("suggestion").notNull(),
+  evidence: text("evidence"),
+  impactScore: real("impact_score").notNull().default(50),
+  effortLevel: text("effort_level").notNull().default("medium"),
+  ruleId: text("rule_id"),
   isFixed: boolean("is_fixed").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1,3 +1,7 @@
+export function deleteStore(storeId: string): Promise<{ success: boolean }> {
+  return requestJson(`/api/stores/${storeId}`, { method: "DELETE" });
+}
+
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   const res = await fetch(input, init);
   if (!res.ok) {
@@ -11,7 +15,7 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export type FixType = "description" | "tags" | "title" | "structure";
+export type FixType = "description" | "tags" | "title" | "structure" | "schema";
 
 export interface QuickFix {
   id: string;

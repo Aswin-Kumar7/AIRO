@@ -178,6 +178,9 @@ router.post("/stores/:storeId/analyze", async (req, res): Promise<void> => {
               productType: product.productType,
               vendor: product.vendor,
               price: product.price,
+              imageUrl: product.imageUrl,
+              reviewCount: product.reviewCount ?? 0,
+              hasStructuredData: product.hasStructuredData ?? false,
             }),
           }))
         );
@@ -220,34 +223,10 @@ router.post("/stores/:storeId/analyze", async (req, res): Promise<void> => {
             title: issue.title,
             description: issue.description,
             suggestion: issue.suggestion,
-            isFixed: false,
-          });
-        }
-
-        if (!product.hasStructuredData) {
-          await db.insert(gapsTable).values({
-            id: generateId(),
-            storeId,
-            productId: product.id,
-            category: "trust",
-            severity: "medium",
-            title: "No JSON-LD structured data",
-            description: "This product is missing machine-readable product markup for AI systems.",
-            suggestion: "Add Product JSON-LD markup so AI agents can parse price, brand, and offer details.",
-            isFixed: false,
-          });
-        }
-
-        if (product.reviewCount === 0) {
-          await db.insert(gapsTable).values({
-            id: generateId(),
-            storeId,
-            productId: product.id,
-            category: "trust",
-            severity: "medium",
-            title: "Missing reviews",
-            description: "There are no review signals for this product, which weakens AI confidence.",
-            suggestion: "Collect and surface customer reviews so AI agents can cite social proof.",
+            evidence: issue.evidence ?? null,
+            impactScore: issue.impactScore ?? 50,
+            effortLevel: issue.effortLevel ?? "medium",
+            ruleId: issue.ruleId ?? null,
             isFixed: false,
           });
         }
@@ -559,6 +538,10 @@ router.get("/stores/:storeId/gaps", async (req, res): Promise<void> => {
     title: gap.title,
     description: gap.description,
     suggestion: gap.suggestion,
+    evidence: gap.evidence ?? null,
+    impactScore: gap.impactScore ?? 50,
+    effortLevel: gap.effortLevel ?? "medium",
+    ruleId: gap.ruleId ?? null,
     isFixed: gap.isFixed,
   })));
 });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useGetProduct, getGetProductQueryKey, getListProductsQueryKey, getGetStoreSummaryQueryKey } from "@workspace/api-client-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -10,20 +10,25 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Package, Loader2, Sparkles, RefreshCw, CheckCircle2,
   AlertTriangle, Zap, ChevronDown, ChevronUp, ExternalLink,
+  Code2, Copy, Check,
 } from "lucide-react";
 import { generateProductFix, applyFix, type FixType, type QuickFix } from "@/lib/quick-fix-api";
 import { cn } from "@/lib/utils";
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-const FIX_TYPES: { type: FixType; label: string; icon: string; scoreKey: "completeness" | "tags" | "clarity" }[] = [
-  { type: "description", label: "Description", icon: "📝", scoreKey: "completeness" },
-  { type: "tags", label: "Tags", icon: "🏷️", scoreKey: "tags" },
-  { type: "title", label: "Title", icon: "✏️", scoreKey: "clarity" },
+const FIX_TYPES: {
+  type: FixType;
+  label: string;
+  icon: string;
+  scoreKey: "completeness" | "tags" | "clarity" | "trust";
+  categories: string[];
+}[] = [
+  { type: "description", label: "Description", icon: "📝", scoreKey: "completeness", categories: ["completeness", "clarity"] },
+  { type: "tags", label: "Tags", icon: "🏷️", scoreKey: "tags", categories: ["tags"] },
+  { type: "title", label: "Title", icon: "✏️", scoreKey: "clarity", categories: ["clarity"] },
+  { type: "schema", label: "JSON-LD Markup", icon: "⚙️", scoreKey: "trust", categories: ["trust"] },
 ];
 
-// categories that AI cannot generate a fix for (need manual action)
-const MANUAL_CATEGORIES = new Set(["trust", "policy"]);
+const MANUAL_CATEGORIES = new Set(["policy"]);
 
 const SEVERITY_COLORS: Record<string, string> = {
   high: "border-l-red-500 bg-red-50/50",
@@ -36,16 +41,35 @@ const CATEGORY_ICONS: Record<string, string> = {
   tags: "🏷️", policy: "📄", consistency: "🔄",
 };
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function handleCopy() {
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1 rounded border border-border hover:bg-muted"
+    >
+      {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 // ─── FixSection ───────────────────────────────────────────────────────────────
 
 function FixSection({
   storeId, productId, type, label, icon, scoreValue,
-  existingFix, onFixApplied,
+  existingFix, onFixApplied, isSchema,
 }: {
   storeId: string; productId: string;
   type: FixType; label: string; icon: string; scoreValue: number;
   existingFix: QuickFix | undefined;
   onFixApplied: () => void;
+  isSchema?: boolean;
 }) {
   const { toast } = useToast();
   const [fix, setFix] = useState<QuickFix | undefined>(existingFix);
@@ -93,15 +117,12 @@ function FixSection({
 
   return (
     <div className={cn("rounded-xl border bg-card transition-all", isApplied && "opacity-80 border-green-200 bg-green-50/30")}>
-      {/* Section header */}
-      <button
-        className="w-full flex items-center gap-3 p-4 text-left"
-        onClick={() => setExpanded(!expanded)}
-      >
+      <button className="w-full flex items-center gap-3 p-4 text-left" onClick={() => setExpanded(!expanded)}>
         <span className="text-lg">{icon}</span>
         <div className="flex-1">
           <p className="text-sm font-semibold text-foreground">{label}</p>
-          <p className={cn("text-xs font-medium", scoreColor)}>Score: {Math.round(scoreValue)}/100</p>
+          {!isSchema && <p className={cn("text-xs font-medium", scoreColor)}>Score: {Math.round(scoreValue)}/100</p>}
+          {isSchema && <p className="text-xs text-muted-foreground">Add machine-readable product markup</p>}
         </div>
         {isApplied ? (
           <div className="flex items-center gap-1.5 text-green-600">
@@ -122,67 +143,105 @@ function FixSection({
           {!fix && !isApplied ? (
             <div className="flex flex-col items-center gap-2 py-4">
               <p className="text-xs text-muted-foreground text-center">
-                No AI fix generated yet for this dimension.
+                {isSchema
+                  ? "Generate schema.org/Product JSON-LD markup to help AI systems parse your product data."
+                  : "No AI fix generated yet for this dimension."}
               </p>
               <Button size="sm" onClick={handleGenerate} disabled={generating} className="gap-1.5">
-                {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                {generating ? "Generating…" : "Generate Fix"}
+                {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : isSchema ? <Code2 className="w-3.5 h-3.5" /> : <Sparkles className="w-3.5 h-3.5" />}
+                {generating ? "Generating…" : isSchema ? "Generate JSON-LD" : "Generate Fix"}
               </Button>
             </div>
           ) : (
             <>
-              {/* Explanation */}
               {fix?.explanation && (
                 <p className="text-xs text-muted-foreground leading-relaxed">{fix.explanation}</p>
               )}
 
-              {/* Before / After */}
-              <div className="grid grid-cols-2 gap-2">
+              {isSchema ? (
+                /* Schema: code block with copy button */
                 <div>
-                  <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-1">Before</p>
-                  <div className="text-[11px] text-foreground bg-red-50 border border-red-100 rounded-lg p-2.5 max-h-32 overflow-y-auto leading-relaxed">
-                    {fix?.originalContent || "(empty)"}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wider mb-1">After (editable)</p>
-                  {isApplied ? (
-                    <div className="text-[11px] text-foreground bg-green-50 border border-green-100 rounded-lg p-2.5 max-h-32 overflow-y-auto leading-relaxed">
-                      {editedContent}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[10px] font-semibold text-foreground uppercase tracking-wider">Generated JSON-LD</p>
+                    <div className="flex items-center gap-2">
+                      {!isApplied && (
+                        <Button
+                          variant="ghost" size="sm"
+                          className="text-xs h-6 text-muted-foreground gap-1 px-2"
+                          onClick={handleGenerate} disabled={generating}
+                        >
+                          {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                          Regenerate
+                        </Button>
+                      )}
+                      <CopyButton text={editedContent} />
                     </div>
-                  ) : (
-                    <Textarea
-                      value={editedContent}
-                      onChange={(e) => setEditedContent(e.target.value)}
-                      className="text-[11px] min-h-[80px] max-h-32 leading-relaxed resize-none"
-                      placeholder="AI-generated content will appear here…"
-                    />
+                  </div>
+                  <pre className="text-[10px] text-foreground bg-muted border border-border rounded-lg p-3 max-h-48 overflow-y-auto whitespace-pre-wrap break-all leading-relaxed font-mono">
+                    {editedContent || "(empty)"}
+                  </pre>
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    Copy and paste this into your Shopify theme's product template, or use "Apply to Shopify" to add it as a metafield.
+                  </p>
+                  {!isApplied && (
+                    <Button
+                      size="sm" className="w-full mt-2 h-7 text-xs gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                      onClick={handleApply} disabled={applying || !editedContent}
+                    >
+                      {applying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                      {applying ? "Applying…" : "Apply to Shopify"}
+                    </Button>
                   )}
                 </div>
-              </div>
+              ) : (
+                /* Standard: editable before/after */
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-1">Before</p>
+                      <div className="text-[11px] text-foreground bg-red-50 border border-red-100 rounded-lg p-2.5 max-h-32 overflow-y-auto leading-relaxed">
+                        {fix?.originalContent || "(empty)"}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wider mb-1">After (editable)</p>
+                      {isApplied ? (
+                        <div className="text-[11px] text-foreground bg-green-50 border border-green-100 rounded-lg p-2.5 max-h-32 overflow-y-auto leading-relaxed">
+                          {editedContent}
+                        </div>
+                      ) : (
+                        <Textarea
+                          value={editedContent}
+                          onChange={(e) => setEditedContent(e.target.value)}
+                          className="text-[11px] min-h-[80px] max-h-32 leading-relaxed resize-none"
+                          placeholder="AI-generated content will appear here…"
+                        />
+                      )}
+                    </div>
+                  </div>
 
-              {/* Actions */}
-              {!isApplied && (
-                <div className="flex items-center justify-between pt-1">
-                  <Button
-                    variant="ghost" size="sm"
-                    className="text-xs h-7 text-muted-foreground gap-1"
-                    onClick={handleGenerate} disabled={generating}
-                  >
-                    {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    Regenerate
-                  </Button>
-                  <Button
-                    size="sm" className="h-7 text-xs gap-1.5 bg-green-600 hover:bg-green-700 text-white"
-                    onClick={handleApply} disabled={applying || !editedContent}
-                  >
-                    {applying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-                    {applying ? "Applying…" : "Apply to Shopify"}
-                  </Button>
-                </div>
+                  {!isApplied && (
+                    <div className="flex items-center justify-between pt-1">
+                      <Button
+                        variant="ghost" size="sm"
+                        className="text-xs h-7 text-muted-foreground gap-1"
+                        onClick={handleGenerate} disabled={generating}
+                      >
+                        {generating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                        Regenerate
+                      </Button>
+                      <Button
+                        size="sm" className="h-7 text-xs gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                        onClick={handleApply} disabled={applying || !editedContent}
+                      >
+                        {applying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                        {applying ? "Applying…" : "Apply to Shopify"}
+                      </Button>
+                    </div>
+                  )}
+                </>
               )}
 
-              {/* Shopify sync error */}
               {fix?.shopifyError && (
                 <p className="text-[10px] text-red-500 bg-red-50 border border-red-100 rounded px-2 py-1">
                   Shopify sync error: {fix.shopifyError}
@@ -198,7 +257,9 @@ function FixSection({
 
 // ─── ManualIssues ─────────────────────────────────────────────────────────────
 
-function ManualIssues({ issues }: { issues: Array<{ id: string; category: string; severity: string; title: string; description: string; suggestion: string }> }) {
+function ManualIssues({ issues }: {
+  issues: Array<{ id: string; category: string; severity: string; title: string; description: string; suggestion: string }>
+}) {
   if (issues.length === 0) return null;
   return (
     <div className="space-y-2">
@@ -246,23 +307,25 @@ export function QuickFixSheet({
   });
 
   function invalidateAfterFix() {
-    queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(storeId, productId) });
-    queryClient.invalidateQueries({ queryKey: getListProductsQueryKey(storeId) });
-    queryClient.invalidateQueries({ queryKey: getGetStoreSummaryQueryKey(storeId) });
+    void queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(storeId, productId) });
+    void queryClient.invalidateQueries({ queryKey: getListProductsQueryKey(storeId) });
+    void queryClient.invalidateQueries({ queryKey: getGetStoreSummaryQueryKey(storeId) });
   }
 
-  // Split issues: auto-fixable vs manual
-  const autoFixableIssues = (product?.issues ?? []).filter((i) => !MANUAL_CATEGORIES.has(i.category));
-  const manualIssues = (product?.issues ?? []).filter((i) => MANUAL_CATEGORIES.has(i.category));
-
-  // Map existing fixes by type
+  const issues = product?.issues ?? [];
+  const autoFixableIssues = issues.filter((i) => !MANUAL_CATEGORIES.has(i.category));
+  const manualIssues = issues.filter((i) => MANUAL_CATEGORIES.has(i.category));
   const fixByType = Object.fromEntries(
     (product?.fixes ?? []).map((f) => [f.type, f as unknown as QuickFix]),
   );
 
-  // Pending fixes for "Apply All"
   const pendingFixes = (product?.fixes ?? []).filter((f) => f.status === "pending");
   const totalPotential = pendingFixes.reduce((sum, f) => sum + f.estimatedScoreImprovement, 0);
+  const projectedScore = product ? Math.min(100, product.score.overall + totalPotential) : null;
+
+  const hasSchemaIssue = issues.some(
+    (i) => i.category === "trust" && (i as unknown as { ruleId?: string }).ruleId === "TRUST_NO_SCHEMA" && !i.isFixed
+  );
 
   async function handleApplyAll() {
     if (pendingFixes.length === 0) return;
@@ -274,9 +337,7 @@ export function QuickFixSheet({
         const result = await applyFix(storeId, fix.id, fix.improvedContent);
         if (result.shopifySynced) synced++;
         if (result.shopifyError) failed++;
-      } catch {
-        failed++;
-      }
+      } catch { failed++; }
     }
     invalidateAfterFix();
     setApplyingAll(false);
@@ -287,10 +348,6 @@ export function QuickFixSheet({
         : failed > 0 ? `${failed} Shopify sync errors` : undefined,
     });
   }
-
-  const projectedScore = product
-    ? Math.min(100, product.score.overall + totalPotential)
-    : null;
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -327,7 +384,6 @@ export function QuickFixSheet({
                   )}
                 </div>
               </div>
-              {/* Score: current → projected */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <div className="text-center">
                   <ScoreRing score={product.score.overall} size={44} />
@@ -355,15 +411,11 @@ export function QuickFixSheet({
             </div>
           ) : product ? (
             <>
-              {/* One section per fix type */}
-              {FIX_TYPES.map(({ type, label, icon, scoreKey }) => {
-                const score = product.score[scoreKey as keyof typeof product.score];
-                // Only show section if score is below threshold or there's already a fix
-                const hasIssueForType = autoFixableIssues.some((i) =>
-                  (type === "description" && (i.category === "completeness" || i.category === "clarity")) ||
-                  (type === "tags" && i.category === "tags") ||
-                  (type === "title" && i.category === "clarity")
-                );
+              {FIX_TYPES.map(({ type, label, icon, scoreKey, categories }) => {
+                const score = product.score[scoreKey as keyof typeof product.score] ?? 0;
+                const hasIssueForType = type === "schema"
+                  ? hasSchemaIssue
+                  : autoFixableIssues.some((i) => categories.includes(i.category));
                 const hasFix = Boolean(fixByType[type]);
                 if (!hasIssueForType && !hasFix) return null;
 
@@ -378,15 +430,14 @@ export function QuickFixSheet({
                     scoreValue={score}
                     existingFix={fixByType[type]}
                     onFixApplied={invalidateAfterFix}
+                    isSchema={type === "schema"}
                   />
                 );
               })}
 
-              {/* Manual issues */}
               <ManualIssues issues={manualIssues} />
 
-              {/* All good */}
-              {autoFixableIssues.length === 0 && manualIssues.length === 0 && (
+              {autoFixableIssues.length === 0 && manualIssues.length === 0 && !hasSchemaIssue && (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
                   <CheckCircle2 className="w-10 h-10 text-green-500" />
                   <p className="text-sm font-medium text-foreground">No issues found</p>
@@ -410,9 +461,7 @@ export function QuickFixSheet({
               {applyingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
               {applyingAll ? "Applying all fixes…" : `Apply All ${pendingFixes.length} Fixes to Shopify`}
               {totalPotential > 0 && !applyingAll && (
-                <span className="ml-auto text-xs bg-white/20 px-1.5 py-0.5 rounded-full">
-                  +{totalPotential} pts
-                </span>
+                <span className="ml-auto text-xs bg-white/20 px-1.5 py-0.5 rounded-full">+{totalPotential} pts</span>
               )}
             </Button>
           </div>
