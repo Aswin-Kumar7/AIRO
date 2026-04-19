@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, avg, count, and } from "drizzle-orm";
+import { eq, avg, count, and, isNotNull, ne } from "drizzle-orm";
 import {
   db,
   storesTable,
@@ -565,6 +565,17 @@ router.get("/stores/:storeId/consistency", async (req, res): Promise<void> => {
   });
 });
 
+// Aspirational targets used when not enough real data exists yet
+const ASPIRATIONAL_BENCHMARK = {
+  clarity: 82, completeness: 78, trust: 75, tags: 72, consistency: 80, policy: 85, overall: 79,
+};
+
+function percentile(sortedValues: number[], p: number): number {
+  if (sortedValues.length === 0) return 0;
+  const idx = Math.ceil((p / 100) * sortedValues.length) - 1;
+  return sortedValues[Math.max(0, Math.min(idx, sortedValues.length - 1))]!;
+}
+
 router.get("/stores/:storeId/benchmark", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
@@ -575,22 +586,59 @@ router.get("/stores/:storeId/benchmark", async (req, res): Promise<void> => {
 
   const [summary] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
 
+  // Fetch all analyzed products EXCEPT from this store to compute a real benchmark
+  const allProducts = await db
+    .select({
+      clarityScore: productsTable.clarityScore,
+      completenessScore: productsTable.completenessScore,
+      trustScore: productsTable.trustScore,
+      tagScore: productsTable.tagScore,
+      overallScore: productsTable.overallScore,
+    })
+    .from(productsTable)
+    .where(and(ne(productsTable.storeId, storeId), isNotNull(productsTable.analyzedAt)));
+
+  // Compute P90 benchmarks from real data; fall back to aspirational if too few samples
+  const MIN_SAMPLE = 10;
+  let benchmarkScores: typeof ASPIRATIONAL_BENCHMARK;
+  let benchmarkSource: "real-p90" | "aspirational";
+
+  if (allProducts.length >= MIN_SAMPLE) {
+    const sorted = (key: keyof typeof allProducts[0]) =>
+      allProducts.map(p => p[key] ?? 0).filter(v => v > 0).sort((a, b) => a - b);
+
+    benchmarkScores = {
+      clarity:      Math.round(percentile(sorted("clarityScore"),      90)),
+      completeness: Math.round(percentile(sorted("completenessScore"), 90)),
+      trust:        Math.round(percentile(sorted("trustScore"),        90)),
+      tags:         Math.round(percentile(sorted("tagScore"),          90)),
+      overall:      Math.round(percentile(sorted("overallScore"),      90)),
+      // Consistency and policy come from store-level, not per-product — use aspirational
+      consistency:  ASPIRATIONAL_BENCHMARK.consistency,
+      policy:       ASPIRATIONAL_BENCHMARK.policy,
+    };
+    benchmarkSource = "real-p90";
+  } else {
+    benchmarkScores = ASPIRATIONAL_BENCHMARK;
+    benchmarkSource = "aspirational";
+  }
+
   const storeScores = {
-    clarity: summary?.clarityScore ?? 0,
+    clarity:      summary?.clarityScore ?? 0,
     completeness: summary?.completenessScore ?? 0,
-    trust: summary?.trustScore ?? 0,
-    tags: summary?.tagScore ?? 0,
-    consistency: summary?.consistencyScore ?? 0,
-    policy: summary?.policyScore ?? 0,
+    trust:        summary?.trustScore ?? 0,
+    tags:         summary?.tagScore ?? 0,
+    consistency:  summary?.consistencyScore ?? 0,
+    policy:       summary?.policyScore ?? 0,
   };
 
   const dimensions = [
-    { name: "Product Clarity", storeScore: storeScores.clarity, benchmarkScore: BENCHMARK.clarity },
-    { name: "Completeness", storeScore: storeScores.completeness, benchmarkScore: BENCHMARK.completeness },
-    { name: "Trust Signals", storeScore: storeScores.trust, benchmarkScore: BENCHMARK.trust },
-    { name: "Tag Quality", storeScore: storeScores.tags, benchmarkScore: BENCHMARK.tags },
-    { name: "Consistency", storeScore: storeScores.consistency, benchmarkScore: BENCHMARK.consistency },
-    { name: "Policy Coverage", storeScore: storeScores.policy, benchmarkScore: BENCHMARK.policy },
+    { name: "Product Clarity",   storeScore: storeScores.clarity,      benchmarkScore: benchmarkScores.clarity },
+    { name: "Completeness",      storeScore: storeScores.completeness,  benchmarkScore: benchmarkScores.completeness },
+    { name: "Trust Signals",     storeScore: storeScores.trust,         benchmarkScore: benchmarkScores.trust },
+    { name: "Tag Quality",       storeScore: storeScores.tags,          benchmarkScore: benchmarkScores.tags },
+    { name: "Consistency",       storeScore: storeScores.consistency,   benchmarkScore: benchmarkScores.consistency },
+    { name: "Policy Coverage",   storeScore: storeScores.policy,        benchmarkScore: benchmarkScores.policy },
   ].map(d => ({
     ...d,
     gap: d.benchmarkScore - d.storeScore,
@@ -598,18 +646,21 @@ router.get("/stores/:storeId/benchmark", async (req, res): Promise<void> => {
   }));
 
   const overallStoreScore = summary?.overallScore ?? 0;
-  const topImprovements = dimensions
+  const topImprovements = [...dimensions]
     .sort((a, b) => b.gap - a.gap)
     .slice(0, 3)
+    .filter(d => d.gap > 0)
     .map(d => `Improve ${d.name} by ${Math.round(d.gap)} points to match top AI-ready stores`);
 
   res.json({
     storeId,
     overallStoreScore,
-    overallBenchmarkScore: BENCHMARK.overall,
-    overallGap: BENCHMARK.overall - overallStoreScore,
+    overallBenchmarkScore: benchmarkScores.overall,
+    overallGap: benchmarkScores.overall - overallStoreScore,
     dimensions,
     topImprovements,
+    benchmarkSource,
+    benchmarkSampleSize: allProducts.length,
   });
 });
 

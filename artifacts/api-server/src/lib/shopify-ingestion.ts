@@ -8,6 +8,7 @@ interface ShopifyMetafieldNode {
 
 interface ShopifyProductNode {
   id: string;
+  handle: string;
   title: string;
   descriptionHtml: string;
   productType: string;
@@ -49,6 +50,7 @@ const PRODUCTS_QUERY = `
       edges {
         node {
           id
+          handle
           title
           descriptionHtml
           productType
@@ -112,6 +114,7 @@ const PAGES_QUERY = `
 
 export interface IngestedProduct {
   shopifyId: string;
+  handle: string;
   title: string;
   description: string | null;
   productType: string | null;
@@ -222,6 +225,93 @@ function detectStructuredData(descriptionHtml: string, metafields: ShopifyMetafi
   });
 }
 
+interface PageSignals {
+  hasStructuredData: boolean;
+  reviewCount: number;
+  reviewRating: number;
+}
+
+async function fetchProductPageSignals(domain: string, handle: string): Promise<PageSignals | null> {
+  const url = `https://${domain}/products/${handle}`;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "AI-Readiness-Analyzer/1.0 (product analysis bot)" },
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+
+    const html = await res.text();
+
+    // Extract all JSON-LD blocks from the page
+    const jsonLdBlocks: Record<string, unknown>[] = [];
+    const jsonLdPattern = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = jsonLdPattern.exec(html)) !== null) {
+      try {
+        const parsed = JSON.parse(match[1] ?? "{}") as unknown;
+        if (parsed && typeof parsed === "object") {
+          // Handle both single objects and @graph arrays
+          const items = Array.isArray((parsed as Record<string, unknown>)["@graph"])
+            ? (parsed as Record<string, unknown>)["@graph"] as Record<string, unknown>[]
+            : [parsed as Record<string, unknown>];
+          jsonLdBlocks.push(...items);
+        }
+      } catch { /* skip malformed JSON-LD */ }
+    }
+
+    // Check for Product schema
+    const productSchema = jsonLdBlocks.find(
+      b => b["@type"] === "Product" || (Array.isArray(b["@type"]) && (b["@type"] as string[]).includes("Product"))
+    );
+    const hasStructuredData = !!productSchema;
+
+    // Extract review signals from AggregateRating
+    let reviewCount = 0;
+    let reviewRating = 0;
+    const aggregateRating = productSchema?.["aggregateRating"] as Record<string, unknown> | undefined
+      ?? jsonLdBlocks.find(b => b["@type"] === "AggregateRating");
+
+    if (aggregateRating) {
+      const count = aggregateRating["reviewCount"] ?? aggregateRating["ratingCount"];
+      const rating = aggregateRating["ratingValue"];
+      if (typeof count === "number") reviewCount = Math.round(count);
+      else if (typeof count === "string") reviewCount = parseInt(count, 10) || 0;
+      if (typeof rating === "number") reviewRating = rating;
+      else if (typeof rating === "string") reviewRating = parseFloat(rating) || 0;
+    }
+
+    return { hasStructuredData, reviewCount, reviewRating };
+  } catch {
+    return null; // timeout, network error, password-protected store
+  }
+}
+
+async function enrichWithPageSignals(
+  domain: string,
+  products: Array<IngestedProduct & { handle: string }>,
+): Promise<void> {
+  const BATCH = 8;
+  for (let i = 0; i < products.length; i += BATCH) {
+    const batch = products.slice(i, i + BATCH);
+    const results = await Promise.all(batch.map(p => fetchProductPageSignals(domain, p.handle)));
+    for (let j = 0; j < batch.length; j++) {
+      const signals = results[j];
+      if (!signals) continue;
+      const product = batch[j]!;
+      // Page HTML is ground truth — override metafield values
+      product.hasStructuredData = signals.hasStructuredData;
+      // Use page-derived review count only if better than metafield-derived
+      if (signals.reviewCount > product.reviewCount) {
+        product.reviewCount = signals.reviewCount;
+        product.reviewRating = signals.reviewRating;
+      }
+    }
+  }
+}
+
 async function fetchAllProducts(domain: string, accessToken: string): Promise<IngestedProduct[]> {
   const products: IngestedProduct[] = [];
   let cursor: string | null = null;
@@ -241,6 +331,7 @@ async function fetchAllProducts(domain: string, accessToken: string): Promise<In
 
       products.push({
         shopifyId: node.id,
+        handle: node.handle,
         title: node.title,
         description: node.descriptionHtml || null,
         productType: node.productType || null,
@@ -259,7 +350,10 @@ async function fetchAllProducts(domain: string, accessToken: string): Promise<In
     cursor = result.products.pageInfo.endCursor;
   }
 
-  return products.slice(0, 250);
+  const capped = products.slice(0, 250);
+  // Enrich with page HTML signals — ground truth for structured data + review counts
+  await enrichWithPageSignals(domain, capped);
+  return capped;
 }
 
 async function fetchPolicyCoverage(domain: string, accessToken: string): Promise<PolicyCoverage> {

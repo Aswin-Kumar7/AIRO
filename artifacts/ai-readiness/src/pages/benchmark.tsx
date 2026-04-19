@@ -66,7 +66,11 @@ export default function Benchmark() {
               <Card className="border-border bg-muted/30">
                 <CardContent className="p-4 text-center">
                   <p className="text-3xl font-bold text-foreground">{Math.round(benchmark.overallBenchmarkScore)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Benchmark (Top Store)</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {(benchmark as { benchmarkSource?: string }).benchmarkSource === "real-p90"
+                      ? `P90 of ${(benchmark as { benchmarkSampleSize?: number }).benchmarkSampleSize} analyzed products`
+                      : "Aspirational target"}
+                  </p>
                 </CardContent>
               </Card>
               <Card className={`border ${benchmark.overallGap > 0 ? "border-red-200 bg-red-50/30" : "border-green-200 bg-green-50/30"}`}>
