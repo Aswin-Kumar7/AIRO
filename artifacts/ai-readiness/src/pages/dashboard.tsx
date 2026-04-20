@@ -250,11 +250,19 @@ export default function Dashboard() {
   const [removing, setRemoving] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  const { data: allStores = [] } = useListStores({ query: { staleTime: 30_000, queryKey: getListStoresQueryKey() } });
+  const { data: allStores = [], isLoading: storesLoading } = useListStores({ query: { staleTime: 30_000, queryKey: getListStoresQueryKey() } });
 
   useEffect(() => {
-    if ((allStores as unknown[]).length === 0) setShowOnboarding(true);
-  }, [(allStores as unknown[]).length]);
+    if (storesLoading) return;
+    const stores = allStores as Array<{ id: string }>;
+    if (stores.length === 0) {
+      setShowOnboarding(true);
+    } else {
+      setShowOnboarding(false);
+      // Auto-pick first store if none is active
+      if (!activeStoreId) setActiveStoreId(stores[0]!.id);
+    }
+  }, [storesLoading, (allStores as unknown[]).length, activeStoreId, setActiveStoreId]);
 
   const { data: store } = useGetStore(activeStoreId!, {
     query: {
@@ -266,7 +274,7 @@ export default function Dashboard() {
       },
     },
   });
-  const { data: summary, isLoading } = useGetStoreSummary(activeStoreId!, {
+  const { data: summary, isLoading: summaryLoading } = useGetStoreSummary(activeStoreId!, {
     query: { enabled: !!activeStoreId, queryKey: getGetStoreSummaryQueryKey(activeStoreId!) },
   });
 
@@ -418,7 +426,7 @@ export default function Dashboard() {
         </div>
 
         {/* Zone 2: Score breakdown + products preview */}
-        {isLoading ? (
+        {summaryLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
           </div>

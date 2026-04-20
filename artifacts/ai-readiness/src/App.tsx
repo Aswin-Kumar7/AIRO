@@ -8,7 +8,7 @@ import { Loader2 } from "lucide-react";
 import type { ComponentType } from "react";
 
 import NotFound from "@/pages/not-found";
-import Login from "@/pages/login";
+import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import Products from "@/pages/products";
 import ProductDetail from "@/pages/product-detail";
@@ -49,7 +49,7 @@ function ProtectedRoute({ component: Component }: { component: ComponentType }) 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Login} />
+      <Route path="/" component={Landing} />
       <Route path="/dashboard">
         {() => <ProtectedRoute component={Dashboard} />}
       </Route>
