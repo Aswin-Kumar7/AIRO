@@ -40,7 +40,7 @@ function getRawBody(req: import("express").Request): Buffer | null {
 router.post("/shopify/webhooks/products-update", async (req, res): Promise<void> => {
   const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string | undefined;
   const shopDomain = req.headers["x-shopify-shop-domain"] as string | undefined;
-  const secret = process.env.SHOPIFY_CLIENT_SECRET ?? "";
+  const secret = process.env.SHOPIFY_API_SECRET ?? "";
 
   if (!hmacHeader || !shopDomain || !secret) {
     res.status(401).json({ error: "Unauthorized" });
@@ -122,7 +122,7 @@ router.post("/shopify/webhooks/products-update", async (req, res): Promise<void>
 router.post("/shopify/webhooks/products-delete", async (req, res): Promise<void> => {
   const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string | undefined;
   const shopDomain = req.headers["x-shopify-shop-domain"] as string | undefined;
-  const secret = process.env.SHOPIFY_CLIENT_SECRET ?? "";
+  const secret = process.env.SHOPIFY_API_SECRET ?? "";
 
   if (!hmacHeader || !shopDomain || !secret) {
     res.status(401).json({ error: "Unauthorized" });
