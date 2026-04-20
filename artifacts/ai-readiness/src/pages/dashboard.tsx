@@ -192,7 +192,7 @@ function ProductsPreview({ storeId, hasAnalysis }: { storeId: string; hasAnalysi
 
 const INSIGHT_CARDS = [
   {
-    href: "/gaps",
+    href: "/issues",
     icon: AlertTriangle,
     color: "text-red-500",
     bg: "bg-red-50 dark:bg-red-950/20",
@@ -200,7 +200,7 @@ const INSIGHT_CARDS = [
     description: "Evidence-based issues grouped by impact",
   },
   {
-    href: "/perception",
+    href: "/ai-readiness",
     icon: Eye,
     color: "text-violet-500",
     bg: "bg-violet-50 dark:bg-violet-950/20",
@@ -208,7 +208,7 @@ const INSIGHT_CARDS = [
     description: "How AI assistants describe your store",
   },
   {
-    href: "/faq-health",
+    href: "/ai-readiness",
     icon: FileQuestion,
     color: "text-blue-500",
     bg: "bg-blue-50 dark:bg-blue-950/20",
@@ -216,7 +216,7 @@ const INSIGHT_CARDS = [
     description: "Gaps in customer question coverage",
   },
   {
-    href: "/structured-data",
+    href: "/tools",
     icon: Layers,
     color: "text-emerald-500",
     bg: "bg-emerald-50 dark:bg-emerald-950/20",
@@ -224,7 +224,7 @@ const INSIGHT_CARDS = [
     description: "JSON-LD markup across your catalog",
   },
   {
-    href: "/tags",
+    href: "/tools",
     icon: Tag,
     color: "text-amber-500",
     bg: "bg-amber-50 dark:bg-amber-950/20",
@@ -232,7 +232,7 @@ const INSIGHT_CARDS = [
     description: "Semantic tag coverage and suggestions",
   },
   {
-    href: "/benchmark",
+    href: "/tools",
     icon: BarChart3,
     color: "text-primary",
     bg: "bg-primary/5",
@@ -460,15 +460,15 @@ export default function Dashboard() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs font-medium text-foreground">{totalIssues} issues found</p>
-                    <Link href="/gaps">
+                    <Link href="/issues">
                       <span className="text-xs text-primary hover:underline cursor-pointer">View all →</span>
                     </Link>
                   </div>
                   <div className="flex gap-2">
                     {[
-                      { label: "Critical", count: summary.criticalIssues, color: "bg-red-500", href: "/gaps" },
-                      { label: "Medium", count: summary.mediumIssues, color: "bg-amber-500", href: "/gaps" },
-                      { label: "Low", count: summary.lowIssues, color: "bg-blue-400", href: "/gaps" },
+                      { label: "Critical", count: summary.criticalIssues, color: "bg-red-500", href: "/issues" },
+                      { label: "Medium", count: summary.mediumIssues, color: "bg-amber-500", href: "/issues" },
+                      { label: "Low", count: summary.lowIssues, color: "bg-blue-400", href: "/issues" },
                       { label: "Quick Fixes", count: summary.pendingFixes, color: "bg-violet-500", href: "/fixes" },
                     ].map(({ label, count, color, href }) => (
                       <Link key={label} href={href}>
