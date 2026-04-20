@@ -300,6 +300,22 @@ function BenchmarkTab({ storeId }: { storeId: string }) {
     <Card className="border-dashed"><CardContent className="py-12 text-center"><BarChart3 className="w-8 h-8 text-slate-300 mx-auto mb-2" /><p className="text-sm text-slate-400">Run an analysis to see benchmarks</p></CardContent></Card>
   );
 
+  const isAspirational = (benchmark as any).benchmarkSource === "aspirational";
+
+  if (isAspirational) {
+    return (
+      <Card className="border-dashed">
+        <CardContent className="py-12 text-center">
+          <Info className="w-8 h-8 text-blue-300 mx-auto mb-3" />
+          <p className="text-sm text-slate-600 font-medium mb-1">Not enough data to compute benchmarks</p>
+          <p className="text-xs text-slate-400 max-w-[280px] mx-auto">
+            We need at least 10 analyzed stores in the system to compute a real P90 benchmark. Once reached, your scores will be compared against top-tier AI-ready stores.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
