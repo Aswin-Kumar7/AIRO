@@ -1,5 +1,13 @@
+import { getCsrfToken } from "./csrf-service";
 async function requestJson<T>(input: string): Promise<T> {
-  const res = await fetch(input, { credentials: "include" });
+  let headers = {};
+  // Assume GET by default, but allow for future extension
+  const method = "GET";
+  if (method !== "GET" && method !== "HEAD") {
+    const csrfToken = await getCsrfToken();
+    headers = { ...headers, "x-csrf-token": csrfToken };
+  }
+  const res = await fetch(input, { credentials: "include", headers });
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {

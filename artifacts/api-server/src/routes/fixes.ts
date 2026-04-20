@@ -134,9 +134,14 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
     return;
   }
 
-  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
   if (!store) {
-    res.status(404).json({ error: "Store not found" });
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
   }
 

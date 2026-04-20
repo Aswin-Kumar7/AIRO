@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import {
   db,
   perceptionReportsTable,
@@ -13,10 +13,14 @@ const router: IRouter = Router();
 
 router.get("/stores/:storeId/tag-optimizer", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
-
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
   if (!store) {
-    res.status(404).json({ error: "Store not found" });
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
   }
 

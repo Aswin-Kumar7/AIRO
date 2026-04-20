@@ -3,7 +3,13 @@ export function deleteStore(storeId: string): Promise<{ success: boolean }> {
 }
 
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(input, { credentials: "include", ...init });
+  let headers = { ...(init?.headers || {}) };
+  const method = (init?.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    const csrfToken = await getCsrfToken();
+    headers = { ...headers, "x-csrf-token": csrfToken };
+  }
+  const res = await fetch(input, { credentials: "include", ...init, headers });
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
@@ -14,6 +20,7 @@ async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+import { getCsrfToken } from "./csrf-service";
 
 export type FixType = "description" | "tags" | "title" | "structure" | "schema";
 

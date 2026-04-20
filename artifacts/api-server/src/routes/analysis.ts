@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, Request, Response } from "express";
 import { eq, avg, count, and, isNotNull, ne } from "drizzle-orm";
 import { rateLimit } from "express-rate-limit";
 import {
@@ -31,11 +31,16 @@ const analysisLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-router.post("/stores/:storeId/analyze", analysisLimiter, async (req, res): Promise<void> => {
+router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
   if (!store) {
-    res.status(404).json({ error: "Store not found" });
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
   }
 
@@ -506,8 +511,10 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req, res): Promi
   });
 });
 
-router.get("/jobs/:jobId", async (req, res): Promise<void> => {
-  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, req.params.jobId));
+
+router.get("/jobs/:jobId", async (req: Request, res: Response): Promise<void> => {
+  const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (!job) {
     res.status(404).json({ error: "Job not found" });
     return;
@@ -520,7 +527,7 @@ router.get("/jobs/:jobId", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/stores/:storeId/summary", async (req, res): Promise<void> => {
+router.get("/stores/:storeId/summary", async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
   if (!store) {
@@ -551,7 +558,7 @@ router.get("/stores/:storeId/summary", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/stores/:storeId/gaps", async (req, res): Promise<void> => {
+router.get("/stores/:storeId/gaps", async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const gaps = await db.select({
     gap: gapsTable,
@@ -580,7 +587,7 @@ router.get("/stores/:storeId/gaps", async (req, res): Promise<void> => {
   })));
 });
 
-router.get("/stores/:storeId/consistency", async (req, res): Promise<void> => {
+router.get("/stores/:storeId/consistency", async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
   if (!store) {
@@ -610,7 +617,7 @@ function percentile(sortedValues: number[], p: number): number {
   return sortedValues[Math.max(0, Math.min(idx, sortedValues.length - 1))]!;
 }
 
-router.get("/stores/:storeId/benchmark", async (req, res): Promise<void> => {
+router.get("/stores/:storeId/benchmark", async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
   if (!store) {
@@ -704,3 +711,4 @@ router.get("/stores/:storeId/benchmark", async (req, res): Promise<void> => {
 });
 
 export default router;
+

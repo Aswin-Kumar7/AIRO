@@ -1,3 +1,4 @@
+import { getCsrfToken } from "./csrf-service";
 export type ActionPlanItem = {
   gapId: string;
   gap: string;
@@ -47,7 +48,13 @@ export type TagOptimizerResponse = {
 };
 
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, { credentials: "include", ...init });
+  let headers = { ...(init?.headers || {}) };
+  const method = (init?.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    const csrfToken = await getCsrfToken();
+    headers = { ...headers, "x-csrf-token": csrfToken };
+  }
+  const response = await fetch(input, { credentials: "include", ...init, headers });
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {
@@ -60,7 +67,6 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
     }
     throw new Error(message);
   }
-
   return response.json() as Promise<T>;
 }
 

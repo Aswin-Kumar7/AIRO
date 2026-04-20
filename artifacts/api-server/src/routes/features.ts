@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, storesTable, productsTable, storeSummariesTable, perceptionReportsTable } from "@workspace/db";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -18,9 +18,13 @@ const router: IRouter = Router();
 
 router.get("/stores/:storeId/llms-txt", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-
-  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
-  if (!store) { res.status(404).json({ error: "Store not found" }); return; }
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  if (!store) { res.status(403).json({ error: "Forbidden: Store does not belong to user" }); return; }
 
   const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
   const [report] = await db.select().from(perceptionReportsTable).where(eq(perceptionReportsTable.storeId, storeId));

@@ -180,6 +180,16 @@ router.delete("/stores/:storeId", async (req, res): Promise<void> => {
 
 router.get("/stores/:storeId/activity", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  if (!store) {
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
+    return;
+  }
   const activity = await db
     .select()
     .from(activityTable)
