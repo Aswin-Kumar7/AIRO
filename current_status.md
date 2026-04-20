@@ -170,46 +170,64 @@ All cached endpoints include `cached: true/false` in response.
 
 ---
 
-## Known Issues
+## Known Issues (post fix round 1)
 
-> Full verified issue list with file references: see `issues.md`
+> Full verified issue list with file references and fix status: see `issues.md`
 
-### Critical (breaks primary user flow)
-| Issue | File | Notes |
+### CRITICAL — must fix before demo
+| Issue | File | Status |
 |---|---|---|
-| **Dashboard nav links all 404** | `dashboard.tsx:193–242, 463–471` | INSIGHT_CARDS + count tiles link to `/gaps`, `/perception`, `/faq-health`, `/structured-data`, `/tags`, `/benchmark` — none exist in App.tsx. Must remap to `/issues`, `/ai-readiness`, `/tools` |
-| **Webhook HMAC wrong env var** | `routes/webhooks.ts:43,125` | Reads `SHOPIFY_CLIENT_SECRET`; OAuth uses `SHOPIFY_API_SECRET`. Webhooks always 401 in production |
-| **No analysis job persistence** | `routes/analysis.ts` | jobId never written to DB; server restart mid-run silently drops the job |
+| **CSRF middleware breaks all frontend mutations** | `app.ts:102–120` | 🆕 NEW — `csrf-sync` added to backend but frontend never sends `x-csrf-token`. Every POST/DELETE/PATCH returns 403. App is unusable for writes. |
 
-### High (security / data risk)
-| Issue | File | Notes |
+### High
+| Issue | File | Status |
 |---|---|---|
-| **SESSION_SECRET hardcoded fallback** | `app.ts:9` | Missing env var in production → session forgery possible |
-| **No CSRF protection** | `app.ts` | `sameSite: none` in prod + no CSRF token → cross-site triggered mutations |
-| **No per-user store isolation** | `routes/stores.ts:19` | All authenticated users see all stores; userId filter never applied |
-| **MemoryStore sessions** | `app.ts:64–75` | Sessions lost on restart; cannot scale horizontally |
-| **No rate limiting on analysis** | `routes/analysis.ts` | Unlimited LLM pipeline triggers per user |
+| **analysis + products/fixes routes skip userId ownership check** | `routes/analysis.ts:36`, `fixes.ts`, `products.ts` | 🆕 NEW — any authenticated user can trigger analysis on, read, or apply fixes to another user's store |
+| **GET /stores/:storeId/activity missing userId check** | `routes/stores.ts:181–196` | 🆕 NEW — activity log readable by any user who knows the storeId |
+| **H-3 partial: userId filter missing on non-CRUD routes** | `routes/analysis.ts`, `fixes.ts`, `products.ts`, `insights.ts`, `features.ts` | ⚠ PARTIAL — `stores.ts` fixed; all other store-scoped routes still open |
 
-### Medium (correctness, UX)
-| Issue | Notes |
-|---|---|
-| **`shopifySynced = true` on verification exception** | `fixes.ts:107` — verification call throws → false-positive synced badge |
-| **`structure`/`schema` fix types skip Shopify write** | `fixes.ts:65` — only `description`, `tags`, `title` are sent to Shopify |
-| **Benchmark shows hardcoded values on demos < 10 stores** | `ai-analyzer.ts:39–49` — `BENCHMARK_SCORES` fallback used silently |
-| **`pendingStoreUrl` never read back** | Saved to `sessionStorage` on landing page but not consumed in onboarding modal |
-| **No global React error boundary** | Crash in any component = blank white screen |
-| **Stale `activeStoreId` not validated** | localStorage value not checked against live store list on load |
-| **`.env.example` missing 5 required vars** | `SESSION_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `APP_BASE_URL` |
+### Medium
+| Issue | File | Status |
+|---|---|---|
+| **ALL gaps marked isFixed when any single fix applied** | `fixes.ts:163–165` | 🔴 OPEN — applying a description fix clears title/trust/tag gaps too |
+| **stale activeStoreId not validated against server** | `store-context.tsx` | 🔴 OPEN — deleted store → all queries 404 with no UX recovery |
+| **.env.example missing 5 required vars** | `.env.example` | ⚠ PARTIAL — still missing `SESSION_SECRET`, `APP_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
+| **jobs table missing completedAt/errorMessage** | `lib/db/src/schema/jobs.ts` | 🆕 NEW — job status endpoint cannot report when a job finished or why it failed |
+| **session table crash if Drizzle migration not run** | `app.ts:82` | 🆕 NEW — `createTableIfMissing: false` silently crashes on fresh clone |
+| **No global React error boundary** | `App.tsx` | 🔴 OPEN — component crash = blank white screen |
 
-### Low (polish, hygiene)
-| Issue | Notes |
+### Low
+| Issue | Notes | Status |
+|---|---|---|
+| **rawBody now typed as `any`** | `app.ts:96` — regressed from inline type to `any` cast | 🔴 REGRESSED |
+| **home.tsx + login.tsx orphaned in pages/** | Not imported or routed anywhere | 🆕 NEW |
+| **stores.userId nullable, no FK constraint** | Orphaned rows possible; per-user isolation fix is incomplete without this | 🔴 OPEN |
+| **Score values render blank while summary loading** | `dashboard.tsx` — `?? 0` guard missing | 🔴 OPEN |
+| **Coarse commit messages** | Cannot retroactively fix; apply Conventional Commits going forward | 🔴 OPEN |
+| **trugglehog typo in CI workflow** | `.github/workflows/` | 🔴 OPEN (unverified) |
+
+### Fixed (19 of 27 original issues resolved)
+| Original | Resolution |
 |---|---|
-| **Fabricated social proof on landing page** | "500+ merchants", "98% accuracy", fake logos |
-| **13 orphaned page files not yet deleted** | `gaps.tsx`, `action-plan.tsx`, `perception.tsx`, `query-test.tsx`, `consistency.tsx`, `topical-authority.tsx`, `internal-links.tsx`, `faq-health.tsx`, `faq-schema.tsx`, `tags.tsx`, `structured-data.tsx`, `benchmark.tsx`, `llms-txt.tsx` |
-| **`BENCHMARK_SCORES` dead code** | Exported but never imported; live path uses P90 from `analysis.ts` |
-| **apply / bulk-apply logic duplicated** | `fixes.ts` — ~80% shared code, bugs must be fixed twice |
-| **Coarse commit messages** | Fails rubric's "clean git history" criterion |
-| **Webhook registration failure silently discarded** | No log, no UI indicator when `registerStoreWebhooks` throws |
+| C-1 Dashboard dead links | `/issues`, `/ai-readiness`, `/tools` |
+| C-2 Webhook HMAC env var | Changed to `SHOPIFY_API_SECRET` |
+| C-3 No job persistence | `jobsTable` + `GET /jobs/:jobId` added |
+| H-1 SESSION_SECRET fallback | Throws in production |
+| H-4 MemoryStore sessions | `connect-pg-simple` + `session.ts` schema |
+| H-5 No rate limiting | 5/hr per userId via `express-rate-limit` |
+| M-1 LLM JSON not Zod-validated | Zod schemas + `safeParse` added |
+| M-2 shopifySynced false positive | `false` + error message on catch |
+| M-3 structure/schema never written | "Manual action required" message returned |
+| M-6 pendingStoreUrl never read | Consumed in `connect.tsx` |
+| M-7 Benchmark no transparency | `benchmarkSource` flag + null gaps when aspirational |
+| M-9 implementation_plan.md wrong stack | Updated to Express + Vite + @google/generative-ai |
+| L-1 Fabricated social proof | Honest hackathon stats, real tech logos |
+| L-2 13 orphaned pages | All deleted |
+| L-3 BENCHMARK_SCORES dead code | Removed |
+| L-4 apply/bulk-apply duplicated | Shared `applyFixToShopify` helper |
+| L-9 Webhook errors silently dropped | Logged via req.log.warn/error |
+| H-2 partial | csrf-sync added (frontend wiring pending) |
+| H-3 partial | userId filter on stores CRUD routes |
 
 ---
 
