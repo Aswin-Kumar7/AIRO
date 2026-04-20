@@ -104,7 +104,8 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
             shopifySynced = verified;
             if (!verified) shopifyError = reason ?? "Update written but Shopify verification failed";
           } catch {
-            shopifySynced = true; // Trust mutation if verification call errors
+            shopifySynced = false;
+            shopifyError = "Verification call failed — please check Shopify manually";
           }
         }
       } catch (err) {
@@ -207,7 +208,8 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
               shopifySynced = verified;
               if (!verified) shopifyError = reason ?? "Update written but Shopify verification failed";
             } catch {
-              shopifySynced = true;
+              shopifySynced = false;
+              shopifyError = "Verification call failed — please check Shopify manually";
             }
           }
         } catch (err) {

@@ -2,6 +2,8 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import session from "express-session";
+import createPgSession from "connect-pg-simple";
+import pg from "pg";
 import { csrfSync } from "csrf-sync";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -67,7 +69,18 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
+
+const PgStore = createPgSession(session);
+const sessionPool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
 app.use(session({
+  store: new PgStore({
+    pool: sessionPool,
+    tableName: "session",
+    createTableIfMissing: false, // We created it via Drizzle already
+  }),
   name: "sid",
   secret: SESSION_SECRET,
   resave: false,

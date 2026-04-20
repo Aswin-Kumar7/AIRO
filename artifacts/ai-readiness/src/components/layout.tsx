@@ -1,3 +1,4 @@
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import {
@@ -14,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import type { ReactNode } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 // ─── Score badge ──────────────────────────────────────────────────────────────
 
@@ -82,7 +83,24 @@ function NavItem({
 function StoreSelector() {
   const { activeStoreId, setActiveStoreId } = useStore();
   const { data: stores } = useListStores();
+  const { toast } = useToast();
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (stores && stores.length > 0) {
+      const isValid = stores.some((s) => s.id === activeStoreId);
+      if (activeStoreId && !isValid) {
+        const fallback = stores[0].id;
+        setActiveStoreId(fallback);
+        toast({
+          title: "Store changed",
+          description: "Your previously active store is no longer available.",
+        });
+      } else if (!activeStoreId) {
+        setActiveStoreId(stores[0].id);
+      }
+    }
+  }, [stores, activeStoreId, setActiveStoreId, toast]);
 
   const activeStore = stores?.find((s) => s.id === activeStoreId);
   const { data: summary } = useGetStoreSummary(activeStoreId!, {

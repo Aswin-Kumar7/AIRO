@@ -1,10 +1,12 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { ErrorBoundary } from "react-error-boundary";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StoreProvider } from "@/context/store-context";
 import { AuthProvider, useAuth } from "@/context/auth-context";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { ComponentType } from "react";
 
 import NotFound from "@/pages/not-found";
@@ -46,42 +48,64 @@ function ProtectedRoute({ component: Component }: { component: ComponentType }) 
   return <Component />;
 }
 
+function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-50 text-center">
+      <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
+        <AlertCircle className="w-6 h-6 text-red-600" />
+      </div>
+      <h2 className="text-lg font-bold text-slate-900 mb-2">Something went wrong</h2>
+      <p className="text-sm text-slate-500 max-w-md mb-6">{error.message || "An unexpected error occurred."}</p>
+      <div className="flex gap-3">
+        <Button onClick={() => window.location.reload()} variant="outline">
+          Reload Page
+        </Button>
+        <Button onClick={resetErrorBoundary} className="bg-indigo-600 hover:bg-indigo-700">
+          Try again
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={Landing} />
-      <Route path="/dashboard">
-        {() => <ProtectedRoute component={Dashboard} />}
-      </Route>
-      <Route path="/products">
-        {() => <ProtectedRoute component={Products} />}
-      </Route>
-      <Route path="/products/:productId">
-        {() => <ProtectedRoute component={ProductDetail} />}
-      </Route>
-      <Route path="/issues">
-        {() => <ProtectedRoute component={Issues} />}
-      </Route>
-      <Route path="/fixes">
-        {() => <ProtectedRoute component={Fixes} />}
-      </Route>
-      <Route path="/ai-readiness">
-        {() => <ProtectedRoute component={AiReadiness} />}
-      </Route>
-      <Route path="/content">
-        {() => <ProtectedRoute component={ContentPage} />}
-      </Route>
-      <Route path="/tools">
-        {() => <ProtectedRoute component={ToolsPage} />}
-      </Route>
-      <Route path="/connect">
-        {() => <ProtectedRoute component={ConnectStore} />}
-      </Route>
-      <Route path="/settings">
-        {() => <ProtectedRoute component={Settings} />}
-      </Route>
-      <Route component={NotFound} />
-    </Switch>
+    <ErrorBoundary FallbackComponent={ErrorFallback} onReset={() => queryClient.resetQueries()}>
+      <Switch>
+        <Route path="/" component={Landing} />
+        <Route path="/dashboard">
+          {() => <ProtectedRoute component={Dashboard} />}
+        </Route>
+        <Route path="/products">
+          {() => <ProtectedRoute component={Products} />}
+        </Route>
+        <Route path="/products/:productId">
+          {() => <ProtectedRoute component={ProductDetail} />}
+        </Route>
+        <Route path="/issues">
+          {() => <ProtectedRoute component={Issues} />}
+        </Route>
+        <Route path="/fixes">
+          {() => <ProtectedRoute component={Fixes} />}
+        </Route>
+        <Route path="/ai-readiness">
+          {() => <ProtectedRoute component={AiReadiness} />}
+        </Route>
+        <Route path="/content">
+          {() => <ProtectedRoute component={ContentPage} />}
+        </Route>
+        <Route path="/tools">
+          {() => <ProtectedRoute component={ToolsPage} />}
+        </Route>
+        <Route path="/connect">
+          {() => <ProtectedRoute component={ConnectStore} />}
+        </Route>
+        <Route path="/settings">
+          {() => <ProtectedRoute component={Settings} />}
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+    </ErrorBoundary>
   );
 }
 

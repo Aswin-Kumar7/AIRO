@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { chatCompletion } from "./ai-client";
 import { logger } from "./logger";
 import { runRuleEngine, type ProductInput, type RuleViolation } from "./rule-engine";
@@ -75,19 +76,23 @@ Return ONLY valid JSON, no markdown.`;
   let aiPerceptionSummary = "Limited product information makes it difficult for AI assistants to confidently recommend this product.";
   let suggestedTags: string[] = [];
 
+  const aiSchema = z.object({
+    clarityScore: z.number().min(0).max(100),
+    aiPerceptionSummary: z.string().min(1),
+    suggestedTags: z.array(z.string()).max(8),
+  });
+
   try {
     const content = await chatCompletion([{ role: "user", content: aiPrompt }], 800);
-    const parsed = JSON.parse(content) as {
-      clarityScore?: number;
-      aiPerceptionSummary?: string;
-      suggestedTags?: string[];
-    };
-    if (typeof parsed.clarityScore === "number") aiClarityScore = Math.max(0, Math.min(100, parsed.clarityScore));
-    if (typeof parsed.aiPerceptionSummary === "string" && parsed.aiPerceptionSummary.trim()) {
-      aiPerceptionSummary = parsed.aiPerceptionSummary.trim();
-    }
-    if (Array.isArray(parsed.suggestedTags)) {
-      suggestedTags = parsed.suggestedTags.filter((t): t is string => typeof t === "string").slice(0, 8);
+    const parsed = JSON.parse(content);
+    const result = aiSchema.safeParse(parsed);
+    
+    if (result.success) {
+      aiClarityScore = result.data.clarityScore;
+      aiPerceptionSummary = result.data.aiPerceptionSummary;
+      suggestedTags = result.data.suggestedTags;
+    } else {
+      logger.warn({ issues: result.error.issues, productTitle: product.title }, "AI response validation failed");
     }
   } catch (err) {
     logger.warn({ err, productTitle: product.title }, "AI layer failed — using rule-only scores");
@@ -165,9 +170,27 @@ Return a JSON object with this exact structure:
 Focus on issues that AI agents would notice when comparing products.
 Return ONLY valid JSON, no markdown.`;
 
+  const consistencySchema = z.object({
+    overallConsistencyScore: z.number().min(0).max(100),
+    issues: z.array(z.object({
+      type: z.enum(["tone", "structure", "formatting", "missing_section"]),
+      description: z.string().min(1),
+      affectedProductCount: z.number(),
+      examples: z.array(z.string()),
+    })),
+    suggestedStructure: z.array(z.string()),
+  });
+
   try {
     const content = await chatCompletion([{ role: "user", content: prompt }], 1500);
-    return JSON.parse(content) as StoreConsistencyResult;
+    const parsed = JSON.parse(content);
+    const result = consistencySchema.safeParse(parsed);
+    
+    if (result.success) {
+      return result.data;
+    }
+    logger.warn({ issues: result.error.issues }, "Consistency AI response validation failed");
+    throw new Error("Invalid AI response");
   } catch (err) {
     logger.error({ err }, "Failed to analyze store consistency");
     return {
@@ -218,9 +241,22 @@ Return a JSON object:
 
 Return ONLY valid JSON, no markdown.`;
 
+  const fixSchema = z.object({
+    improvedContent: z.string().min(1),
+    explanation: z.string().min(1),
+    estimatedScoreImprovement: z.number().min(0).max(100),
+  });
+
   try {
     const content = await chatCompletion([{ role: "user", content: prompt }], 1500);
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    const result = fixSchema.safeParse(parsed);
+    
+    if (result.success) {
+      return result.data;
+    }
+    logger.warn({ issues: result.error.issues }, "Fix AI response validation failed");
+    throw new Error("Invalid AI response");
   } catch (err) {
     logger.error({ err }, "Failed to generate fix");
     return {

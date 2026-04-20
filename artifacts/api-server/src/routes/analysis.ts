@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, avg, count, and, isNotNull, ne } from "drizzle-orm";
+import { rateLimit } from "express-rate-limit";
 import {
   db,
   storesTable,
@@ -21,7 +22,16 @@ import { generateId } from "../lib/id";
 
 const router: IRouter = Router();
 
-router.post("/stores/:storeId/analyze", async (req, res): Promise<void> => {
+const analysisLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each user to 5 analysis runs per hour
+  message: { error: "Analysis rate limit exceeded. Please try again in an hour." },
+  keyGenerator: (req) => req.session?.userId || req.ip || "anonymous",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.post("/stores/:storeId/analyze", analysisLimiter, async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
   if (!store) {
@@ -679,10 +689,15 @@ router.get("/stores/:storeId/benchmark", async (req, res): Promise<void> => {
   res.json({
     storeId,
     overallStoreScore,
-    overallBenchmarkScore: benchmarkScores.overall,
-    overallGap: benchmarkScores.overall - overallStoreScore,
-    dimensions,
-    topImprovements,
+    overallBenchmarkScore: benchmarkSource === "real-p90" ? benchmarkScores.overall : null,
+    overallGap: benchmarkSource === "real-p90" ? benchmarkScores.overall - overallStoreScore : null,
+    dimensions: dimensions.map(d => ({
+      ...d,
+      benchmarkScore: benchmarkSource === "real-p90" ? d.benchmarkScore : null,
+      gap: benchmarkSource === "real-p90" ? d.gap : null,
+      priority: benchmarkSource === "real-p90" ? d.priority : "low",
+    })),
+    topImprovements: benchmarkSource === "real-p90" ? topImprovements : [],
     benchmarkSource,
     benchmarkSampleSize: allProducts.length,
   });

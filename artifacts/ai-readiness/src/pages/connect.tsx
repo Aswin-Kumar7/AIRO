@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useStore } from "@/context/store-context";
 import { useConnectStore } from "@workspace/api-client-react";
@@ -31,6 +31,14 @@ export default function ConnectStore() {
   const connectStore = useConnectStore();
   const { setActiveStoreId } = useStore();
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    const pending = sessionStorage.getItem("pendingStoreUrl");
+    if (pending) {
+      setDomain(pending);
+      sessionStorage.removeItem("pendingStoreUrl");
+    }
+  }, []);
 
   function handleOAuth(e: React.FormEvent) {
     e.preventDefault();
