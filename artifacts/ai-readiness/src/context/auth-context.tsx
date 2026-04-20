@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { getCsrfToken, clearCsrfToken } from "@/lib/csrf-service";
 
 export interface AuthUser {
   id: string;
@@ -46,11 +47,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => { fetchMe(); }, [fetchMe]);
 
   const logout = useCallback(async () => {
-    try {
-      await fetch(`${API_BASE}/auth/logout`, { method: "POST", credentials: "include" });
-    } finally {
-      setUser(null);
+    const sendLogout = async (): Promise<Response> => {
+      const csrfToken = await getCsrfToken();
+      return fetch(`${API_BASE}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "x-csrf-token": csrfToken },
+      });
+    };
+
+    let response = await sendLogout();
+    if (response.status === 403) {
+      // Retry once with a fresh CSRF token in case the cached token expired.
+      clearCsrfToken();
+      response = await sendLogout();
     }
+    if (!response.ok) {
+      throw new Error(`Logout failed (HTTP ${response.status})`);
+    }
+
+    clearCsrfToken();
+    setUser(null);
   }, []);
 
   return (

@@ -8,6 +8,15 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
+async function requireOwnedStore(storeId: string, userId: string | undefined) {
+  if (!userId) return null;
+  const [store] = await db
+    .select()
+    .from(storesTable)
+    .where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  return store ?? null;
+}
+
 router.post("/stores/:storeId/fetch-products", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const userId = req.session?.userId;
@@ -34,6 +43,16 @@ router.post("/stores/:storeId/fetch-products", async (req, res): Promise<void> =
 
 router.get("/stores/:storeId/products", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const store = await requireOwnedStore(storeId, userId);
+  if (!store) {
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
+    return;
+  }
   const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
   res.json(products.map(p => ({
     id: p.id,
@@ -61,6 +80,16 @@ router.get("/stores/:storeId/products", async (req, res): Promise<void> => {
 router.get("/stores/:storeId/products/:productId", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const store = await requireOwnedStore(storeId, userId);
+  if (!store) {
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
+    return;
+  }
 
   const [product] = await db
     .select()
@@ -141,6 +170,16 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
   const { type } = req.body as { type?: string };
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const store = await requireOwnedStore(storeId, userId);
+  if (!store) {
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
+    return;
+  }
 
   const validTypes = ["description", "tags", "title", "structure", "schema"] as const;
   if (!type || !validTypes.includes(type as typeof validTypes[number])) {

@@ -79,8 +79,18 @@ router.get("/auth/me", async (req, res): Promise<void> => {
 });
 
 router.post("/auth/logout", (req, res): void => {
-  req.session.destroy(() => {
-    res.clearCookie("sid");
+  req.session.destroy((err) => {
+    if (err) {
+      req.log?.error?.({ err }, "Session destroy failed during logout");
+      res.status(500).json({ error: "Failed to close session" });
+      return;
+    }
+    res.clearCookie("sid", {
+      path: "/",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    });
     res.json({ ok: true });
   });
 });

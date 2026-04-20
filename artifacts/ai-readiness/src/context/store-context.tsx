@@ -24,6 +24,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  useEffect(() => {
+    function handleStorage(event: StorageEvent) {
+      if (event.key === "activeStoreId") {
+        setActiveStoreIdState(event.newValue);
+      }
+    }
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
   return (
     <StoreContext.Provider value={{ activeStoreId, setActiveStoreId }}>
       {children}

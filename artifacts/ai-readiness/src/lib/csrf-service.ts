@@ -10,10 +10,11 @@ export async function getCsrfToken(): Promise<string> {
   tokenPromise = (async (): Promise<string> => {
     const res = await fetch("/api/csrf-token", { credentials: "include" });
     if (!res.ok) throw new Error("Failed to fetch CSRF token");
-    const data = await res.json();
-    if (!data.csrfToken || typeof data.csrfToken !== "string") throw new Error("No CSRF token in response");
-    csrfToken = data.csrfToken;
-    return data.csrfToken;
+    const data = (await res.json()) as { token?: string; csrfToken?: string };
+    const resolvedToken = typeof data.token === "string" ? data.token : data.csrfToken;
+    if (!resolvedToken) throw new Error("No CSRF token in response");
+    csrfToken = resolvedToken;
+    return resolvedToken;
   })();
   try {
     return await tokenPromise;

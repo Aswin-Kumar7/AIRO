@@ -22,6 +22,17 @@ import { generateId } from "../lib/id";
 
 const router: IRouter = Router();
 
+async function requireOwnedStore(storeId: string, userId: string | undefined) {
+  if (!userId) {
+    return null;
+  }
+  const [store] = await db
+    .select()
+    .from(storesTable)
+    .where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  return store ?? null;
+}
+
 const analysisLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5, // Limit each user to 5 analysis runs per hour
@@ -38,7 +49,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  const store = await requireOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -494,7 +505,10 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
       });
 
       logger.info({ storeId, avgOverall, productCount }, "Store analysis completed");
-      await db.update(jobsTable).set({ status: "completed" }).where(eq(jobsTable.id, jobId));
+      await db
+        .update(jobsTable)
+        .set({ status: "completed", completedAt: new Date(), errorMessage: null })
+        .where(eq(jobsTable.id, jobId));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown analysis error";
       logger.error({ err, storeId }, "Store analysis failed");
@@ -506,7 +520,10 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         message: `Analysis failed — ${errorMessage}`,
         metadata: { error: errorMessage },
       });
-      await db.update(jobsTable).set({ status: "failed" }).where(eq(jobsTable.id, jobId));
+      await db
+        .update(jobsTable)
+        .set({ status: "failed", completedAt: new Date(), errorMessage })
+        .where(eq(jobsTable.id, jobId));
     }
   });
 });
@@ -519,19 +536,36 @@ router.get("/jobs/:jobId", async (req: Request, res: Response): Promise<void> =>
     res.status(404).json({ error: "Job not found" });
     return;
   }
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const store = await requireOwnedStore(job.storeId, userId);
+  if (!store) {
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
+    return;
+  }
   res.json({
     id: job.id,
     storeId: job.storeId,
     status: job.status,
     startedAt: job.startedAt.toISOString(),
+    completedAt: job.completedAt?.toISOString() ?? null,
+    errorMessage: job.errorMessage ?? null,
   });
 });
 
 router.get("/stores/:storeId/summary", async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const store = await requireOwnedStore(storeId, userId);
   if (!store) {
-    res.status(404).json({ error: "Store not found" });
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
   }
 
@@ -560,6 +594,16 @@ router.get("/stores/:storeId/summary", async (req: Request, res: Response): Prom
 
 router.get("/stores/:storeId/gaps", async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const store = await requireOwnedStore(storeId, userId);
+  if (!store) {
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
+    return;
+  }
   const gaps = await db.select({
     gap: gapsTable,
     productTitle: productsTable.title,
@@ -589,9 +633,14 @@ router.get("/stores/:storeId/gaps", async (req: Request, res: Response): Promise
 
 router.get("/stores/:storeId/consistency", async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const store = await requireOwnedStore(storeId, userId);
   if (!store) {
-    res.status(404).json({ error: "Store not found" });
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
   }
 
@@ -619,9 +668,14 @@ function percentile(sortedValues: number[], p: number): number {
 
 router.get("/stores/:storeId/benchmark", async (req: Request, res: Response): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  const userId = req.session?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  const store = await requireOwnedStore(storeId, userId);
   if (!store) {
-    res.status(404).json({ error: "Store not found" });
+    res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
   }
 

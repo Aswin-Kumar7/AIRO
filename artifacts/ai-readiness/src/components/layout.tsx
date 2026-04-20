@@ -146,6 +146,8 @@ function StoreSelector() {
 
 function UserMenu() {
   const { user, logout } = useAuth();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
   const initials = user?.name?.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "?";
 
   return (
@@ -166,7 +168,19 @@ function UserMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="gap-2 cursor-pointer text-slate-600"
-          onClick={() => logout().then(() => window.location.assign("/"))}
+          onClick={async () => {
+            try {
+              await logout();
+              localStorage.removeItem("activeStoreId");
+              navigate("/");
+            } catch (err) {
+              toast({
+                title: "Sign out failed",
+                description: err instanceof Error ? err.message : "Please try again.",
+                variant: "destructive",
+              });
+            }
+          }}
         >
           <LogOut className="w-3.5 h-3.5" />
           <span className="text-sm">Sign out</span>

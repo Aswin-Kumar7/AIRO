@@ -436,7 +436,7 @@ export default function Dashboard() {
             <div className="col-span-2 grid grid-cols-2 gap-4">
               <Card className="border-border">
                 <CardContent className="p-4 flex flex-col items-center justify-center gap-2">
-                  <ScoreRing score={summary.overallScore} size={96} />
+                  <ScoreRing score={typeof summary.overallScore === 'number' && !isNaN(summary.overallScore) ? summary.overallScore : 0} size={96} />
                   <p className="text-xs text-muted-foreground">AI Readiness Score</p>
                 </CardContent>
               </Card>
@@ -444,11 +444,11 @@ export default function Dashboard() {
               <Card className="border-border">
                 <CardContent className="p-4 space-y-2.5">
                   {[
-                    { label: "Clarity", score: summary.clarityScore },
-                    { label: "Completeness", score: summary.completenessScore },
-                    { label: "Trust", score: summary.trustScore },
-                    { label: "Tags", score: summary.tagScore },
-                    { label: "Consistency", score: summary.consistencyScore },
+                    { label: "Clarity", score: summary.clarityScore ?? 0 },
+                    { label: "Completeness", score: summary.completenessScore ?? 0 },
+                    { label: "Trust", score: summary.trustScore ?? 0 },
+                    { label: "Tags", score: summary.tagScore ?? 0 },
+                    { label: "Consistency", score: summary.consistencyScore ?? 0 },
                   ].map(({ label, score }) => (
                     <ScoreBar key={label} label={label} score={score} />
                   ))}
@@ -466,10 +466,10 @@ export default function Dashboard() {
                   </div>
                   <div className="flex gap-2">
                     {[
-                      { label: "Critical", count: summary.criticalIssues, color: "bg-red-500", href: "/issues" },
-                      { label: "Medium", count: summary.mediumIssues, color: "bg-amber-500", href: "/issues" },
-                      { label: "Low", count: summary.lowIssues, color: "bg-blue-400", href: "/issues" },
-                      { label: "Quick Fixes", count: summary.pendingFixes, color: "bg-violet-500", href: "/fixes" },
+                      { label: "Critical", count: summary.criticalIssues ?? 0, color: "bg-red-500", href: "/issues" },
+                      { label: "Medium", count: summary.mediumIssues ?? 0, color: "bg-amber-500", href: "/issues" },
+                      { label: "Low", count: summary.lowIssues ?? 0, color: "bg-blue-400", href: "/issues" },
+                      { label: "Quick Fixes", count: summary.pendingFixes ?? 0, color: "bg-violet-500", href: "/fixes" },
                     ].map(({ label, count, color, href }) => (
                       <Link key={label} href={href}>
                         <div className="flex-1 rounded-md border border-border p-2.5 text-center hover:bg-accent transition-colors cursor-pointer min-w-[70px]">

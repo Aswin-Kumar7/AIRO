@@ -79,7 +79,7 @@ app.use(session({
   store: new PgStore({
     pool: sessionPool,
     tableName: "session",
-    createTableIfMissing: false, // We created it via Drizzle already
+    createTableIfMissing: process.env.NODE_ENV !== "production",
   }),
   name: "sid",
   secret: SESSION_SECRET,
@@ -93,7 +93,7 @@ app.use(session({
   },
 }));
 app.use(express.json({
-  verify: (req: any, _res, buf) => {
+  verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
     req.rawBody = buf;
   },
 }));

@@ -7,6 +7,8 @@ export const jobsTable = pgTable("jobs", {
   storeId: text("store_id").notNull(),
   status: text("status").notNull(),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  errorMessage: text("error_message"),
 });
 
 export const insertJobSchema = createInsertSchema(jobsTable);
