@@ -10,6 +10,7 @@ import {
   storeSummariesTable,
   consistencyReportsTable,
   perceptionReportsTable,
+  jobsTable,
 } from "@workspace/db";
 import { analyzeProduct, analyzeStoreConsistency, generateFix, BENCHMARK } from "../lib/ai-analyzer";
 import { buildPrioritizedActionPlan } from "../lib/conversion-ranker";
@@ -38,6 +39,13 @@ router.post("/stores/:storeId/analyze", async (req, res): Promise<void> => {
     type: "analysis_started",
     message: "AI readiness analysis started",
     metadata: { jobId },
+  });
+
+  await db.insert(jobsTable).values({
+    id: jobId,
+    storeId,
+    status: "running",
+    startedAt: new Date(startedAt),
   });
 
   res.json({
@@ -471,6 +479,7 @@ router.post("/stores/:storeId/analyze", async (req, res): Promise<void> => {
       });
 
       logger.info({ storeId, avgOverall, productCount }, "Store analysis completed");
+      await db.update(jobsTable).set({ status: "completed" }).where(eq(jobsTable.id, jobId));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown analysis error";
       logger.error({ err, storeId }, "Store analysis failed");
@@ -482,7 +491,22 @@ router.post("/stores/:storeId/analyze", async (req, res): Promise<void> => {
         message: `Analysis failed — ${errorMessage}`,
         metadata: { error: errorMessage },
       });
+      await db.update(jobsTable).set({ status: "failed" }).where(eq(jobsTable.id, jobId));
     }
+  });
+});
+
+router.get("/jobs/:jobId", async (req, res): Promise<void> => {
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, req.params.jobId));
+  if (!job) {
+    res.status(404).json({ error: "Job not found" });
+    return;
+  }
+  res.json({
+    id: job.id,
+    storeId: job.storeId,
+    status: job.status,
+    startedAt: job.startedAt.toISOString(),
   });
 });
 

@@ -6,7 +6,12 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
-const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-session-secret-change-in-production";
+const DEV_SECRET = "dev-session-secret-change-in-production";
+const SESSION_SECRET = process.env.SESSION_SECRET ?? DEV_SECRET;
+
+if (process.env.NODE_ENV === "production" && SESSION_SECRET === DEV_SECRET) {
+  throw new Error("CRITICAL: SESSION_SECRET must be set in production to prevent session forgery.");
+}
 
 // Routes that don't require authentication
 const PUBLIC_ROUTE_PREFIXES = [
