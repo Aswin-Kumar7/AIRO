@@ -1,6 +1,6 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { eq, avg, count, and, isNotNull, ne } from "drizzle-orm";
-import { rateLimit } from "express-rate-limit";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import {
   db,
   storesTable,
@@ -37,7 +37,7 @@ const analysisLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 5, // Limit each user to 5 analysis runs per hour
   message: { error: "Analysis rate limit exceeded. Please try again in an hour." },
-  keyGenerator: (req) => req.session?.userId || req.ip || "anonymous",
+  keyGenerator: (req) => req.session?.userId ?? ipKeyGenerator(req.ip ?? "127.0.0.1"),
   standardHeaders: true,
   legacyHeaders: false,
 });
