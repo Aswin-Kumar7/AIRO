@@ -365,15 +365,15 @@ export default function Dashboard() {
           {hasAnalysis && summary && (
             <div className="flex items-center gap-6 pr-4 border-r border-border">
               <div className="text-center">
-                <p className="text-xl font-bold text-foreground">{Math.round(summary.overallScore)}</p>
+                <p className="text-xl font-bold text-foreground">{Math.round(summary.overallScore ?? 0)}</p>
                 <p className="text-[10px] text-muted-foreground">Overall</p>
               </div>
               <div className="text-center">
-                <p className="text-xl font-bold text-red-500">{summary.criticalIssues}</p>
+                <p className="text-xl font-bold text-red-500">{summary.criticalIssues ?? 0}</p>
                 <p className="text-[10px] text-muted-foreground">Critical</p>
               </div>
               <div className="text-center">
-                <p className="text-xl font-bold text-amber-500">{summary.pendingFixes}</p>
+                <p className="text-xl font-bold text-amber-500">{summary.pendingFixes ?? 0}</p>
                 <p className="text-[10px] text-muted-foreground">Fixes</p>
               </div>
             </div>

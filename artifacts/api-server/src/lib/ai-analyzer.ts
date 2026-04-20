@@ -37,17 +37,6 @@ export interface StoreConsistencyResult {
   suggestedStructure: string[];
 }
 
-const BENCHMARK_SCORES = {
-  clarity: 88,
-  completeness: 85,
-  trust: 82,
-  tags: 80,
-  consistency: 85,
-  policy: 90,
-  overall: 85,
-};
-
-export const BENCHMARK = BENCHMARK_SCORES;
 
 export async function analyzeProduct(product: ProductInput): Promise<ProductAnalysisResult> {
   // Step 1: deterministic rule engine — fast, evidence-backed, no AI

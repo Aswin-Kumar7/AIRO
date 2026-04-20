@@ -420,14 +420,14 @@ function Hero({ onAnalyze }: { onAnalyze: (url: string) => void }) {
 
 // ─── Social Proof ─────────────────────────────────────────────────────────────
 
-const BRANDS = ["CoreOS", "Leapyear", "EasyTax", "Foresight", "Peregrin", "NovaBrand", "Cipher Demo"];
+const BRANDS = ["Kasparro", "Gemini", "Shopify", "Drizzle", "Express", "Vite", "Hackathon"];
 
 function SocialProof() {
   return (
     <section className="py-24 bg-[#fafafa]">
       <div className="max-w-6xl mx-auto px-6">
         <p className="text-center text-[19px] text-[#222] font-semibold mb-12">
-          Trusted by 104+ Businesses
+          Built for the Kasparro Agentic Commerce Hackathon
         </p>
         <div className="relative overflow-hidden">
           <div className="flex gap-6 items-center" style={{ animation: "kasMarquee 35s linear infinite" }}>
@@ -625,9 +625,9 @@ function HowItWorks() {
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
 const STATS_DATA = [
-  { end: 500, suffix: "+", label: "Merchants using Kasparro", sub: "and growing" },
+  { end: 1, suffix: "", label: "Active Hackathon Entry", sub: "April 2026 Submission" },
   { end: 15, suffix: "", label: "Diagnostic rules", sub: "across 6 gap categories" },
-  { end: 98, suffix: "%", label: "Report accuracy", sub: "evidence-backed every time" },
+  { end: 100, suffix: "%", label: "Evidence-Backed", sub: "proven diagnostic models" },
   { end: 60, suffix: "s", label: "Analysis time", sub: "full catalog scan" },
 ];
 

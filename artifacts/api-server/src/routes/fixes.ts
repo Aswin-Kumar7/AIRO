@@ -6,6 +6,84 @@ import { generateId } from "../lib/id";
 
 const router: IRouter = Router();
 
+/**
+ * Shared logic for applying a fix to Shopify and mirroring locally.
+ * Refactored for better maintainability (L-4).
+ */
+async function applyFixToShopify(
+  storeId: string,
+  fix: typeof fixesTable.$inferSelect,
+  contentToApply: string,
+  store: typeof storesTable.$inferSelect,
+  log: any
+): Promise<{ shopifySynced: boolean; shopifyError: string | null }> {
+  let shopifySynced = false;
+  let shopifyError: string | null = null;
+  const supportsSync = ["description", "tags", "title"].includes(fix.type);
+
+  if (!fix.productId) {
+    return { shopifySynced, shopifyError };
+  }
+
+  if (supportsSync) {
+    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, fix.productId));
+    if (product) {
+      try {
+        const result = await updateShopifyProduct(
+          store.domain,
+          store.accessToken,
+          product.shopifyProductId,
+          { type: fix.type as "description" | "tags" | "title", content: contentToApply },
+        );
+        shopifyError = result.error ?? null;
+
+        if (result.success) {
+          // Mirror locally
+          if (fix.type === "description") {
+            await db.update(productsTable)
+              .set({ description: contentToApply, hasAppliedFixes: true })
+              .where(eq(productsTable.id, fix.productId));
+          } else if (fix.type === "tags") {
+            const updatedTags = contentToApply.split(",").map((t) => t.trim()).filter(Boolean);
+            await db.update(productsTable)
+              .set({ tags: updatedTags, hasAppliedFixes: true })
+              .where(eq(productsTable.id, fix.productId));
+          } else if (fix.type === "title") {
+            await db.update(productsTable)
+              .set({ title: contentToApply, hasAppliedFixes: true })
+              .where(eq(productsTable.id, fix.productId));
+          }
+
+          // Verify the write actually landed on Shopify
+          try {
+            const { verified, reason } = await verifyShopifyUpdate(
+              store.domain,
+              store.accessToken,
+              product.shopifyProductId,
+              { type: fix.type as "description" | "tags" | "title", content: contentToApply },
+            );
+            shopifySynced = verified;
+            if (!verified) shopifyError = reason ?? "Update written but Shopify verification failed";
+          } catch {
+            shopifySynced = false;
+            shopifyError = "Verification call failed — please check Shopify manually";
+          }
+        }
+      } catch (err) {
+        shopifyError = err instanceof Error ? err.message : "Shopify write failed";
+        log.warn({ err, fixId: fix.id, storeId }, "Shopify product update failed");
+      }
+    }
+  } else {
+    shopifySynced = false;
+    shopifyError = fix.type === "structure" || fix.type === "schema"
+      ? "Manual action required: Automation not available for this fix type. Please update your Shopify theme/metafields manually."
+      : "Automation not yet supported for this fix type.";
+  }
+
+  return { shopifySynced, shopifyError };
+}
+
 router.get("/stores/:storeId/fixes", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
 
@@ -56,64 +134,14 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
     return;
   }
 
-  const contentToApply = improvedContent?.trim() || fix.improvedContent;
-
-  // Shopify write-back
-  let shopifySynced = false;
-  let shopifyError: string | null = null;
-
-  if (fix.productId && fix.type !== "structure") {
-    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, fix.productId));
-    const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
-
-    if (product && store) {
-      try {
-        const result = await updateShopifyProduct(
-          store.domain,
-          store.accessToken,
-          product.shopifyProductId,
-          { type: fix.type as "description" | "tags" | "title", content: contentToApply },
-        );
-        shopifyError = result.error ?? null;
-
-        if (result.success) {
-          // Mirror locally
-          if (fix.type === "description") {
-            await db.update(productsTable)
-              .set({ description: contentToApply, hasAppliedFixes: true })
-              .where(eq(productsTable.id, fix.productId));
-          } else if (fix.type === "tags") {
-            const updatedTags = contentToApply.split(",").map((t) => t.trim()).filter(Boolean);
-            await db.update(productsTable)
-              .set({ tags: updatedTags, hasAppliedFixes: true })
-              .where(eq(productsTable.id, fix.productId));
-          } else if (fix.type === "title") {
-            await db.update(productsTable)
-              .set({ title: contentToApply, hasAppliedFixes: true })
-              .where(eq(productsTable.id, fix.productId));
-          }
-
-          // Verify the write actually landed on Shopify
-          try {
-            const { verified, reason } = await verifyShopifyUpdate(
-              store.domain,
-              store.accessToken,
-              product.shopifyProductId,
-              { type: fix.type as "description" | "tags" | "title", content: contentToApply },
-            );
-            shopifySynced = verified;
-            if (!verified) shopifyError = reason ?? "Update written but Shopify verification failed";
-          } catch {
-            shopifySynced = false;
-            shopifyError = "Verification call failed — please check Shopify manually";
-          }
-        }
-      } catch (err) {
-        shopifyError = err instanceof Error ? err.message : "Shopify write failed";
-        req.log.warn({ err, fixId, storeId }, "Shopify product update failed");
-      }
-    }
+  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  if (!store) {
+    res.status(404).json({ error: "Store not found" });
+    return;
   }
+
+  const contentToApply = improvedContent?.trim() || fix.improvedContent;
+  const { shopifySynced, shopifyError } = await applyFixToShopify(storeId, fix, contentToApply, store, req.log);
 
   // Update fix record
   await db.update(fixesTable).set({
@@ -148,9 +176,9 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
 
   // Refresh summary counts
   const allFixes = await db.select().from(fixesTable).where(eq(fixesTable.storeId, storeId));
-  const pendingFixes = allFixes.filter((f) => f.status === "pending").length;
-  const appliedFixes = allFixes.filter((f) => f.status === "applied").length;
-  await db.update(storeSummariesTable).set({ pendingFixes, appliedFixes, updatedAt: new Date() })
+  const pendingFixesCount = allFixes.filter((f) => f.status === "pending").length;
+  const appliedFixesCount = allFixes.filter((f) => f.status === "applied").length;
+  await db.update(storeSummariesTable).set({ pendingFixes: pendingFixesCount, appliedFixes: appliedFixesCount, updatedAt: new Date() })
     .where(eq(storeSummariesTable.storeId, storeId));
 
   res.json({ fixId, success: true, shopifySynced, shopifyError });
@@ -166,6 +194,10 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
   }
 
   const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  if (!store) {
+    res.status(404).json({ error: "Store not found" });
+    return;
+  }
 
   const results: Array<{ fixId: string; success: boolean; shopifySynced: boolean; shopifyError: string | null }> = [];
 
@@ -179,44 +211,7 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
     }
 
     const contentToApply = fix.editedContent ?? fix.improvedContent;
-    let shopifySynced = false;
-    let shopifyError: string | null = null;
-
-    if (fix.productId && fix.type !== "structure" && store) {
-      const [product] = await db.select().from(productsTable).where(eq(productsTable.id, fix.productId));
-      if (product) {
-        try {
-          const result = await updateShopifyProduct(
-            store.domain, store.accessToken, product.shopifyProductId,
-            { type: fix.type as "description" | "tags" | "title", content: contentToApply },
-          );
-          shopifyError = result.error ?? null;
-          if (result.success) {
-            if (fix.type === "description") {
-              await db.update(productsTable).set({ description: contentToApply, hasAppliedFixes: true }).where(eq(productsTable.id, fix.productId));
-            } else if (fix.type === "tags") {
-              const updatedTags = contentToApply.split(",").map((t) => t.trim()).filter(Boolean);
-              await db.update(productsTable).set({ tags: updatedTags, hasAppliedFixes: true }).where(eq(productsTable.id, fix.productId));
-            } else if (fix.type === "title") {
-              await db.update(productsTable).set({ title: contentToApply, hasAppliedFixes: true }).where(eq(productsTable.id, fix.productId));
-            }
-            try {
-              const { verified, reason } = await verifyShopifyUpdate(
-                store.domain, store.accessToken, product.shopifyProductId,
-                { type: fix.type as "description" | "tags" | "title", content: contentToApply },
-              );
-              shopifySynced = verified;
-              if (!verified) shopifyError = reason ?? "Update written but Shopify verification failed";
-            } catch {
-              shopifySynced = false;
-              shopifyError = "Verification call failed — please check Shopify manually";
-            }
-          }
-        } catch (err) {
-          shopifyError = err instanceof Error ? err.message : "Shopify write failed";
-        }
-      }
-    }
+    const { shopifySynced, shopifyError } = await applyFixToShopify(storeId, fix, contentToApply, store, req.log);
 
     await db.update(fixesTable).set({ status: "applied", appliedAt: new Date(), shopifySynced, shopifyError })
       .where(eq(fixesTable.id, fixId));
@@ -237,9 +232,9 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
   }
 
   const allFixes = await db.select().from(fixesTable).where(eq(fixesTable.storeId, storeId));
-  const pendingFixes = allFixes.filter((f) => f.status === "pending").length;
+  const pendingFixesCount = allFixes.filter((f) => f.status === "pending").length;
   const appliedFixCount = allFixes.filter((f) => f.status === "applied").length;
-  await db.update(storeSummariesTable).set({ pendingFixes, appliedFixes: appliedFixCount, updatedAt: new Date() })
+  await db.update(storeSummariesTable).set({ pendingFixes: pendingFixesCount, appliedFixes: appliedFixCount, updatedAt: new Date() })
     .where(eq(storeSummariesTable.storeId, storeId));
 
   const applied = results.filter((r) => r.success).length;

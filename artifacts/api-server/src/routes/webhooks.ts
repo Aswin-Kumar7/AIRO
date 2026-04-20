@@ -32,7 +32,7 @@ function verifyWebhookHmac(rawBody: Buffer, hmacHeader: string, secret: string):
 }
 
 function getRawBody(req: import("express").Request): Buffer | null {
-  return (req as unknown as { rawBody?: Buffer }).rawBody ?? null;
+  return req.rawBody ?? null;
 }
 
 // ─── PRODUCTS_UPDATE ──────────────────────────────────────────────────────────

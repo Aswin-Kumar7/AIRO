@@ -93,7 +93,7 @@ app.use(session({
   },
 }));
 app.use(express.json({
-  verify: (req: import("express").Request & { rawBody?: Buffer }, _res, buf) => {
+  verify: (req: any, _res, buf) => {
     req.rawBody = buf;
   },
 }));

@@ -129,16 +129,16 @@ router.get("/shopify/callback", async (req, res): Promise<void> => {
     setImmediate(async () => {
       try {
         await fetchAndUpsertProducts(store);
-      } catch {
-        // non-critical — user can trigger manually
+      } catch (err) {
+        req.log.error({ err, storeId: store.id }, "Background product fetch failed after OAuth");
       }
 
       const appBaseUrl = process.env.APP_BASE_URL ?? "";
       if (appBaseUrl) {
         try {
           await registerStoreWebhooks(store.domain, store.accessToken, appBaseUrl);
-        } catch {
-          // non-critical — webhooks are best-effort
+        } catch (err) {
+          req.log.warn({ err, storeId: store.id }, "Background webhook registration failed after OAuth");
         }
       }
     });
