@@ -13,7 +13,7 @@ import {
   perceptionReportsTable,
   jobsTable,
 } from "@workspace/db";
-import { analyzeProduct, analyzeStoreConsistency, generateFix, BENCHMARK } from "../lib/ai-analyzer";
+import { analyzeProduct, analyzeStoreConsistency, generateFix } from "../lib/ai-analyzer";
 import { buildPrioritizedActionPlan } from "../lib/conversion-ranker";
 import { simulateStorePerception } from "../lib/perception-simulator";
 import { ingestStore, type StoreSnapshot } from "../lib/shopify-ingestion";
