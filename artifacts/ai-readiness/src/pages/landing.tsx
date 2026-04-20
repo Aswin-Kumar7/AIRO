@@ -863,26 +863,20 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.45, delay: index * 0.05, ease: [0.22, 1, 0.36, 1] }}
-      className={cn(
-        "mb-4 overflow-hidden rounded-2xl transition-all duration-300 border",
-        open ? "bg-white border-emerald-500/20 shadow-[0_8px_30px_rgba(16,185,129,0.08)] ring-1 ring-emerald-500/10" : "bg-slate-50/50 border-slate-200/80 hover:bg-white hover:border-slate-300 hover:shadow-sm"
-      )}
+      transition={{ duration: 0.45, delay: index * 0.06, ease: [0.22, 1, 0.36, 1] }}
+      className="border-b border-slate-200/60"
     >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-6 md:px-8 md:py-7 text-left group"
+        className="w-full flex items-center justify-between py-6 text-left group"
       >
-        <span className="text-[17px] font-bold text-slate-900 pr-6 tracking-tight leading-snug">{q}</span>
+        <span className="text-[17px] font-semibold text-slate-900 pr-6 group-hover:text-slate-600 transition-colors duration-200 tracking-tight">{q}</span>
         <motion.div
           animate={{ rotate: open ? 45 : 0 }}
-          transition={{ duration: 0.3, type: "spring", stiffness: 400, damping: 25 }}
-          className={cn(
-            "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-300",
-            open ? "bg-emerald-100 text-emerald-700" : "bg-white border border-slate-200 text-slate-500 group-hover:border-slate-300 group-hover:text-slate-900 shadow-sm"
-          )}
+          transition={{ duration: 0.25, type: "spring", stiffness: 300, damping: 20 }}
+          className="flex-shrink-0 w-8 h-8 rounded-full border border-slate-200/80 bg-white flex items-center justify-center transition-colors duration-200 group-hover:border-slate-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <svg className="w-3.5 h-3.5 text-slate-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
         </motion.div>
@@ -893,12 +887,10 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <p className="text-[15px] text-slate-600 leading-relaxed px-6 pb-8 md:px-8 md:pb-8 pt-0 font-medium">
-              {a}
-            </p>
+            <p className="text-[15px] text-slate-500 leading-[1.65] pb-8 pt-1 pr-12 font-medium">{a}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -924,7 +916,7 @@ function FAQ() {
           </p>
         </motion.div>
 
-        <div className="mt-4">
+        <div className="space-y-0 border-t border-slate-200/60 pt-4">
           {FAQ_ITEMS.map((item, i) => (
             <FAQItem key={item.q} q={item.q} a={item.a} index={i} />
           ))}

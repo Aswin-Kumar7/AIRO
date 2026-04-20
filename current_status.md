@@ -170,22 +170,55 @@ All cached endpoints include `cached: true/false` in response.
 
 ---
 
-## Known Gaps / Weaknesses
+## Known Issues
 
-### Functional
-| Gap | Severity | Notes |
+> Full verified issue list with file references: see `issues.md`
+
+### Critical (breaks primary user flow)
+| Issue | File | Notes |
 |---|---|---|
-| **Benchmark scores are static** | Medium | Values are hardcoded constants, not from real crawled AI-ready store data |
-| **Query simulation queries are AI-generated** | Low | Not from real search data or historical query logs |
-| **No per-user store isolation** | Low | Auth is enforced but all logged-in users see all stores; `userId` column exists but filtering not yet applied |
-| **No analysis progress indicator** | Medium | Analysis can take 30–60s with only a spinner; no step-by-step feedback |
+| **Dashboard nav links all 404** | `dashboard.tsx:193–242, 463–471` | INSIGHT_CARDS + count tiles link to `/gaps`, `/perception`, `/faq-health`, `/structured-data`, `/tags`, `/benchmark` — none exist in App.tsx. Must remap to `/issues`, `/ai-readiness`, `/tools` |
+| **Webhook HMAC wrong env var** | `routes/webhooks.ts:43,125` | Reads `SHOPIFY_CLIENT_SECRET`; OAuth uses `SHOPIFY_API_SECRET`. Webhooks always 401 in production |
+| **No analysis job persistence** | `routes/analysis.ts` | jobId never written to DB; server restart mid-run silently drops the job |
 
-### Technical Debt
-| Item | Notes |
+### High (security / data risk)
+| Issue | File | Notes |
+|---|---|---|
+| **SESSION_SECRET hardcoded fallback** | `app.ts:9` | Missing env var in production → session forgery possible |
+| **No CSRF protection** | `app.ts` | `sameSite: none` in prod + no CSRF token → cross-site triggered mutations |
+| **No per-user store isolation** | `routes/stores.ts:19` | All authenticated users see all stores; userId filter never applied |
+| **MemoryStore sessions** | `app.ts:64–75` | Sessions lost on restart; cannot scale horizontally |
+| **No rate limiting on analysis** | `routes/analysis.ts` | Unlimited LLM pipeline triggers per user |
+
+### Medium (correctness, UX)
+| Issue | Notes |
 |---|---|
-| **`hasStructuredData` always false** | Actual detection requires HTML parsing; Shopify metafields rarely used for JSON-LD |
-| **`reviewCount` always 0** | Shopify Admin API requires metafields or third-party reviews app integration |
-| **Old page files still present** | `gaps.tsx`, `action-plan.tsx`, `perception.tsx`, `query-test.tsx`, `consistency.tsx`, `topical-authority.tsx`, `internal-links.tsx`, `faq-health.tsx`, `faq-schema.tsx`, `tags.tsx`, `structured-data.tsx`, `benchmark.tsx`, `llms-txt.tsx` still exist but are no longer routed — can be deleted |
+| **`shopifySynced = true` on verification exception** | `fixes.ts:107` — verification call throws → false-positive synced badge |
+| **`structure`/`schema` fix types skip Shopify write** | `fixes.ts:65` — only `description`, `tags`, `title` are sent to Shopify |
+| **Benchmark shows hardcoded values on demos < 10 stores** | `ai-analyzer.ts:39–49` — `BENCHMARK_SCORES` fallback used silently |
+| **`pendingStoreUrl` never read back** | Saved to `sessionStorage` on landing page but not consumed in onboarding modal |
+| **No global React error boundary** | Crash in any component = blank white screen |
+| **Stale `activeStoreId` not validated** | localStorage value not checked against live store list on load |
+| **`.env.example` missing 5 required vars** | `SESSION_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `APP_BASE_URL` |
+
+### Low (polish, hygiene)
+| Issue | Notes |
+|---|---|
+| **Fabricated social proof on landing page** | "500+ merchants", "98% accuracy", fake logos |
+| **13 orphaned page files not yet deleted** | `gaps.tsx`, `action-plan.tsx`, `perception.tsx`, `query-test.tsx`, `consistency.tsx`, `topical-authority.tsx`, `internal-links.tsx`, `faq-health.tsx`, `faq-schema.tsx`, `tags.tsx`, `structured-data.tsx`, `benchmark.tsx`, `llms-txt.tsx` |
+| **`BENCHMARK_SCORES` dead code** | Exported but never imported; live path uses P90 from `analysis.ts` |
+| **apply / bulk-apply logic duplicated** | `fixes.ts` — ~80% shared code, bugs must be fixed twice |
+| **Coarse commit messages** | Fails rubric's "clean git history" criterion |
+| **Webhook registration failure silently discarded** | No log, no UI indicator when `registerStoreWebhooks` throws |
+
+---
+
+## Implemented — Previously Listed as Gaps (now corrected)
+
+| Item | Status |
+|---|---|
+| **`hasStructuredData` detection** | ✅ Implemented — `shopify-ingestion.ts:269` parses JSON-LD from product `descriptionHtml` and metafields; `enrichWithPageSignals` fetches storefront HTML and parses `AggregateRating` schema |
+| **`reviewCount` detection** | ✅ Implemented — `shopify-ingestion.ts:180–204` (`extractReviewSignals`) reads metafields; `enrichWithPageSignals` parses JSON-LD `ratingCount`/`reviewCount` from live storefront HTML |
 
 ---
 
@@ -199,3 +232,5 @@ All cached endpoints include `cached: true/false` in response.
 | Concrete action to improve | **Strong** | Quick Fix generates + applies with Shopify write-back verification; FAQ schema, JSON-LD, llms.txt deployable immediately |
 | Genuine product thinking | **Strong** | Rule engine over pure AI scoring; "Can AI answer this?" test grounds scores in actual AI behavior; webhook sync keeps data fresh |
 | **Overall** | **Meets all 5 criteria** | Auth layer + webhook sync + caching bring the project to production-ready quality |
+
+> **Before submission:** Fix C-1 (dashboard dead links), C-2 (webhook env var), and L-1 (fake social proof) at minimum. These are the issues a judge will encounter in the first 5 minutes. See `issues.md` for the full 27-issue list with exact file references.
