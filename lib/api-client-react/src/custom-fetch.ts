@@ -17,6 +17,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _cachedCsrfToken: string | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -355,6 +356,28 @@ export async function customFetch<T = unknown>(
     const token = await _authTokenGetter();
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
+    }
+  }
+
+  // Handle CSRF token for mutating requests
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    if (!_cachedCsrfToken && typeof window !== "undefined" && !headers.has("x-csrf-token")) {
+      try {
+        const url = _baseUrl ? `${_baseUrl}/api/csrf-token` : "/api/csrf-token";
+        const res = await fetch(url, { 
+          headers: { accept: "application/json" },
+          credentials: "include" 
+        });
+        if (res.ok) {
+          const data = await res.json();
+          _cachedCsrfToken = data.token;
+        }
+      } catch (e) {
+        // Ignored. We'll proceed without it, and let the server 403 if it's required.
+      }
+    }
+    if (_cachedCsrfToken && !headers.has("x-csrf-token")) {
+      headers.set("x-csrf-token", _cachedCsrfToken);
     }
   }
 

@@ -107,6 +107,10 @@ router.get("/shopify/callback", async (req, res): Promise<void> => {
       throw new Error("Missing Shopify OAuth code parameter.");
     }
 
+    if (!req.session?.userId) {
+      throw new Error("Must be logged in to connect a store.");
+    }
+
     const accessToken = await exchangeShopifyCodeForAccessToken(shop, code);
     const verifiedName = await validateShopifyToken(shop, accessToken);
     const store = await upsertConnectedStore({
@@ -114,6 +118,7 @@ router.get("/shopify/callback", async (req, res): Promise<void> => {
       name: verifiedName,
       accessToken,
       source: "oauth",
+      userId: req.session.userId,
     });
 
     res.clearCookie(cookieNames.state, { path: "/api/shopify", httpOnly: true, sameSite: "lax", secure });

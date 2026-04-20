@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { db, storesTable, activityTable } from "@workspace/db";
 import {
   hasConfiguredShopifyAdminAccessToken,
@@ -16,7 +16,9 @@ const router: IRouter = Router();
 
 router.get("/stores", async (req, res): Promise<void> => {
   req.log.info("Listing stores");
-  const stores = await db.select().from(storesTable).orderBy(desc(storesTable.createdAt));
+  const stores = await db.select().from(storesTable)
+    .where(eq(storesTable.userId, req.session.userId!))
+    .orderBy(desc(storesTable.createdAt));
   res.json(stores.map(s => ({
     id: s.id,
     domain: s.domain,
@@ -78,6 +80,7 @@ router.post("/stores", async (req, res): Promise<void> => {
     name: verifiedName,
     accessToken: accessTokenToStore,
     source: "manual",
+    userId: req.session.userId!,
   });
 
   req.log.info({ storeId: store.id }, "Store connected");
@@ -117,7 +120,7 @@ router.post("/stores", async (req, res): Promise<void> => {
 
 router.get("/stores/:storeId", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
+  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session.userId!)));
   if (!store) {
     res.status(404).json({ error: "Store not found" });
     return;
@@ -151,7 +154,7 @@ router.patch("/stores/:storeId/positioning", async (req, res): Promise<void> => 
   const normalizedPositioning = desiredPositioning.trim();
   const [store] = await db.update(storesTable).set({
     desiredPositioning: normalizedPositioning || null,
-  }).where(eq(storesTable.id, storeId)).returning();
+  }).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session.userId!))).returning();
 
   if (!store) {
     res.status(404).json({ error: "Store not found" });
@@ -166,7 +169,7 @@ router.patch("/stores/:storeId/positioning", async (req, res): Promise<void> => 
 
 router.delete("/stores/:storeId", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const [store] = await db.delete(storesTable).where(eq(storesTable.id, storeId)).returning();
+  const [store] = await db.delete(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session.userId!))).returning();
   if (!store) {
     res.status(404).json({ error: "Store not found" });
     return;

@@ -18,6 +18,7 @@ type UpsertConnectedStoreInput = {
   name: string;
   accessToken: string;
   source: "manual" | "oauth";
+  userId: string;
 };
 
 export async function upsertConnectedStore({
@@ -25,6 +26,7 @@ export async function upsertConnectedStore({
   name,
   accessToken,
   source,
+  userId,
 }: UpsertConnectedStoreInput): Promise<Store> {
   const normalizedDomain = normalizeShopifyDomain(domain);
   const [existingStore] = await db.select().from(storesTable).where(eq(storesTable.domain, normalizedDomain));
@@ -45,6 +47,7 @@ export async function upsertConnectedStore({
       name,
       accessToken,
       status: "connected",
+      userId,
     }).returning();
     store = createdStore;
   }

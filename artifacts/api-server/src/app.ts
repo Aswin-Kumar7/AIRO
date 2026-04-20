@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import session from "express-session";
+import { csrfSync } from "csrf-sync";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -84,6 +85,26 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: true }));
+
+const { csrfSynchronisedProtection, generateToken } = csrfSync({
+  getTokenFromRequest: (req) => {
+    return req.headers["x-csrf-token"] as string;
+  },
+});
+
+app.get("/api/csrf-token", (req, res) => {
+  res.json({ token: generateToken(req) });
+});
+
+function csrfProtection(req: Request, res: Response, next: NextFunction): void {
+  if (req.path.startsWith("/api/shopify/webhooks/")) {
+    next();
+    return;
+  }
+  return csrfSynchronisedProtection(req, res, next);
+}
+
+app.use(csrfProtection);
 
 app.use(requireAuth);
 app.use("/api", router);
