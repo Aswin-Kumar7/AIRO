@@ -9,9 +9,9 @@ import {
   type Variants,
 } from "framer-motion";
 import {
-  ArrowRight, BarChart3, Zap, Shield, Brain, TrendingUp,
+  ArrowRight, BarChart3, Zap, Cable, Shield, Brain, TrendingUp,
   ChevronRight, Target, GitBranch, Package, Layers, Menu, X,
-  Activity, AlertTriangle, Sparkles, Bot, ChevronDown, Check,
+  Activity, AlertTriangle, ClockFading, Sparkles, Bot, ChevronDown, Check, Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +83,7 @@ function Navbar({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: 
           {[
             { label: "Features", href: "#features" },
             { label: "How it works", href: "#how-it-works" },
+            { label: "Pricing", href: "#pricing" },
             { label: "FAQ", href: "#faq" },
           ].map(({ label, href }) => (
             <a key={label} href={href}
@@ -120,7 +121,7 @@ function Navbar({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: 
             exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25, ease: "easeInOut" }}
             className="md:hidden bg-white border-t border-slate-100 overflow-hidden">
             <div className="px-6 py-4 space-y-1">
-              {["Features", "How it works", "FAQ"].map(link => (
+              {["Features", "How it works", "Pricing", "FAQ"].map(link => (
                 <a key={link} href={`#${link.toLowerCase().replace(/ /g, "-")}`}
                   className="block text-sm font-medium text-slate-600 hover:text-slate-900 py-2.5 border-b border-slate-50 last:border-0 transition-colors"
                   onClick={() => setMobileOpen(false)}>
@@ -322,57 +323,51 @@ function Hero({ onAnalyze }: { onAnalyze: (url: string) => void }) {
   const [focused, setFocused] = useState(false);
 
   return (
-    <section className="relative min-h-screen flex flex-col items-center pt-28 pb-0 overflow-hidden">
-      {/* Layered background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-emerald-50/80 via-white/60 to-white pointer-events-none" />
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[700px] pointer-events-none"
-        style={{ background: "radial-gradient(ellipse at 50% 20%, rgba(16,185,129,0.13) 0%, transparent 70%)" }} />
-      <div className="absolute top-32 left-1/4 w-72 h-72 bg-emerald-300/8 rounded-full blur-[80px] pointer-events-none" />
-      <div className="absolute top-48 right-1/4 w-64 h-64 bg-emerald-400/6 rounded-full blur-[80px] pointer-events-none" />
-      <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: "radial-gradient(circle, rgba(16,185,129,0.18) 1px, transparent 1px)",
-        backgroundSize: "28px 28px",
-        maskImage: "radial-gradient(ellipse at 50% 40%, black 0%, transparent 70%)",
+    <section className="relative min-h-screen flex flex-col items-center pt-32 pb-0 overflow-hidden bg-[#e4efeb]">
+      {/* Misty Layered Background */}
+      <div className="absolute inset-0 bg-[#e4efeb] pointer-events-none" />
+      <div className="absolute top-0 w-[1400px] h-[900px] opacity-60 mix-blend-overlay pointer-events-none left-1/2 -translate-x-1/2"
+        style={{ background: "radial-gradient(ellipse at 50% 0%, #a2c2b3 0%, transparent 70%)" }} />
+      <div className="absolute top-[10%] left-[20%] w-[600px] h-[600px] bg-[#f5fbf8] rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-[20%] right-[10%] w-[500px] h-[500px] bg-[#d3e3db] rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute inset-0 pointer-events-none opacity-40 uppercase" style={{
+        backgroundImage: "radial-gradient(circle, rgba(17,24,39,0.06) 1px, transparent 1px)",
+        backgroundSize: "24px 24px"
       }} />
 
-      <motion.div
-        className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center"
-        variants={stagger} initial="hidden" animate="visible"
-      >
+      <motion.div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center">
         {/* Badge */}
-        <motion.div variants={fadeUp} custom={0}>
-          <div className="inline-flex items-center gap-2 bg-white/90 backdrop-blur-sm border border-emerald-200/80 text-emerald-700 text-xs font-semibold px-4 py-2 rounded-full mb-8 shadow-sm shadow-emerald-100/50">
-            <Sparkles className="w-3.5 h-3.5" />
-            AI-Powered Store Optimization · Get recommended more often
+        <motion.div
+          initial={{ opacity: 0, y: 10, filter: "blur(10px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="inline-flex items-center gap-2 bg-white/60 backdrop-blur-md border border-white/80 text-[#151e18] text-[11.5px] font-semibold px-4 py-1.5 rounded-full mb-8 shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-700" />
+            Designed for AI-first commerce
           </div>
         </motion.div>
 
         {/* Headline */}
         <motion.h1
-          variants={fadeUp} custom={1}
-          className="text-[56px] md:text-[68px] lg:text-[80px] font-bold text-slate-900 leading-none tracking-tighter mb-6"
+          initial={{ opacity: 0, y: 20, filter: "blur(12px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: 0.8, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+          className="text-[48px] md:text-[68px] lg:text-[76px] font-bold text-[#111827] leading-[1.05] tracking-tighter mb-7"
         >
-          Know exactly how<br />
-          <span className="relative">
-            AI agents{" "}
-            <em className="not-italic italic text-emerald-600">see</em>
-            {" "}your store
-          </span>
+          Smarter store optimization.<br />
+          Powered by <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10b981] to-[#047857]">real AI insights.</span>
         </motion.h1>
 
         {/* Subtext */}
         <motion.p
-          variants={fadeUp} custom={2}
-          className="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto mb-10 leading-[1.7] font-normal"
+          initial={{ opacity: 0, y: 20, filter: "blur(12px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="text-lg text-slate-600 max-w-2xl mx-auto mb-10 leading-[1.65] font-medium"
         >
-          Analyze how AI shopping assistants perceive your products. Get evidence-backed gap reports and one-click fixes pushed directly to Shopify.
+          Plan, optimize, and analyze exactly how AI agents perceive your catalog. Grow faster with evidence-backed gap reports and automated fixes synced directly to Shopify.
         </motion.p>
 
         {/* Input + CTA */}
-        <motion.div variants={fadeUp} custom={3} id="get-started">
+        <motion.div initial={{ opacity: 0, y: 20, filter: "blur(12px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: 0.8, delay: 0.3, ease: [0.22, 1, 0.36, 1] }} id="get-started">
           <form
             onSubmit={e => { e.preventDefault(); onAnalyze(url.trim()); }}
-            className="flex flex-col sm:flex-row gap-2.5 max-w-[480px] mx-auto mb-5"
+            className="flex flex-col sm:flex-row gap-3 max-w-[500px] mx-auto mb-6"
           >
             <div className="flex-1 relative">
               <motion.input
@@ -384,31 +379,30 @@ function Hero({ onAnalyze }: { onAnalyze: (url: string) => void }) {
                 placeholder="my-store.myshopify.com"
                 animate={{
                   boxShadow: focused
-                    ? "0 0 0 2px rgba(16,185,129,0.2), 0 1px 4px rgba(0,0,0,0.04)"
-                    : "0 1px 4px rgba(0,0,0,0.04)",
+                    ? "0 0 0 2px rgba(17,24,39,0.1), 0 4px 12px rgba(0,0,0,0.05)"
+                    : "0 2px 8px rgba(0,0,0,0.03)",
                 }}
-                transition={{ duration: 0.2 }}
-                className="w-full h-12 px-4 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all duration-200"
+                className="w-full h-12 px-5 rounded-[14px] border border-white/80 bg-white/70 backdrop-blur-md text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-all duration-300 shadow-inner shadow-white/50"
               />
             </div>
             <motion.button
               type="submit"
-              whileHover={{ scale: 1.025, boxShadow: "0 6px 24px rgba(5,150,105,0.35)" }}
-              whileTap={{ scale: 0.97 }}
-              className="h-12 px-7 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl flex items-center justify-center gap-2 text-sm transition-colors shadow-sm whitespace-nowrap"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="h-12 px-8 bg-[#151e18] hover:bg-[#0d130f] text-white font-medium rounded-[14px] flex items-center justify-center gap-2.5 text-[14px] transition-colors shadow-[0_6px_20px_rgba(21,30,24,0.25)] whitespace-nowrap group"
             >
               Analyze Store
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-3.5 h-3.5 opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform duration-200 -rotate-45" />
             </motion.button>
           </form>
           <div className="flex items-center justify-center gap-5">
             {[
-              { icon: Shield, text: "No credit card" },
-              { icon: Zap, text: "60-second analysis" },
-              { icon: Check, text: "Free to start" },
+              { icon: Cable, text: "Easy to connnect" },
+              { icon: ClockFading, text: "60 sec analysis" },
+              { icon: Check, text: "Quick fixes" },
             ].map(({ icon: Icon, text }) => (
-              <div key={text} className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
-                <Icon className="w-3 h-3 text-emerald-500" />
+              <div key={text} className="flex items-center gap-1.5 text-[12px] text-slate-500 font-medium">
+                <Icon className="w-3 h-3 text-[#151e18]/50" />
                 {text}
               </div>
             ))}
@@ -419,30 +413,35 @@ function Hero({ onAnalyze }: { onAnalyze: (url: string) => void }) {
       <div className="relative z-10 w-full max-w-5xl mx-auto px-6 mt-16 pb-0">
         <DashboardMockup />
       </div>
-      <div className="absolute bottom-0 left-0 right-0 h-36 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-[#fafafa] via-white/80 to-transparent pointer-events-none z-20" />
     </section>
   );
 }
 
 // ─── Social Proof ─────────────────────────────────────────────────────────────
 
-const BRANDS = ["Cipher Demo", "EasyTax", "CoreOS", "Peregrin", "Foresight", "Leapyear", "NovaBrand", "PulseKit", "Storefront"];
+const BRANDS = ["CoreOS", "Leapyear", "EasyTax", "Foresight", "Peregrin", "NovaBrand", "Cipher Demo"];
 
 function SocialProof() {
   return (
-    <section className="py-16 bg-white border-y border-slate-100/60">
+    <section className="py-24 bg-[#fafafa]">
       <div className="max-w-6xl mx-auto px-6">
-        <p className="text-center text-[11px] text-slate-400 font-bold uppercase tracking-[0.12em] mb-8">
-          Trusted by 500+ Shopify merchants worldwide
+        <p className="text-center text-[19px] text-[#222] font-semibold mb-12">
+          Trusted by 104+ Businesses
         </p>
         <div className="relative overflow-hidden">
-          <div className="flex gap-14 items-center" style={{ animation: "kasMarquee 28s linear infinite" }}>
-            {[...BRANDS, ...BRANDS].map((brand, i) => (
-              <span key={i} className="text-slate-300 font-bold text-sm tracking-wider whitespace-nowrap select-none">{brand}</span>
+          <div className="flex gap-6 items-center" style={{ animation: "kasMarquee 35s linear infinite" }}>
+            {[...BRANDS, ...BRANDS, ...BRANDS].map((brand, i) => (
+              <div key={i} className="flex items-center justify-center px-8 py-4 bg-white border border-slate-200/50 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
+                <span className="text-slate-800 font-bold text-[15px] tracking-tight whitespace-nowrap select-none flex items-center gap-2">
+                  <div className="w-4 h-4 bg-slate-800 rounded-sm" style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}></div>
+                  {brand}
+                </span>
+              </div>
             ))}
           </div>
-          <div className="absolute inset-y-0 left-0 w-28 bg-gradient-to-r from-white to-transparent pointer-events-none" />
-          <div className="absolute inset-y-0 right-0 w-28 bg-gradient-to-l from-white to-transparent pointer-events-none" />
+          <div className="absolute inset-y-0 left-0 w-48 bg-gradient-to-r from-[#fafafa] to-transparent pointer-events-none" />
+          <div className="absolute inset-y-0 right-0 w-48 bg-gradient-to-l from-[#fafafa] to-transparent pointer-events-none" />
         </div>
       </div>
     </section>
@@ -481,22 +480,21 @@ const FEATURES = [
 function FeatureCard({ icon: Icon, title, description }: typeof FEATURES[0]) {
   return (
     <motion.div
-       variants={fadeUp}
-      whileHover={{ y: -4, boxShadow: "0 12px 32px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.02)" }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
-      className="group bg-white rounded-2xl border border-slate-200/60 p-6 xl:p-8 cursor-default transition-all duration-300 relative overflow-hidden"
+      whileHover={{ y: -4, scale: 1.01, boxShadow: "0 20px 40px rgba(17,24,39,0.06), 0 4px 12px rgba(17,24,39,0.04)" }}
+      transition={{ duration: 0.15, ease: "easeOut" }}
+      className="group bg-white rounded-3xl border border-slate-200/50 p-8 xl:p-10 cursor-default transition-colors duration-150 relative overflow-hidden flex flex-col justify-start h-full"
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute top-0 right-0 w-64 h-64 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-100/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
       <div className="relative z-10">
-        <motion.div
-           className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-center mb-6 shadow-sm"
-          whileHover={{ scale: 1.05, rotate: 2 }}
-          transition={{ type: "spring", stiffness: 400, damping: 20 }}
+        <div
+          className="w-12 h-12 rounded-[18px] bg-[#fafafa] border border-slate-200/80 flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.03)] mb-8 transition-transform duration-200 group-hover:scale-105 group-hover:rotate-2"
         >
-          <Icon className="w-4 h-4 text-slate-700" />
-        </motion.div>
-        <h3 className="text-[15px] font-bold text-slate-900 mb-2.5 leading-snug tracking-tight">{title}</h3>
-        <p className="text-[13.5px] text-slate-500 leading-relaxed font-medium">{description}</p>
+          <Icon className="w-5 h-5 text-slate-800" />
+        </div>
+        <div>
+          <h3 className="text-[17px] font-bold text-slate-900 mb-3.5 leading-snug tracking-tight">{title}</h3>
+          <p className="text-[14px] text-slate-500 leading-[1.65] font-medium">{description}</p>
+        </div>
       </div>
     </motion.div>
   );
@@ -507,34 +505,37 @@ function Features() {
   const inView = useInView(ref as React.RefObject<Element>, { once: true, margin: "-80px" });
 
   return (
-    <section id="features" className="py-28 bg-slate-50/40">
+    <section id="features" className="py-32 bg-[#fafafa]">
       <div className="max-w-6xl mx-auto px-6">
         <motion.div
-          className="text-center mb-16"
-          initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
+          className="text-center mb-20"
+          initial={{ opacity: 0, y: 24, filter: "blur(10px)" }} whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="inline-flex items-center gap-2 bg-white border border-slate-200/80 text-slate-600 text-xs font-semibold px-3 py-1.5 rounded-full mb-5 shadow-sm">
+          <div className="inline-flex items-center gap-2 bg-white border border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6 shadow-sm">
             <Package className="w-3.5 h-3.5 text-emerald-500" />
-            Everything you need
+            Powerful Features
           </div>
-          <h2 className="text-4xl md:text-[52px] font-bold text-slate-900 mb-4 leading-tight tracking-tighter">
-            Built for the age of<br />
-            <span className="italic text-emerald-600">AI commerce</span>
+          <h2 className="text-4xl md:text-[56px] font-bold text-[#111827] mb-5 leading-tight tracking-tighter">
+            Built for the age of <br className="md:hidden" />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10b981] to-[#047857]">AI commerce.</span>
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto text-base leading-relaxed">
+          <p className="text-slate-500 max-w-xl mx-auto text-[17px] leading-[1.7] font-medium">
             Traditional SEO tools don't understand how AI agents evaluate stores. Kasparro is built for what comes next.
           </p>
         </motion.div>
 
-        <motion.div
+        <div
           ref={ref}
-          variants={stagger} initial="hidden" animate={inView ? "visible" : "hidden"}
-          className="grid md:grid-cols-2 lg:grid-cols-3 gap-5"
+          className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
         >
-          {FEATURES.map(f => <FeatureCard key={f.title} {...f} />)}
-        </motion.div>
+          {FEATURES.map((f, i) => (
+            <motion.div key={f.title} initial={{ opacity: 0, y: 40, filter: "blur(12px)", scale: 0.95 }} whileInView={{ opacity: 1, y: 0, filter: "blur(0px)", scale: 1 }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.7, delay: i * 0.1, type: "spring", bounce: 0.3 }}>
+              <FeatureCard {...f} />
+            </motion.div>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -553,53 +554,61 @@ function HowItWorks() {
   const inView = useInView(ref as React.RefObject<Element>, { once: true, margin: "-80px" });
 
   return (
-    <section id="how-it-works" className="py-28 bg-white border-t border-slate-100/60 relative overflow-hidden">
+    <section id="how-it-works" className="py-32 bg-white relative overflow-hidden">
       <div className="max-w-6xl mx-auto px-6">
         <motion.div
-          className="text-center mb-20"
+          className="text-center mb-28"
           initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200/60 text-slate-600 text-xs font-semibold px-3 py-1.5 rounded-full mb-5 shadow-sm">
-            <Layers className="w-3.5 h-3.5 text-slate-500" />
+          <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200/60 text-slate-600 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6">
+            <Layers className="w-3.5 h-3.5 text-emerald-500" />
             Simple workflow
           </div>
-          <h2 className="text-4xl md:text-[52px] font-bold text-slate-900 mb-4 leading-tight tracking-tighter">
-            From zero to optimized<br />
-            <span className="italic text-emerald-600">in under 5 minutes</span>
+          <h2 className="text-4xl md:text-[56px] font-bold text-[#111827] mb-5 leading-tight tracking-tighter">
+            From zero to optimized <br className="md:hidden" />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10b981] to-[#047857]">in under 5 minutes.</span>
           </h2>
         </motion.div>
 
-        <div className="max-w-4xl mx-auto relative pl-6 md:pl-0" ref={ref}>
-          {/* Vertical connector line */}
+        <div className="max-w-4xl mx-auto relative pl-8 md:pl-0" ref={ref}>
+          {/* Sleek Vertical Line */}
           <motion.div
-            className="absolute top-4 bottom-8 left-[39px] md:left-1/2 md:-ml-[1.5px] w-[3px] bg-gradient-to-b from-slate-200 via-slate-200 to-transparent rounded-full origin-top"
+            className="absolute top-4 bottom-8 left-[45px] md:left-1/2 md:-ml-px w-[2px] bg-slate-100 rounded-full origin-top"
             initial={{ scaleY: 0 }}
             animate={inView ? { scaleY: 1 } : {}}
             transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
           />
 
-          <div className="space-y-20">
+          <div className="space-y-28">
             {STEPS.map(({ num, title, desc }, i) => (
               <motion.div
                 key={num}
-                className={cn("relative flex flex-col md:flex-row gap-6 md:gap-16 items-start md:items-center", i % 2 !== 0 && "md:flex-row-reverse")}
-                initial={{ opacity: 0, y: 24 }}
-                animate={inView ? { opacity: 1, y: 0 } : {}}
-                transition={{ duration: 0.6, delay: i * 0.2, ease: [0.22, 1, 0.36, 1] }}
+                className={cn("relative flex flex-col md:flex-row gap-8 md:gap-24 items-start md:items-center group", i % 2 !== 0 && "md:flex-row-reverse")}
+                initial={{ opacity: 0, y: 40, filter: "blur(8px)" }}
+                animate={inView ? { opacity: 1, y: 0, filter: "blur(0px)" } : {}}
+                transition={{ duration: 0.7, delay: 0.3 + (i * 0.2), type: "spring", bounce: 0.3 }}
               >
                 {/* Node */}
-                <div className="absolute left-[-11px] md:left-1/2 md:-translate-x-1/2 top-1 md:top-1/2 md:-translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-full bg-white border-[3px] border-slate-300 shadow-[0_0_0_6px_white] z-10 transition-colors duration-300 hover:border-slate-400">
-                  <div className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-                </div>
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={inView ? { scale: 1 } : {}}
+                  transition={{ duration: 0.6, delay: 0.4 + (i * 0.2), type: "spring", bounce: 0.6 }}
+                  className="absolute left-[-15px] md:left-1/2 md:-translate-x-1/2 top-0 md:top-1/2 md:-translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-full bg-white border border-slate-200 shadow-[0_0_0_8px_white] z-10 transition-transform duration-300 group-hover:scale-125 group-hover:border-slate-300"
+                >
+                  <motion.div
+                    initial={{ scale: 0 }} animate={inView ? { scale: 1 } : {}} transition={{ delay: 0.6 + (i * 0.2), type: "spring" }}
+                    className="w-2.5 h-2.5 rounded-full bg-slate-800 group-hover:bg-emerald-600 transition-colors duration-300"
+                  />
+                </motion.div>
 
                 <div className={cn("flex-1 pt-0.5 md:pt-0 pl-10 md:pl-0 w-full", i % 2 !== 0 ? "md:text-left" : "md:text-right")}>
-                  <div className={cn("inline-flex items-center justify-center w-11 h-11 rounded-xl bg-white border border-slate-200/80 text-slate-900 font-bold mb-5 shadow-[0_4px_12px_rgba(0,0,0,0.03)]", i % 2 !== 0 ? "" : "md:ml-auto")}>
-                    {num}
+                  <div className={cn("inline-flex items-center justify-center px-4 h-9 rounded-full bg-white border border-slate-200/80 text-slate-600 text-[13px] font-bold mb-6 shadow-sm tracking-wide", i % 2 !== 0 ? "" : "md:ml-auto")}>
+                    Step {num}
                   </div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-2.5 leading-tight tracking-tight">{title}</h3>
-                  <p className={cn("text-[14.5px] text-slate-500 leading-relaxed font-medium block max-w-sm", i % 2 !== 0 ? "mr-auto" : "md:ml-auto")}>
+                  <h3 className="text-3xl font-bold text-[#111827] mb-4 leading-tight tracking-tight">{title}</h3>
+                  <p className={cn("text-[16px] text-slate-500 leading-relaxed font-medium block max-w-sm", i % 2 !== 0 ? "mr-auto" : "md:ml-auto")}>
                     {desc}
                   </p>
                 </div>
@@ -654,6 +663,169 @@ function Stats() {
   );
 }
 
+// ─── Pricing ──────────────────────────────────────────────────────────────────
+
+type Currency = "USD" | "GBP" | "INR";
+
+const PRICING_TIERS = [
+  {
+    name: "Starter",
+    desc: "Perfect for exploring AI perception on small catalogs.",
+    prices: { USD: 29, GBP: 25, INR: 2400 },
+    features: [
+      "Up to 100 products",
+      "Basic AI scoring",
+      "Standard gap reports",
+      "1 concurrent analysis",
+      "Community support",
+    ],
+  },
+  {
+    name: "Growth",
+    desc: "For scaling brands that need continuous optimization.",
+    prices: { USD: 79, GBP: 65, INR: 6500 },
+    isPopular: true,
+    features: [
+      "Up to 2,000 products",
+      "Deep clarity scoring",
+      "1-click Shopify fixes",
+      "Query simulation",
+      "Priority email support",
+    ],
+  },
+  {
+    name: "Scale",
+    desc: "High-volume analysis and custom AI rulesets.",
+    prices: { USD: 199, GBP: 160, INR: 16500 },
+    features: [
+      "Unlimited products",
+      "Custom diagnostic rules",
+      "Multi-store support",
+      "API access",
+      "Dedicated success manager",
+    ],
+  },
+];
+
+const CURRENCY_SYMBOLS = { USD: "$", GBP: "£", INR: "₹" };
+
+function Pricing() {
+  const [currency, setCurrency] = useState<Currency>("USD");
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref as React.RefObject<Element>, { once: true, margin: "-80px" });
+
+  return (
+    <section id="pricing" className="py-32 bg-slate-50 relative overflow-hidden">
+      <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white to-transparent pointer-events-none" />
+      <div className="max-w-6xl mx-auto px-6 relative z-10" ref={ref}>
+        <motion.div
+          className="text-center mb-20"
+          initial={{ opacity: 0, y: 24 }}
+          animate={inView ? { opacity: 1, y: 0 } : {}}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <div className="inline-flex items-center gap-2 bg-white border border-slate-200/60 text-slate-600 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6 shadow-sm">
+            <Zap className="w-3.5 h-3.5 text-emerald-500" />
+            Pricing Plans
+          </div>
+          <h2 className="text-4xl md:text-[56px] font-bold text-[#111827] mb-5 leading-tight tracking-tighter">
+            Transparent pricing. <br className="md:hidden" />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-emerald-700">No surprises.</span>
+          </h2>
+          <p className="text-slate-500 text-[17px] font-medium leading-relaxed max-w-2xl mx-auto">
+            Choose the perfect plan for your catalog size. All plans include full access to discovery and automated Shopify sync.
+          </p>
+
+          <div className="mt-8 flex justify-center">
+            <div className="inline-flex items-center p-1 bg-slate-200/50 rounded-[10px] border border-slate-200/80">
+              {(["USD", "GBP", "INR"] as Currency[]).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setCurrency(c)}
+                  className={cn(
+                    "px-4 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-200",
+                    currency === c
+                      ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/50"
+                      : "text-slate-500 hover:text-slate-800"
+                  )}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+
+        <div className="grid md:grid-cols-3 gap-8 items-stretch max-w-5xl mx-auto">
+          {PRICING_TIERS.map((tier, i) => (
+            <motion.div
+              key={tier.name}
+              initial={{ opacity: 0, y: 30 }}
+              animate={inView ? { opacity: 1, y: 0 } : {}}
+              transition={{ duration: 0.6, delay: i * 0.15, type: "spring", bounce: 0.3 }}
+              className={cn(
+                "relative bg-white rounded-3xl p-8 border transition-all duration-300 flex flex-col group",
+                tier.isPopular ? "border-emerald-500 shadow-[0_20px_60px_rgba(16,185,129,0.12)] ring-1 ring-emerald-500/20 md:-mt-4 md:mb-4" : "border-slate-200/80 shadow-sm hover:shadow-md"
+              )}
+            >
+              {tier.isPopular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full shadow-sm">
+                  Most Popular
+                </div>
+              )}
+              <h3 className="text-[22px] font-bold text-slate-900 mb-2">{tier.name}</h3>
+              <p className="text-[14px] text-slate-500 font-medium mb-6 min-h-[42px] leading-relaxed">{tier.desc}</p>
+
+              <div className="mb-6">
+                <div className="flex items-end gap-1.5">
+                  <span className="text-5xl font-bold text-slate-900 leading-none tracking-tighter">
+                    {CURRENCY_SYMBOLS[currency]}{tier.prices[currency].toLocaleString()}
+                  </span>
+                  <span className="text-[15px] font-medium text-slate-500 mb-1.5">/mo</span>
+                </div>
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                onClick={() => document.getElementById("get-started")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                className={cn(
+                  "relative w-full h-[52px] rounded-xl font-semibold text-[15px] transition-all duration-300 mb-8 overflow-hidden group",
+                  tier.isPopular
+                    ? "bg-slate-900 hover:shadow-emerald-500/20 text-white shadow-md shadow-slate-900/10 border border-slate-800"
+                    : "bg-white text-slate-900 border-2 border-slate-200/80"
+                )}
+              >
+                <div className="absolute inset-0 flex items-center justify-center transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-full">
+                  Start free trial
+                </div>
+                <div className={cn(
+                  "absolute inset-0 flex items-center justify-center gap-2 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] translate-y-full group-hover:translate-y-0",
+                  tier.isPopular ? "bg-emerald-500 text-white" : "bg-emerald-50 text-emerald-700"
+                )}>
+                  <Gift className="w-5 h-5" />
+                  Free during Early Access
+            </div>
+              </motion.button>
+
+              <div className="space-y-4 flex-1">
+                <p className="text-[11px] font-bold text-slate-900 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">What's included</p>
+                {tier.features.map(f => (
+                  <div key={f} className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center mt-0.5">
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    </div>
+                    <span className="text-[14.5px] text-slate-600 font-medium leading-snug">{f}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── FAQ ──────────────────────────────────────────────────────────────────────
 
 const FAQ_ITEMS = [
@@ -691,20 +863,28 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.45, delay: index * 0.06, ease: [0.22, 1, 0.36, 1] }}
-      className="border-b border-slate-100 last:border-0"
+      transition={{ duration: 0.45, delay: index * 0.05, ease: [0.22, 1, 0.36, 1] }}
+      className={cn(
+        "mb-4 overflow-hidden rounded-2xl transition-all duration-300 border",
+        open ? "bg-white border-emerald-500/20 shadow-[0_8px_30px_rgba(16,185,129,0.08)] ring-1 ring-emerald-500/10" : "bg-slate-50/50 border-slate-200/80 hover:bg-white hover:border-slate-300 hover:shadow-sm"
+      )}
     >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between py-5 text-left group"
+        className="w-full flex items-center justify-between p-6 md:px-8 md:py-7 text-left group"
       >
-        <span className="text-sm font-semibold text-slate-900 pr-4 group-hover:text-emerald-700 transition-colors duration-200">{q}</span>
+        <span className="text-[17px] font-bold text-slate-900 pr-6 tracking-tight leading-snug">{q}</span>
         <motion.div
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-          className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 group-hover:bg-emerald-50 flex items-center justify-center transition-colors duration-200"
+          animate={{ rotate: open ? 45 : 0 }}
+          transition={{ duration: 0.3, type: "spring", stiffness: 400, damping: 25 }}
+          className={cn(
+            "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-300",
+            open ? "bg-emerald-100 text-emerald-700" : "bg-white border border-slate-200 text-slate-500 group-hover:border-slate-300 group-hover:text-slate-900 shadow-sm"
+          )}
         >
-          <ChevronDown className="w-3 h-3 text-slate-500 group-hover:text-emerald-600 transition-colors duration-200" />
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
         </motion.div>
       </button>
       <AnimatePresence initial={false}>
@@ -716,7 +896,9 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <p className="text-sm text-slate-500 leading-relaxed pb-5">{a}</p>
+            <p className="text-[15px] text-slate-600 leading-relaxed px-6 pb-8 md:px-8 md:pb-8 pt-0 font-medium">
+              {a}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -726,23 +908,23 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
 
 function FAQ() {
   return (
-    <section id="faq" className="py-28 bg-slate-50/40">
-      <div className="max-w-2xl mx-auto px-6">
+    <section id="faq" className="py-32 bg-[#fafafa]">
+      <div className="max-w-3xl mx-auto px-6">
         <motion.div
-          className="text-center mb-14"
+          className="text-center mb-16"
           initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-          <h2 className="text-4xl md:text-[48px] font-bold text-slate-900 mb-4 leading-tight tracking-tighter">
+          <h2 className="text-4xl md:text-[56px] font-bold text-[#111827] mb-5 leading-tight tracking-tighter">
             Common questions
           </h2>
-          <p className="text-slate-500 text-base leading-relaxed">
-            Everything you need to know before you connect.
+          <p className="text-slate-500 text-[17px] font-medium leading-relaxed">
+            Everything you need to know before joining.
           </p>
         </motion.div>
 
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-8">
+        <div className="mt-4">
           {FAQ_ITEMS.map((item, i) => (
             <FAQItem key={item.q} q={item.q} a={item.a} index={i} />
           ))}
@@ -756,9 +938,9 @@ function FAQ() {
 
 const FOOTER_LINKS = {
   Product: ["Dashboard", "Features", "Pricing", "Changelog"],
-  Company: ["About", "Blog", "Careers", "Press"],
-  Resources: ["Documentation", "API Reference", "Status", "Community"],
-  Legal: ["Privacy Policy", "Terms of Service", "Cookie Policy", "GDPR"],
+  Company: ["About", "Blog", "Careers"],
+  Resources: ["Documentation", "API Reference", "Status"],
+  Legal: ["Privacy Policy", "Terms of Service", "Cookie Policy"],
 };
 
 function Footer() {
@@ -837,82 +1019,89 @@ function ConnectModal({ open, storeUrl, onClose }: { open: boolean; storeUrl: st
 
           {/* Dialog */}
           <motion.div
-            className="relative z-10 w-full max-w-[440px] overflow-hidden rounded-[24px] bg-white shadow-[0_24px_80px_rgba(0,0,0,0.12)] border border-slate-200/60"
+            className="relative z-10 w-full max-w-[420px] overflow-hidden rounded-[24px] bg-white shadow-2xl border border-slate-200/70"
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ type: "spring", damping: 25, stiffness: 400 }}
           >
+            {/* Top glowing ambient background */}
+            <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-slate-50 to-transparent pointer-events-none" />
+            <div className="absolute inset-x-0 top-0 h-48 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9IiNlNGU0ZTciIC8+PC9zdmc+')] opacity-[0.35] [mask-image:linear-gradient(to_bottom,white,transparent_80%)] pointer-events-none" />
+
             {/* Close button */}
             {state === "idle" && (
               <button
                 onClick={onClose}
-                className="absolute top-5 right-5 w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors z-10"
+                className="absolute top-4 right-4 w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 flex items-center justify-center transition-colors z-20 backdrop-blur-sm"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             )}
 
-            <div className="px-10 pt-12 pb-10 text-center">
+            <div className="relative z-10 px-8 pt-10 pb-8 text-center">
               <motion.div
-                className="w-16 h-16 rounded-2xl bg-white shadow-sm border border-slate-200/80 flex items-center justify-center mx-auto mb-6"
+                className="w-16 h-16 rounded-[18px] bg-white shadow-sm border border-slate-200/80 flex items-center justify-center mx-auto mb-6 relative overflow-hidden group"
                 animate={state === "loading" ? { rotate: [0, 360] } : {}}
                 transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
               >
+                <div className="absolute inset-0 bg-emerald-500/5 group-hover:bg-emerald-500/10 transition-colors" />
                 {state === "loading" ? (
                   <motion.div
-                    className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full"
+                    className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full relative z-10"
                     animate={{ rotate: 360 }}
                     transition={{ repeat: Infinity, duration: 0.8, ease: "linear" }}
                   />
                 ) : (
-                  <BarChart3 className="w-7 h-7 text-emerald-600" />
+                  <BarChart3 className="w-7 h-7 text-emerald-600 relative z-10" />
                 )}
               </motion.div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-2.5 leading-tight tracking-tight">
-                {state === "loading" ? "Connecting to Shopify…" : "Analyze your store"}
+              <h2 className="text-[22px] font-bold text-slate-900 mb-2 leading-tight tracking-tight">
+                {state === "loading" ? "Redirecting to Google Oauth" : "Analyze your store"}
               </h2>
               {storeUrl && state === "idle" ? (
-                <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-600 text-sm font-medium px-3 py-1.5 rounded-lg border border-slate-200 mt-1">
+                <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-600 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-slate-200 mt-2 mb-4 shadow-sm">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
                   {storeUrl}
                 </div>
               ) : (
-                <p className="text-slate-500 text-[14.5px] leading-relaxed max-w-[280px] mx-auto">
-                  {state === "loading" ? "Redirecting to Google securely…" : "Log in to view exactly how AI shopping assistants perceive your catalog."}
+                <p className="text-slate-500 text-[14px] leading-[1.6] max-w-[280px] mx-auto mb-1">
+                  {state === "loading" ? "Redirecting securely…" : "Log in to view exactly how AI shopping assistants perceive your catalog."}
                 </p>
               )}
 
-              <div className="mt-10">
+              <div className="mt-8">
                 <motion.button
                   onClick={handleGoogle}
                   disabled={state === "loading"}
-                  whileHover={state === "idle" ? { y: -1, boxShadow: "0 6px 16px rgba(0,0,0,0.06)" } : {}}
+                  whileHover={state === "idle" ? { y: -1, boxShadow: "0 4px 12px rgba(0,0,0,0.05)" } : {}}
                   whileTap={state === "idle" ? { y: 0, scale: 0.98 } : {}}
                   className={cn(
-                    "w-full h-14 rounded-xl flex items-center justify-center gap-3 text-[14.5px] font-semibold transition-all duration-200 border",
+                    "w-full h-11 rounded-[10px] flex items-center justify-center gap-2.5 text-[14px] font-semibold transition-all duration-200 border",
                     state === "loading"
                       ? "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed"
-                      : "bg-white hover:bg-slate-50 text-slate-900 border-slate-200 shadow-sm",
+                      : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-[0_2px_4px_rgba(0,0,0,0.02)] hover:border-slate-300",
                   )}
                 >
-                  {!state && null}
-                  <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                  </svg>
-                  Continue with Google
+                  {state === "loading" ? null : (
+                    <svg className="w-[18px] h-[18px] flex-shrink-0" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                  )}
+                  {state === "loading" ? "Securely redirecting..." : "Continue with Google"}
                 </motion.button>
               </div>
+            </div>
 
-              <div className="mt-8 flex justify-center">
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Shield className="w-4 h-4" />
-                  <span className="text-[13px] font-medium tracking-wide">Secure Authentication</span>
+            <div className="border-t border-slate-100 bg-slate-50/50 px-8 py-5 flex flex-col items-center justify-center relative z-10">
+                <div className="flex items-center gap-1.5 text-slate-400 mb-2.5 hover:text-slate-600 transition-colors cursor-default">
+                   <p className="text-[11.5px] text-slate-400 text-center leading-relaxed">
+                  By continuing, you agree to Kasparro's <a href="#" className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">Terms of Service</a> & <a href="#" className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">Privacy Policy</a>.
+                </p>
                 </div>
-              </div>
             </div>
           </motion.div>
         </div>
@@ -983,6 +1172,7 @@ export default function Landing() {
   return (
     <>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap');
         @keyframes kasFloat {
           0%, 100% { transform: translateY(0px); }
           33% { transform: translateY(-10px); }
@@ -1004,6 +1194,7 @@ export default function Landing() {
         <Features />
         <HowItWorks />
         <Stats />
+        <Pricing />
         <FAQ />
         <Footer />
         <ConnectModal open={modalOpen} storeUrl={pendingUrl} onClose={() => setModalOpen(false)} />
