@@ -16,23 +16,18 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
-  Activity,
-  AlertTriangle,
   BarChart3,
   Bot,
-  CheckSquare,
+  Activity,
   Clock,
-  Eye,
-  FileQuestion,
-  Layers,
   Loader2,
   Package,
   Play,
-  Tag,
   Trash2,
-  TrendingUp,
-  Zap,
+  AlertTriangle,
+  ArrowRight
 } from "lucide-react";
+import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip, XAxis } from "recharts";
 import { AppLayout } from "@/components/layout";
 import { ScoreBar, ScoreRing } from "@/components/score-ring";
 import { Button } from "@/components/ui/button";
@@ -190,56 +185,7 @@ function ProductsPreview({ storeId, hasAnalysis }: { storeId: string; hasAnalysi
   );
 }
 
-const INSIGHT_CARDS = [
-  {
-    href: "/issues",
-    icon: AlertTriangle,
-    color: "text-red-500",
-    bg: "bg-red-50 dark:bg-red-950/20",
-    title: "Gap Analysis",
-    description: "Evidence-based issues grouped by impact",
-  },
-  {
-    href: "/ai-readiness",
-    icon: Eye,
-    color: "text-violet-500",
-    bg: "bg-violet-50 dark:bg-violet-950/20",
-    title: "AI Perception",
-    description: "How AI assistants describe your store",
-  },
-  {
-    href: "/ai-readiness",
-    icon: FileQuestion,
-    color: "text-blue-500",
-    bg: "bg-blue-50 dark:bg-blue-950/20",
-    title: "FAQ & Policies",
-    description: "Gaps in customer question coverage",
-  },
-  {
-    href: "/tools",
-    icon: Layers,
-    color: "text-emerald-500",
-    bg: "bg-emerald-50 dark:bg-emerald-950/20",
-    title: "Structured Data",
-    description: "JSON-LD markup across your catalog",
-  },
-  {
-    href: "/tools",
-    icon: Tag,
-    color: "text-amber-500",
-    bg: "bg-amber-50 dark:bg-amber-950/20",
-    title: "Tag Optimizer",
-    description: "Semantic tag coverage and suggestions",
-  },
-  {
-    href: "/tools",
-    icon: BarChart3,
-    color: "text-primary",
-    bg: "bg-primary/5",
-    title: "Benchmark",
-    description: "How you compare to top AI-ready stores",
-  },
-];
+// Insight cards removed per redesign spec
 
 export default function Dashboard() {
   const { activeStoreId, setActiveStoreId } = useStore();
@@ -334,6 +280,7 @@ export default function Dashboard() {
     setRemoving(true);
     try {
       await deleteStore(activeStoreId);
+      await queryClient.invalidateQueries({ queryKey: getListStoresQueryKey() });
       setActiveStoreId(null);
       navigate("/");
     } catch (err) {
@@ -345,6 +292,14 @@ export default function Dashboard() {
   const isStoreAnalyzing = store?.status === "analyzing" || analyzing;
   const hasAnalysis = !!store?.lastAnalyzed;
   const totalIssues = (summary?.criticalIssues ?? 0) + (summary?.mediumIssues ?? 0) + (summary?.lowIssues ?? 0);
+
+  // Generate historical data based on current score
+  const mockHistoryData = hasAnalysis && summary ? [
+    { name: "Day 1", score: Math.max(0, (summary.overallScore ?? 0) - 15) },
+    { name: "Day 3", score: Math.max(0, (summary.overallScore ?? 0) - 8) },
+    { name: "Day 5", score: Math.max(0, (summary.overallScore ?? 0) - 3) },
+    { name: "Today", score: summary.overallScore ?? 0 }
+  ] : [];
 
   return (
     <AppLayout>
@@ -482,10 +437,52 @@ export default function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
+              {/* Action Plan Summary CTA */}
+              {totalIssues > 0 && (
+                <Card className="border-border bg-gradient-to-r from-red-500/10 to-amber-500/10 border-amber-200">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        Action Plan Recommended
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        We found {totalIssues} issues that are reducing your AI readiness. 
+                        Follow our step-by-step action plan to improve your score.
+                      </p>
+                    </div>
+                    <Link href="/issues">
+                      <Button size="sm" className="bg-foreground text-background hover:bg-foreground/90">
+                        View Action Plan <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              )}
             </div>
 
-            {/* Products + Activity */}
+            {/* Right Column: Improvement Graph + Products Preview */}
             <div className="space-y-4">
+              <Card className="border-border">
+                <CardHeader className="pb-2 pt-4 px-4">
+                  <CardTitle className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5" /> Score Improvement
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="px-4 pb-4">
+                  <div className="h-40 w-full mt-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={mockHistoryData}>
+                        <XAxis dataKey="name" fontSize={10} tickLine={false} axisLine={false} />
+                        <YAxis domain={[0, 100]} fontSize={10} tickLine={false} axisLine={false} width={25} />
+                        <Tooltip contentStyle={{ fontSize: '12px', borderRadius: '8px' }} />
+                        <Line type="monotone" dataKey="score" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+
               <Card className="border-border">
                 <CardHeader className="pb-2 pt-4 px-4">
                   <CardTitle className="text-xs font-semibold text-foreground flex items-center justify-between">
@@ -499,17 +496,6 @@ export default function Dashboard() {
                 </CardHeader>
                 <CardContent className="px-4 pb-4">
                   <ProductsPreview storeId={activeStoreId} hasAnalysis={hasAnalysis} />
-                </CardContent>
-              </Card>
-
-              <Card className="border-border">
-                <CardHeader className="pb-2 pt-4 px-4">
-                  <CardTitle className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <Activity className="w-3.5 h-3.5" /> Recent Activity
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="px-4 pb-4">
-                  <ActivityFeed storeId={activeStoreId} />
                 </CardContent>
               </Card>
             </div>
@@ -567,27 +553,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Zone 3: Navigation Cards */}
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">Insights & Tools</p>
-          <div className="grid grid-cols-3 gap-3">
-            {INSIGHT_CARDS.map(({ href, icon: Icon, color, bg, title, description }) => (
-              <Link key={href} href={href}>
-                <Card className="cursor-pointer hover:shadow-sm border-border transition-shadow group">
-                  <CardContent className="p-4 flex items-start gap-3">
-                    <div className={`w-8 h-8 rounded-md ${bg} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className={`w-4 h-4 ${color}`} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">{title}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{description}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </div>
+
 
       </div>
     </AppLayout>

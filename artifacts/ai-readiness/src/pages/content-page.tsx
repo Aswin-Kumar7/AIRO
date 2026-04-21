@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, BookOpen, AlertCircle, TrendingUp, Package, Link2, ArrowRight } from "lucide-react";
 import { getTopicalAuthority, getInternalLinks, type TopicalCluster, type InternalLinkSuggestion } from "@/lib/features-api";
+import { useState } from "react";
 
 // ─── Topical Authority tab ────────────────────────────────────────────────────
 
@@ -63,14 +64,26 @@ function ClusterCard({ cluster }: { cluster: TopicalCluster }) {
 }
 
 function TopicalTab({ storeId }: { storeId: string }) {
+  const [hasRun, setHasRun] = useState(false);
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["topical-authority", storeId],
     queryFn: () => getTopicalAuthority(storeId),
-    enabled: !!storeId,
+    enabled: !!storeId && hasRun,
     staleTime: 5 * 60 * 1000,
   });
 
   const sorted = [...(data?.clusters ?? [])].sort((a, b) => a.coverageScore - b.coverageScore);
+
+  if (!hasRun && !data) return (
+    <div className="space-y-4">
+      <Card className="border-dashed"><CardContent className="py-12 text-center">
+        <BookOpen className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+        <p className="text-sm font-medium text-foreground mb-1">Ready for Analysis</p>
+        <p className="text-sm text-slate-400 mb-4">Run analysis to map your content gaps and topic coverage</p>
+        <Button onClick={() => setHasRun(true)} disabled={isFetching}>Run Analysis</Button>
+      </CardContent></Card>
+    </div>
+  );
 
   if (isLoading || isFetching) return (
     <Card><CardContent className="flex flex-col items-center gap-3 py-16">
@@ -81,7 +94,6 @@ function TopicalTab({ storeId }: { storeId: string }) {
 
   if (!data || sorted.length === 0) return (
     <div className="space-y-4">
-      <Button variant="outline" size="sm" onClick={() => refetch()}>Analyze</Button>
       <Card className="border-dashed"><CardContent className="py-12 text-center"><p className="text-sm text-slate-400">No products to analyze</p></CardContent></Card>
     </div>
   );
@@ -146,10 +158,11 @@ function LinkCard({ suggestion }: { suggestion: InternalLinkSuggestion }) {
 }
 
 function LinksTab({ storeId }: { storeId: string }) {
+  const [hasRun, setHasRun] = useState(false);
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["internal-links", storeId],
     queryFn: () => getInternalLinks(storeId),
-    enabled: !!storeId,
+    enabled: !!storeId && hasRun,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -162,6 +175,17 @@ function LinksTab({ storeId }: { storeId: string }) {
   ];
   const groups = allGroups.filter((g) => g.items.length > 0);
 
+  if (!hasRun && !data) return (
+    <div className="space-y-4">
+      <Card className="border-dashed"><CardContent className="py-12 text-center">
+        <Link2 className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+        <p className="text-sm font-medium text-foreground mb-1">Ready for Analysis</p>
+        <p className="text-sm text-slate-400 mb-4">Run analysis to find internal link opportunities between related products</p>
+        <Button onClick={() => setHasRun(true)} disabled={isFetching}>Run Analysis</Button>
+      </CardContent></Card>
+    </div>
+  );
+
   if (isLoading || isFetching) return (
     <Card><CardContent className="flex flex-col items-center gap-3 py-16">
       <Loader2 className="w-6 h-6 animate-spin text-primary" />
@@ -171,7 +195,6 @@ function LinksTab({ storeId }: { storeId: string }) {
 
   if (groups.length === 0) return (
     <div className="space-y-4">
-      <Button variant="outline" size="sm" onClick={() => refetch()}>Analyze</Button>
       <Card className="border-dashed"><CardContent className="py-12 text-center">
         <p className="text-sm text-slate-400">{(data?.totalProducts ?? 0) < 2 ? "Need at least 2 products." : "No link opportunities found."}</p>
       </CardContent></Card>

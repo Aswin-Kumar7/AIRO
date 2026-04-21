@@ -204,7 +204,7 @@ export async function generateFix(
 ): Promise<{ improvedContent: string; explanation: string; estimatedScoreImprovement: number }> {
   const typeInstructions: Record<string, string> = {
     description:
-      "Rewrite this product description to be clear, complete, and AI-agent-friendly. Include key features, specifications, use cases, and materials. Make it informative without being salesy.",
+      "Rewrite this product description to be clear, complete, and AI-agent-friendly. Include key features, specifications, use cases, and materials. Make it informative without being salesy. IMPORTANT: If the original content contains any <script type=\"application/ld+json\"> blocks, you MUST preserve them exactly as is and append them to your returned description. Do not remove any existing JSON-LD markup.",
     tags: "Improve these product tags to be semantic, relevant, and optimized for AI retrieval. Include category, use case, material, audience, and feature tags.",
     title: "Improve this product title to be clear, specific, and include key identifying information.",
     structure: "Restructure this product description with clear sections: Overview, Features, Specifications, Use Cases.",

@@ -27,10 +27,11 @@ function CopyButton({ text }: { text: string }) {
 }
 
 function LlmsTab({ storeId }: { storeId: string }) {
+  const [hasRun, setHasRun] = useState(false);
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["llms-txt", storeId],
     queryFn: () => getLlmsTxt(storeId),
-    enabled: !!storeId,
+    enabled: !!storeId && hasRun,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -83,7 +84,12 @@ function LlmsTab({ storeId }: { storeId: string }) {
           </Card>
         </>
       ) : (
-        <Button variant="outline" onClick={() => refetch()} className="gap-1.5"><FileText className="w-3.5 h-3.5" />Generate llms.txt</Button>
+        <div className="flex flex-col items-center justify-center p-8 bg-card border border-dashed rounded-lg">
+          <FileText className="w-8 h-8 text-slate-300 mb-3" />
+          <p className="text-sm font-medium text-foreground mb-1">Generate llms.txt</p>
+          <p className="text-xs text-muted-foreground mb-4 max-w-sm text-center">Your personalized llms.txt provides crawled instructions that help AI systems accurately list your products and terms and avoid hallucinating.</p>
+          <Button onClick={() => setHasRun(true)} disabled={isFetching} className="gap-1.5"><FileText className="w-3.5 h-3.5" />Generate LLM File</Button>
+        </div>
       )}
     </div>
   );
@@ -94,14 +100,15 @@ function LlmsTab({ storeId }: { storeId: string }) {
 function FaqTab({ storeId }: { storeId: string }) {
   const [showSchema, setShowSchema] = useState(false);
   const [copiedSchema, setCopiedSchema] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
 
-  const { data: perception, isLoading: percLoading } = useQuery({
+  const { data: perception, isLoading: percLoading, isFetching } = useQuery({
     queryKey: ["store-perception", storeId],
     queryFn: () => getStorePerception(storeId),
-    enabled: !!storeId,
+    enabled: !!storeId && hasRun,
   });
 
-  const { data: schema, isLoading: schemaLoading, refetch, isFetching } = useQuery({
+  const { data: schema, isLoading: schemaLoading, refetch, isFetching: schemaFetching } = useQuery({
     queryKey: ["faq-schema", storeId],
     queryFn: () => getFaqSchema(storeId),
     enabled: showSchema && !!storeId,
@@ -118,32 +125,41 @@ function FaqTab({ storeId }: { storeId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* FAQ page health */}
-      {percLoading ? <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-slate-300" /></div> : perception && (
+      {!hasRun && !perception ? (
+        <div className="flex flex-col items-center justify-center p-8 bg-card border border-dashed rounded-lg">
+          <FileQuestion className="w-8 h-8 text-slate-300 mb-3" />
+          <p className="text-sm font-medium text-foreground mb-1">Ready for FAQ Health Analysis</p>
+          <p className="text-xs text-muted-foreground mb-4 max-w-sm text-center">Analyze your FAQ page and extract missing questions.</p>
+          <Button onClick={() => setHasRun(true)} disabled={isFetching} className="gap-1.5">Analyze FAQs & Policies</Button>
+        </div>
+      ) : (
         <>
-          <Card>
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3 mb-3">
-                {faq?.found ? <CheckCircle className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-red-500" />}
-                <div>
-                  <p className="text-sm font-semibold">{faq?.found ? `FAQ page found: "${faq.title}"` : "No FAQ page found"}</p>
-                  <p className="text-xs text-muted-foreground">{faq?.found ? `${faq.questionCount} questions detected` : "Add a page with handle 'faq'"}</p>
-                </div>
-                {faq?.found && <Badge variant="secondary" className="ml-auto">{faq.questionCount} Q&As</Badge>}
-              </div>
-              {perception.unansweredQuestions.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-2">Questions AI can't answer</p>
-                  {perception.unansweredQuestions.map((q, i) => (
-                    <div key={i} className="flex gap-2 py-1.5 border-b border-border last:border-0">
-                      <span className="text-red-400 text-xs flex-shrink-0">✗</span>
-                      <p className="text-xs text-foreground">{q}</p>
+          {/* FAQ page health */}
+          {percLoading || isFetching ? <div className="flex justify-center py-8"><Loader2 className="w-4 h-4 animate-spin text-slate-300" /></div> : perception && (
+            <>
+              <Card>
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    {faq?.found ? <CheckCircle className="w-5 h-5 text-green-500" /> : <XCircle className="w-5 h-5 text-red-500" />}
+                    <div>
+                      <p className="text-sm font-semibold">{faq?.found ? `FAQ page found: "${faq.title}"` : "No FAQ page found"}</p>
+                      <p className="text-xs text-muted-foreground">{faq?.found ? `${faq.questionCount} questions detected` : "Add a page with handle 'faq'"}</p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    {faq?.found && <Badge variant="secondary" className="ml-auto">{faq.questionCount} Q&As</Badge>}
+                  </div>
+                  {perception.unansweredQuestions.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-2">Questions AI can't answer</p>
+                      {perception.unansweredQuestions.map((q, i) => (
+                        <div key={i} className="flex gap-2 py-1.5 border-b border-border last:border-0">
+                          <span className="text-red-400 text-xs flex-shrink-0">✗</span>
+                          <p className="text-xs text-foreground">{q}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
           {faq?.unansweredTopics && faq.unansweredTopics.length > 0 && (
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><MessageSquare className="w-4 h-4 text-amber-500" />Topics not covered</CardTitle></CardHeader>
@@ -157,45 +173,47 @@ function FaqTab({ storeId }: { storeId: string }) {
               </CardContent>
             </Card>
           )}
+            </>
+          )}
+
+          {/* FAQ Schema generator */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm">Generate FAQPage JSON-LD</CardTitle>
+                {!showSchema && <Button size="sm" onClick={() => setShowSchema(true)} className="gap-1.5"><FileQuestion className="w-3.5 h-3.5" />Generate schema</Button>}
+              </div>
+            </CardHeader>
+            {showSchema && (
+              <CardContent>
+                {schemaLoading || schemaFetching ? (
+                  <div className="flex items-center gap-2 py-4"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm text-slate-400">Generating FAQ schema…</span></div>
+                ) : schema ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">{schema.questionCount} Q&As generated</span>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={copySchema} className="gap-1.5">
+                          {copiedSchema ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          {copiedSchema ? "Copied!" : "Copy snippet"}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => refetch()}>Regenerate</Button>
+                      </div>
+                    </div>
+                    {schema.questions.map((q, i) => (
+                      <div key={i} className="border border-border rounded-lg p-3">
+                        <p className="text-xs font-semibold text-foreground mb-1">{q.question}</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{q.answer}</p>
+                      </div>
+                    ))}
+                    <pre className="bg-slate-50 border border-slate-200 rounded-md p-3 text-[10px] font-mono overflow-x-auto">{`<script type="application/ld+json">\n${schema.jsonLd}\n</script>`}</pre>
+                  </div>
+                ) : null}
+              </CardContent>
+            )}
+          </Card>
         </>
       )}
-
-      {/* FAQ Schema generator */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm">Generate FAQPage JSON-LD</CardTitle>
-            {!showSchema && <Button size="sm" onClick={() => setShowSchema(true)} className="gap-1.5"><FileQuestion className="w-3.5 h-3.5" />Generate schema</Button>}
-          </div>
-        </CardHeader>
-        {showSchema && (
-          <CardContent>
-            {schemaLoading || isFetching ? (
-              <div className="flex items-center gap-2 py-4"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-sm text-slate-400">Generating FAQ schema…</span></div>
-            ) : schema ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">{schema.questionCount} Q&As generated</span>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={copySchema} className="gap-1.5">
-                      {copiedSchema ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                      {copiedSchema ? "Copied!" : "Copy snippet"}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => refetch()}>Regenerate</Button>
-                  </div>
-                </div>
-                {schema.questions.map((q, i) => (
-                  <div key={i} className="border border-border rounded-lg p-3">
-                    <p className="text-xs font-semibold text-foreground mb-1">{q.question}</p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{q.answer}</p>
-                  </div>
-                ))}
-                <pre className="bg-slate-50 border border-slate-200 rounded-md p-3 text-[10px] font-mono overflow-x-auto">{`<script type="application/ld+json">\n${schema.jsonLd}\n</script>`}</pre>
-              </div>
-            ) : null}
-          </CardContent>
-        )}
-      </Card>
     </div>
   );
 }
@@ -203,13 +221,23 @@ function FaqTab({ storeId }: { storeId: string }) {
 // ─── Tag Optimizer tab ────────────────────────────────────────────────────────
 
 function TagsTab({ storeId }: { storeId: string }) {
-  const { data, isLoading } = useQuery({
+  const [hasRun, setHasRun] = useState(false);
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ["store-tag-optimizer", storeId],
     queryFn: () => getStoreTagOptimizer(storeId),
-    enabled: !!storeId,
+    enabled: !!storeId && hasRun,
   });
 
-  if (isLoading) return <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>;
+  if (!hasRun && !data) return (
+    <div className="flex flex-col items-center justify-center p-8 bg-card border border-dashed rounded-lg">
+      <Tag className="w-8 h-8 text-slate-300 mb-3" />
+      <p className="text-sm font-medium text-foreground mb-1">Ready for Tag Optimization</p>
+      <p className="text-xs text-muted-foreground mb-4 max-w-sm text-center">Analyze your product tags and get semantic routing tag suggestions.</p>
+      <Button onClick={() => setHasRun(true)} disabled={isFetching} className="gap-1.5">Optimize Tags</Button>
+    </div>
+  );
+
+  if (isLoading || isFetching) return <div className="flex justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>;
 
   if (!data || data.items.length === 0) return (
     <Card className="border-dashed"><CardContent className="py-12 text-center"><Tag className="w-8 h-8 text-slate-300 mx-auto mb-3" /><p className="text-sm text-slate-400">Run an analysis to get tag suggestions</p></CardContent></Card>

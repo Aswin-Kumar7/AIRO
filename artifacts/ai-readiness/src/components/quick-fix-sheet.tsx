@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { ScoreRing } from "@/components/score-ring";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
   Package, Loader2, Sparkles, RefreshCw, CheckCircle2,
@@ -194,31 +195,35 @@ function FixSection({
                   )}
                 </div>
               ) : (
-                /* Standard: editable before/after */
+                /* Standard: editable before/after using Tabs */
                 <>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wider mb-1">Before</p>
-                      <div className="text-[11px] text-foreground bg-red-50 border border-red-100 rounded-lg p-2.5 max-h-32 overflow-y-auto leading-relaxed">
+                  <Tabs defaultValue="generated" className="w-full">
+                    <TabsList className="mb-2 w-full grid grid-cols-2">
+                      <TabsTrigger value="existing" className="text-[10px] uppercase tracking-wider">Existing Content</TabsTrigger>
+                      <TabsTrigger value="generated" className="text-[10px] uppercase tracking-wider">Generated Content</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="existing">
+                      <div className="text-[11px] text-foreground bg-muted border border-border rounded p-2.5 max-h-40 overflow-y-auto leading-relaxed">
                         {fix?.originalContent || "(empty)"}
                       </div>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-semibold text-green-600 uppercase tracking-wider mb-1">After (editable)</p>
+                    </TabsContent>
+                    
+                    <TabsContent value="generated">
                       {isApplied ? (
-                        <div className="text-[11px] text-foreground bg-green-50 border border-green-100 rounded-lg p-2.5 max-h-32 overflow-y-auto leading-relaxed">
+                        <div className="text-[11px] text-foreground bg-green-50 border border-green-100 rounded p-2.5 max-h-40 overflow-y-auto leading-relaxed">
                           {editedContent}
                         </div>
                       ) : (
                         <Textarea
                           value={editedContent}
                           onChange={(e) => setEditedContent(e.target.value)}
-                          className="text-[11px] min-h-[80px] max-h-32 leading-relaxed resize-none"
+                          className="text-[11px] min-h-[120px] max-h-40 leading-relaxed resize-y"
                           placeholder="AI-generated content will appear here…"
                         />
                       )}
-                    </div>
-                  </div>
+                    </TabsContent>
+                  </Tabs>
 
                   {!isApplied && (
                     <div className="flex items-center justify-between pt-1">

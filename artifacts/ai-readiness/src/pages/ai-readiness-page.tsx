@@ -262,8 +262,20 @@ export default function AiReadiness() {
       <div className="p-6 max-w-4xl mx-auto">
         <div className="mb-6">
           <h1 className="text-xl font-bold text-slate-900">AI Readiness</h1>
-          <p className="text-sm text-slate-500 mt-0.5">How AI agents perceive, query, and describe your store</p>
+          <p className="text-sm text-slate-500 mt-0.5">Understand and optimize how AI shopping agents evaluate your catalog</p>
         </div>
+
+        <Card className="mb-6 border-violet-200 bg-violet-50/50">
+          <CardContent className="p-4 flex gap-3">
+            <Bot className="w-5 h-5 text-violet-600 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1 text-violet-900">
+              <p className="text-sm font-semibold">Why this matters</p>
+              <p className="text-xs leading-relaxed opacity-90">
+                Modern shoppers increasingly rely on Voice, AI agents, and LLMs (like ChatGPT or specialized shopping assistants) to find products. This module analyzes your store from an AI's perspective. It evaluates how well your products are contextualized, simulates real AI buying queries to measure recommendation rates, and ensures your catalog's structure is consistent enough for reliable data extraction.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
         <Tabs defaultValue="perception">
           <TabsList className="mb-6 bg-slate-100 p-0.5 h-9">
             <TabsTrigger value="perception" className="text-xs h-8 gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm">

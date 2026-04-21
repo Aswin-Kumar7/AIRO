@@ -230,7 +230,7 @@ export default function ProductDetail({ params }: { params: { productId: string 
                 </div>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
-                {isAnalyzed && <ScoreRing score={product.score.overall} size={68} label="Overall" />}
+                {isAnalyzed && <ScoreRing score={product.score?.overall ?? 0} size={68} label="Overall" />}
                 <Button size="sm" onClick={() => setQuickFixOpen(true)} className="h-8">
                   <Zap className="w-3.5 h-3.5 mr-1.5" />
                   Quick Fix
@@ -247,10 +247,10 @@ export default function ProductDetail({ params }: { params: { productId: string 
                       <CardTitle className="text-sm">Score Breakdown</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <ScoreBar score={product.score.clarity} label="Clarity — How clearly is this product described for AI?" />
-                      <ScoreBar score={product.score.completeness} label="Completeness — Specs, dimensions, materials present?" />
-                      <ScoreBar score={product.score.trust} label="Trust Signals — Brand, reviews, structured data?" />
-                      <ScoreBar score={product.score.tags} label="Tag Quality — Semantic and AI-retrieval-ready?" />
+                      <ScoreBar score={product.score?.clarity ?? 0} label="Clarity — How clearly is this product described for AI?" />
+                      <ScoreBar score={product.score?.completeness ?? 0} label="Completeness — Specs, dimensions, materials present?" />
+                      <ScoreBar score={product.score?.trust ?? 0} label="Trust Signals — Brand, reviews, structured data?" />
+                      <ScoreBar score={product.score?.tags ?? 0} label="Tag Quality — Semantic and AI-retrieval-ready?" />
                     </CardContent>
                   </Card>
                 )}

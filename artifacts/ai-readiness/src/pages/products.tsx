@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Package, Search, Tag, AlertTriangle, CheckCircle, Zap } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
-import { QuickFixSheet } from "@/components/quick-fix-sheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function ScoreChip({ score }: { score: number }) {
   const color = score >= 75 ? "bg-green-100 text-green-700" : score >= 50 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700";
@@ -22,19 +22,29 @@ export default function Products() {
     query: { enabled: !!activeStoreId, queryKey: getListProductsQueryKey(activeStoreId!) },
   });
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [, navigate] = useLocation();
-  const [quickFixProduct, setQuickFixProduct] = useState<{ id: string; title: string } | null>(null);
 
   if (!activeStoreId) {
     navigate("/");
     return null;
   }
 
-  const filtered = products?.filter(p =>
-    p.title.toLowerCase().includes(search.toLowerCase()) ||
-    p.productType?.toLowerCase().includes(search.toLowerCase()) ||
-    p.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
-  ) ?? [];
+  const filtered = products?.filter(p => {
+    const rawSearch = search.trim().toLowerCase();
+    const matchSearch = !rawSearch || 
+      p.title.toLowerCase().includes(rawSearch) ||
+      p.productType?.toLowerCase().includes(rawSearch) ||
+      p.tags.some(t => t.toLowerCase().includes(rawSearch));
+
+    let matchStatus = true;
+    if (statusFilter === "analyzed") matchStatus = !!p.analyzedAt;
+    if (statusFilter === "unanalyzed") matchStatus = !p.analyzedAt;
+    if (statusFilter === "hasIssues") matchStatus = !!p.analyzedAt && p.issueCount > 0;
+    if (statusFilter === "fixed") matchStatus = !!p.analyzedAt && !!p.hasAppliedFixes;
+
+    return matchSearch && matchStatus;
+  }) ?? [];
 
   const sorted = [...filtered].sort((a, b) => a.score.overall - b.score.overall);
 
@@ -46,9 +56,23 @@ export default function Products() {
             <h1 className="text-xl font-bold text-foreground">Products</h1>
             <p className="text-sm text-muted-foreground">{products?.length ?? 0} products analyzed</p>
           </div>
-          <div className="relative w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search products..." className="pl-9 text-sm" value={search} onChange={e => setSearch(e.target.value)} />
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[140px] text-sm h-9">
+                <SelectValue placeholder="All products" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All products</SelectItem>
+                <SelectItem value="analyzed">Analyzed</SelectItem>
+                <SelectItem value="unanalyzed">Not analyzed</SelectItem>
+                <SelectItem value="hasIssues">Has issues</SelectItem>
+                <SelectItem value="fixed">Fixed</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input placeholder="Search products..." className="pl-9 h-9 text-sm" value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
           </div>
         </div>
 
@@ -109,21 +133,20 @@ export default function Products() {
 
                     {/* Actions */}
                     <div className="col-span-3 flex items-center justify-center gap-2">
-                      {product.issueCount > 0 ? (
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setQuickFixProduct({ id: product.id, title: product.title });
-                          }}
-                        >
-                          <Zap className="w-3 h-3" />
-                          Quick Fix
-                          <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 bg-white/20 text-white border-0">
-                            {product.issueCount}
-                          </Badge>
-                        </Button>
+                      {!product.analyzedAt ? (
+                        <div className="text-[11px] text-muted-foreground whitespace-nowrap">
+                          Not analyzed
+                        </div>
+                      ) : product.issueCount > 0 ? (
+                        <Link href={`/products/${product.id}`} onClick={(e) => e.stopPropagation()}>
+                          <Button size="sm" className="h-7 text-[11px] gap-1.5" variant="outline">
+                            <AlertTriangle className="w-3 h-3 text-amber-500" />
+                            View Issues
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 bg-amber-100 text-amber-700 border-0">
+                              {product.issueCount}
+                            </Badge>
+                          </Button>
+                        </Link>
                       ) : (
                         <div className="flex items-center gap-1 text-xs text-green-600">
                           <CheckCircle className="w-3 h-3" />
@@ -151,17 +174,6 @@ export default function Products() {
           </div>
         )}
       </div>
-
-      {/* Quick Fix slide-over */}
-      {quickFixProduct && (
-        <QuickFixSheet
-          storeId={activeStoreId}
-          productId={quickFixProduct.id}
-          productTitle={quickFixProduct.title}
-          isOpen={true}
-          onClose={() => setQuickFixProduct(null)}
-        />
-      )}
     </AppLayout>
   );
 }

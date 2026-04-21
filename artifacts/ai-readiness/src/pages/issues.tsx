@@ -5,11 +5,14 @@ import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, AlertTriangle, Zap, TrendingUp, Wrench, ListChecks, Package, CheckCircle2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { getStorePerception, type ActionPlanItem } from "@/lib/insights-api";
+import { useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 
 // ─── Gaps tab types & helpers ─────────────────────────────────────────────────
 
@@ -154,11 +157,19 @@ export default function Issues() {
     query: { enabled: !!activeStoreId, queryKey: getListGapsQueryKey(activeStoreId!) },
   }) as { data: Gap[] | undefined; isLoading: boolean };
 
-  const { data: planData, isLoading: planLoading } = useQuery({
+  const queryClient = useQueryClient();
+  const { data: planData, isLoading: planLoading, isFetching: planFetching } = useQuery({
     queryKey: ["store-perception", activeStoreId],
     queryFn: () => getStorePerception(activeStoreId!),
     enabled: !!activeStoreId,
   });
+
+  const isRefreshing = gapsLoading || planFetching;
+
+  function handleHardRefresh() {
+    queryClient.invalidateQueries({ queryKey: getListGapsQueryKey(activeStoreId!) });
+    queryClient.invalidateQueries({ queryKey: ["store-perception", activeStoreId] });
+  }
 
   if (!activeStoreId) { navigate("/"); return null; }
 
@@ -182,7 +193,13 @@ export default function Issues() {
         {/* Header */}
         <div className="flex items-start justify-between mb-5">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Issues</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-bold text-slate-900">Issues</h1>
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs gap-1 opacity-70 hover:opacity-100" onClick={handleHardRefresh} disabled={isRefreshing}>
+                <RefreshCw className={cn("w-3 h-3", isRefreshing && "animate-spin")} />
+                Refresh
+              </Button>
+            </div>
             <p className="text-sm text-slate-500 mt-0.5">Evidence-based gaps and prioritized action plan</p>
           </div>
           <div className="flex gap-2">
@@ -248,8 +265,40 @@ export default function Issues() {
                 <p className="text-sm text-slate-400">Run a full analysis to generate an action plan</p>
               </CardContent></Card>
             ) : (
-              <div className="space-y-3">
-                {sorted.map((item, idx) => <ActionCard key={item.gapId} item={item} rank={idx + 1} />)}
+              <div className="space-y-6 relative before:absolute before:inset-0 before:ml-[1.1rem] before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
+                {sorted.filter(i => i.severity === "high").length > 0 && (
+                  <div className="relative space-y-3 z-10 w-full mb-8">
+                    <h3 className="text-sm font-bold text-red-600 flex items-center justify-center bg-white py-1 relative">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full border-2 border-white bg-red-100 text-red-700 text-xs shadow-sm absolute left-0 md:bg-white md:static mr-2">1</span>
+                      Phase 1: Immediate Action
+                    </h3>
+                    <div className="space-y-3 px-8 md:px-0">
+                      {sorted.filter(i => i.severity === "high").map((item, idx) => <ActionCard key={item.gapId} item={item} rank={idx + 1} />)}
+                    </div>
+                  </div>
+                )}
+                {sorted.filter(i => i.severity === "medium").length > 0 && (
+                  <div className="relative space-y-3 z-10 w-full mb-8">
+                    <h3 className="text-sm font-bold text-amber-600 flex items-center justify-center bg-white py-1 relative">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full border-2 border-white bg-amber-100 text-amber-700 text-xs shadow-sm absolute left-0 md:bg-white md:static mr-2">2</span>
+                      Phase 2: Short-Term Fixes
+                    </h3>
+                    <div className="space-y-3 px-8 md:px-0">
+                      {sorted.filter(i => i.severity === "medium").map((item, idx) => <ActionCard key={item.gapId} item={item} rank={sorted.filter(i => i.severity === "high").length + idx + 1} />)}
+                    </div>
+                  </div>
+                )}
+                {sorted.filter(i => i.severity === "low").length > 0 && (
+                  <div className="relative space-y-3 z-10 w-full">
+                    <h3 className="text-sm font-bold text-blue-600 flex items-center justify-center bg-white py-1 relative">
+                      <span className="flex items-center justify-center w-6 h-6 rounded-full border-2 border-white bg-blue-100 text-blue-700 text-xs shadow-sm absolute left-0 md:bg-white md:static mr-2">3</span>
+                      Phase 3: Long-Term Enhancements
+                    </h3>
+                    <div className="space-y-3 px-8 md:px-0">
+                      {sorted.filter(i => i.severity === "low").map((item, idx) => <ActionCard key={item.gapId} item={item} rank={sorted.filter(i => i.severity === "high").length + sorted.filter(i => i.severity === "medium").length + idx + 1} />)}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>

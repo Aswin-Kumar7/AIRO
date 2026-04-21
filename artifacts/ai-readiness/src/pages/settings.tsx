@@ -35,7 +35,7 @@ export default function Settings() {
         const next = (stores as Array<{ id: string }>).find((s) => s.id !== storeId);
         setActiveStoreId(next?.id ?? null);
       }
-      queryClient.invalidateQueries({ queryKey: ["stores"] });
+      queryClient.invalidateQueries({ queryKey: getListStoresQueryKey() });
       toast({ title: "Store removed" });
       setConfirmDeleteId(null);
     } catch {
