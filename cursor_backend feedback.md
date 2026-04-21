@@ -188,4 +188,3 @@
   - **Judge/demo resilience:** 7/10
 
   **Overall:** strong contender with clear differentiation, but needs reliability + eval hardening to beat top international teams consistently.
-
