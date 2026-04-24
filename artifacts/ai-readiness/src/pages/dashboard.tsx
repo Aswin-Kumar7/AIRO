@@ -205,8 +205,11 @@ export default function Dashboard() {
       setShowOnboarding(true);
     } else {
       setShowOnboarding(false);
-      // Auto-pick first store if none is active
-      if (!activeStoreId) setActiveStoreId(stores[0]!.id);
+      // Auto-pick first store if none is active OR if the stored ID no longer exists
+      const isValidStore = stores.some((s) => s.id === activeStoreId);
+      if (!activeStoreId || !isValidStore) {
+        setActiveStoreId(stores[0]!.id);
+      }
     }
   }, [storesLoading, allStores.length, activeStoreId, setActiveStoreId]);
 

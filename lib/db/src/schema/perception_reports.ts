@@ -12,6 +12,8 @@ export const perceptionReportsTable = pgTable("perception_reports", {
   faqPageTitle: text("faq_page_title"),
   faqQuestionCount: integer("faq_question_count").notNull().default(0),
   faqGaps: jsonb("faq_gaps").notNull().default([]),
+  // Upgrade 3: policy text bodies stored for FAQ schema grounding
+  policyBodies: jsonb("policy_bodies"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

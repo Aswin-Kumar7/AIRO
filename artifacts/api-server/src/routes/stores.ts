@@ -9,6 +9,7 @@ import {
   registerStoreWebhooks,
 } from "../lib/shopify-client";
 import { getConnectionMode, maskStoredAccessToken, upsertConnectedStore } from "../lib/store-connection";
+import { resolveAccessToken } from "../lib/crypto";
 import { fetchAndUpsertProducts } from "../lib/fetch-products";
 import { logger } from "../lib/logger";
 
@@ -110,7 +111,7 @@ router.post("/stores", async (req, res): Promise<void> => {
     const appBaseUrl = process.env.APP_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "";
     if (appBaseUrl) {
       try {
-        await registerStoreWebhooks(store.domain, store.accessToken, appBaseUrl);
+        await registerStoreWebhooks(store.domain, resolveAccessToken(store.accessToken), appBaseUrl);
       } catch (err) {
         logger.warn({ err, storeId: store.id }, "Webhook registration after manual connect failed");
       }

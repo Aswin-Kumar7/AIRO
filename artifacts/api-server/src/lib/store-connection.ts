@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, storesTable, activityTable, storeSummariesTable, type Store } from "@workspace/db";
 import { generateId } from "./id";
 import { isStoredShopifyEnvTokenReference, normalizeShopifyDomain } from "./shopify-client";
+import { encryptToken, looksEncrypted } from "./crypto";
 
 export function maskStoredAccessToken(accessToken: string): string {
   return isStoredShopifyEnvTokenReference(accessToken)
@@ -29,6 +30,13 @@ export async function upsertConnectedStore({
   userId,
 }: UpsertConnectedStoreInput): Promise<Store> {
   const normalizedDomain = normalizeShopifyDomain(domain);
+
+  // CB-5: Encrypt the access token before persisting. Skip encryption for the env-variable
+  // sentinel value (it is not a real credential) and for already-encrypted tokens (idempotent).
+  const tokenToStore = isStoredShopifyEnvTokenReference(accessToken) || looksEncrypted(accessToken)
+    ? accessToken
+    : encryptToken(accessToken);
+
   const [existingStore] = await db.select().from(storesTable).where(eq(storesTable.domain, normalizedDomain));
 
   let store: Store;
@@ -36,7 +44,7 @@ export async function upsertConnectedStore({
   if (existingStore) {
     const [updatedStore] = await db.update(storesTable).set({
       name,
-      accessToken,
+      accessToken: tokenToStore,
       status: "connected",
     }).where(eq(storesTable.id, existingStore.id)).returning();
     store = updatedStore;
@@ -45,7 +53,7 @@ export async function upsertConnectedStore({
       id: generateId(),
       domain: normalizedDomain,
       name,
-      accessToken,
+      accessToken: tokenToStore,
       status: "connected",
       userId,
     }).returning();

@@ -1,16 +1,16 @@
 # Issues — AI Readiness Analyzer
 > Code-verified audit · April 2026 · Kasparro Agentic Commerce Hackathon
 > Every issue verified against actual source files with exact file paths and line numbers.
-> Last updated after fix round 1.
+> Last updated after fix round 2.
 
-Legend: ✅ FIXED · ⚠ PARTIAL · 🔴 OPEN · 🆕 NEW (introduced by fixes)
+Legend: ✅ FIXED · ⚠ PARTIAL · 🔴 OPEN · 🆕 NEW
 
 ---
 
 ## CRITICAL
 
 ### C-1 ✅ — Dashboard navigation links all 404
-**Fixed:** `INSIGHT_CARDS` now links to `/issues`, `/ai-readiness`, `/ai-readiness`, `/tools`, `/tools`, `/tools`. Issue count tiles link to `/issues` and `/fixes`. `"View all →"` links to `/issues`. All routes exist in App.tsx.
+**Fixed:** `INSIGHT_CARDS` now links to `/issues`, `/ai-readiness`, `/tools`. All routes exist in App.tsx.
 
 ---
 
@@ -21,283 +21,238 @@ Legend: ✅ FIXED · ⚠ PARTIAL · 🔴 OPEN · 🆕 NEW (introduced by fixes)
 
 ### C-3 ✅ — Analysis job has no persistence
 **Fixed:**
-- `jobsTable` added to DB schema (`lib/db/src/schema/jobs.ts`) with `id`, `storeId`, `status`, `startedAt`.
-- `analysis.ts:54–59` inserts a job row before `setImmediate`.
-- `GET /jobs/:jobId` endpoint added at `analysis.ts:509–521`.
-- Status updated to `"completed"` or `"failed"` at end/error of pipeline.
-- Rate limiting: `analysis.ts:25–32` applies `express-rate-limit` at 5 runs/hour keyed to `userId`.
-
-**Remaining gap (new issue N-1):** `jobs` table has no `completedAt` or `errorMessage` columns — see N-1 below.
+- `jobsTable` added to DB schema with `id`, `storeId`, `status`, `startedAt`, `completedAt`, `errorMessage`.
+- `analysis.ts` inserts a job row before `setImmediate`, updates to `completed`/`failed` with timestamps and error message.
+- `GET /jobs/:jobId` endpoint returns full job state including userId ownership check.
+- Rate limiting: 5 runs/hour per `userId` via `express-rate-limit`.
 
 ---
 
 ## HIGH
 
 ### H-1 ✅ — SESSION_SECRET hardcoded fallback enables session forgery
-**Fixed:** `app.ts:15–17` throws in production when `SESSION_SECRET` equals the dev default:
-```ts
-if (process.env.NODE_ENV === "production" && SESSION_SECRET === DEV_SECRET) {
-  throw new Error("CRITICAL: SESSION_SECRET must be set in production...");
-}
-```
-Dev still uses the hardcoded default, which is acceptable.
+**Fixed:** `app.ts:15–17` throws in production when `SESSION_SECRET` equals the dev default.
 
 ---
 
-### H-2 ⚠ — No CSRF protection on state-mutating routes
-**Partially fixed:** `csrf-sync` middleware added in `app.ts:102–120`. Shopify webhooks correctly exempted.
-
-**Critical gap (new issue N-2):** The frontend **never fetches `GET /api/csrf-token` and never sends `x-csrf-token` header**. Zero references to CSRF in `artifacts/ai-readiness/src/`. Every POST/DELETE/PATCH from the browser will fail CSRF validation — the "fix" broke all mutations from the frontend. This is currently the highest-impact unresolved issue.
+### H-2 ✅ — No CSRF protection on state-mutating routes
+**Fixed:**
+- Backend: `csrf-sync` middleware in `app.ts:102–120`. Webhooks correctly exempted.
+- Frontend: `csrf-service.ts` fetches and caches `GET /api/csrf-token`. All mutation calls in `quick-fix-api.ts`, `auth-context.tsx` (logout), `features-api.ts`, and `insights-api.ts` inject `x-csrf-token` header.
+- Token cached in-memory, cleared on logout and on 403 retry.
 
 ---
 
-### H-3 ⚠ — No per-user store isolation at the query level
-**Mostly fixed:**
-- `GET /stores` — filters by `userId` ✅ (`stores.ts:20`)
-- `POST /stores` — inserts with `userId` ✅ (`stores.ts:83`)
-- `GET /stores/:storeId` — filters by `userId` ✅ (`stores.ts:123`)
-- `PATCH /stores/:storeId/positioning` — filters by `userId` ✅ (`stores.ts:157`)
-- `DELETE /stores/:storeId` — filters by `userId` ✅ (`stores.ts:172`)
-
-**Still open:**
-- `GET /stores/:storeId/activity` — `stores.ts:181–196` only filters by `storeId`, no `userId` check. Any user who knows a `storeId` can read another user's activity log.
-- `POST /stores/:storeId/analyze` — `analysis.ts:36` loads store by `storeId` only, no `userId` check. Any authenticated user can trigger analysis of another user's store, burning their analysis rate limit and their LLM credits.
-- All routes in `products.ts`, `fixes.ts`, `insights.ts`, `features.ts` — none include a userId join/filter.
+### H-3 ✅ — No per-user store isolation at the query level
+**Fixed:** All routes now verify userId ownership:
+- `stores.ts` CRUD routes: `where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)))` ✅
+- `stores.ts:181–196` activity feed: verifies store ownership via userId join before returning data ✅
+- `analysis.ts`: `requireOwnedStore(storeId, userId)` called on every route, returns 403 on mismatch ✅
+- `fixes.ts`: `requireOwnedStore` used on GET, single-apply, and bulk-apply routes ✅
+- All `/gaps`, `/consistency`, `/benchmark`, `/summary` routes: ownership verified ✅
 
 ---
 
 ### H-4 ✅ — express-session MemoryStore
-**Fixed:** `app.ts:73–83` uses `connect-pg-simple` (`PgStore`) backed by `DATABASE_URL`. Session table defined in `lib/db/src/schema/session.ts` with expire index.
-
-**Note:** `createTableIfMissing: false` at `app.ts:82` — the session table must exist in Postgres before startup. If `drizzle-kit push` hasn't been run on a fresh environment, the server crashes at first session write. No error message tells the developer why. Consider setting `createTableIfMissing: true` in dev.
+**Fixed:** `app.ts:73–83` uses `connect-pg-simple` (`PgStore`) backed by `DATABASE_URL`.
+- `createTableIfMissing: process.env.NODE_ENV !== "production"` — auto-creates session table in dev, requires migration in prod ✅
 
 ---
 
 ### H-5 ✅ — No rate limiting on analysis endpoint
-**Fixed:** `analysis.ts:25–32` — `express-rate-limit`, 5/hour per `userId`, standard headers. Correctly uses userId as key (falls back to `req.ip` if no session, which is correct since requireAuth runs first).
+**Fixed:** 5/hour per `userId` via `express-rate-limit` at `analysis.ts:36–43`.
 
 ---
 
 ## MEDIUM
 
 ### M-1 ✅ — LLM JSON not Zod-validated
-**Fixed:** `ai-analyzer.ts` now imports Zod and uses `safeParse` with typed schemas:
-- `aiSchema` for `analyzeProduct`
-- `consistencySchema` for `analyzeStoreConsistency`
-- `fixSchema` for `generateFix`
-On parse failure, falls back to rule-only scores and logs a warning.
+**Fixed:** `ai-analyzer.ts` uses `aiSchema`, `consistencySchema`, `fixSchema` with `.safeParse()`. Falls back to rule-only scores on parse failure.
 
 ---
 
 ### M-2 ✅ — shopifySynced forced true when verifyShopifyUpdate throws
-**Fixed:** `fixes.ts:67–70` (inside shared `applyFixToShopify` helper):
-```ts
-} catch {
-  shopifySynced = false;
-  shopifyError = "Verification call failed — please check Shopify manually";
-}
-```
+**Fixed:** `fixes.ts:84–87` (inside `applyFixToShopify`): catch sets `shopifySynced = false` and descriptive `shopifyError` message.
 
 ---
 
 ### M-3 ✅ — structure and schema fix types skip Shopify write entirely
-**Fixed:** `fixes.ts:77–82` now explicitly returns a descriptive `shopifyError` for non-syncable types:
-```ts
-shopifyError = fix.type === "structure" || fix.type === "schema"
-  ? "Manual action required: Automation not available for this fix type..."
-  : "Automation not yet supported for this fix type.";
-```
-`shopifySynced` correctly stays `false`.
+**Fixed:** `fixes.ts:95–99`: returns `"Manual action required: Automation not available for this fix type..."` with `shopifySynced = false`.
 
 ---
 
 ### M-4 ✅ — Stale activeStoreId in localStorage not validated on load
-**Fixed (partially):** `connect.tsx:36–39` reads `pendingStoreUrl` from sessionStorage on mount and pre-fills the domain input, clearing it after use. **Note:** The `store-context.tsx` still does not validate `activeStoreId` against the live store list from the server — if a store is deleted and the user returns on a new session, all queries still 404 until they manually switch. See N-3.
+**Fixed:**
+- `connect.tsx:36–39` reads `pendingStoreUrl` from sessionStorage and pre-fills domain input.
+- `dashboard.tsx`: `useEffect` now validates `activeStoreId` against the live store list — if the ID doesn't exist in the returned stores, auto-switches to the first available store ✅ (fix round 2).
 
 ---
 
-### M-5 ⚠ — .env.example missing required variables
-**Partially fixed:** `.env.example` now contains `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `FRONTEND_URL`.
-
-**Still missing from `.env.example`:**
-- `SESSION_SECRET` — required to avoid the production boot-throw at `app.ts:15–17`
-- `APP_BASE_URL` — required for Google OAuth redirect URI construction
-- `GOOGLE_CLIENT_ID` — required for Google OAuth
-- `GOOGLE_CLIENT_SECRET` — required for Google OAuth
-- `GOOGLE_REDIRECT_URI` — required for Google OAuth callback
-
-A fresh clone cannot complete Google Auth without these. The README setup path is still broken.
+### M-5 ✅ — .env.example missing required variables
+**Fixed (round 2):** `.env.example` now contains all required variables:
+- `SESSION_SECRET=` ✅
+- `APP_BASE_URL=http://localhost:4000` ✅ (added round 2)
+- `GOOGLE_CLIENT_ID=` ✅
+- `GOOGLE_CLIENT_SECRET=` ✅
+- `GOOGLE_REDIRECT_URI=http://localhost:4000/api/auth/google/callback` ✅
 
 ---
 
 ### M-6 ✅ — pendingStoreUrl saved to sessionStorage but never read
-**Fixed:** `connect.tsx:36–39` reads `sessionStorage.getItem("pendingStoreUrl")` on mount and pre-fills the store URL input. `landing.tsx:994` still writes it before OAuth redirect. Flow now works end-to-end.
+**Fixed:** `connect.tsx` reads on mount and pre-fills store URL input.
 
 ---
 
 ### M-7 ✅ — Benchmark shows hardcoded values without indication
-**Fixed:** Benchmark endpoint now returns `benchmarkSource: "real-p90" | "aspirational"`. When aspirational (< 10 stores), benchmark gap fields return `null` rather than computed differences. Frontend can distinguish and show "Not enough data" state.
+**Fixed:** Returns `benchmarkSource: "real-p90" | "aspirational"`. When aspirational, gap fields return `null`.
 
 ---
 
 ### M-8 ✅ — No global React error boundary
-**Status:** Need to verify — not checked in this pass. Assumed open if not explicitly seen in App.tsx.
+**Fixed:** `App.tsx` wraps Router in `<ErrorBoundary FallbackComponent={ErrorFallback}>` from `react-error-boundary`. `ErrorFallback` shows error message with "Reload Page" and "Try again" buttons.
 
 ---
 
 ### M-9 ✅ — implementation_plan.md references wrong SDK/framework
-**Fixed:** Document updated to reference Express, Vite, `@google/generative-ai`, Drizzle — matches actual implementation.
+**Fixed:** Updated to reference Express, Vite, `@google/generative-ai`, Drizzle.
 
 ---
 
 ## LOW
 
 ### L-1 ✅ — Fabricated social proof on landing page
-**Fixed:** "500+ merchants", "98% accuracy" removed. Landing now shows honest stats: "1 Active Hackathon Entry", "15 Diagnostic Rules", "100% Evidence-Backed", "60s Analysis Time". Social proof row reads "Built for the Kasparro Agentic Commerce Hackathon". Tech logos (Shopify, Gemini, Drizzle) replace fake customer logos.
+**Fixed:** Honest hackathon stats, tech logos, no fake metrics.
 
 ---
 
 ### L-2 ✅ — 13 orphaned page files still in source tree
-**Fixed:** All 13 removed. `gaps.tsx`, `action-plan.tsx`, `perception.tsx`, `query-test.tsx`, `consistency.tsx`, `topical-authority.tsx`, `internal-links.tsx`, `faq-health.tsx`, `faq-schema.tsx`, `tags.tsx`, `structured-data.tsx`, `benchmark.tsx`, `llms-txt.tsx` are gone. Features consolidated into `issues.tsx`, `ai-readiness-page.tsx`, `content-page.tsx`, `tools-page.tsx`.
+**Fixed:** All 13 deleted. Features consolidated into 4 pages.
 
 ---
 
 ### L-3 ✅ — BENCHMARK_SCORES dead code
-**Fixed:** `BENCHMARK_SCORES` and `BENCHMARK` export completely removed from `ai-analyzer.ts`. Only exports remaining: `ProductData` type, `analyzeProduct`, `analyzeStoreConsistency`, `generateFix`.
+**Fixed:** Removed from `ai-analyzer.ts`.
 
 ---
 
 ### L-4 ✅ — apply/bulk-apply handlers share ~80% duplicated logic
-**Fixed:** Shared `applyFixToShopify` helper extracted at `fixes.ts:13–85`. Both single-apply (`fixes.ts:144`) and bulk-apply (`fixes.ts:214`) call it. Comment on line 11 explicitly documents the refactor.
+**Fixed:** Shared `applyFixToShopify` helper at `fixes.ts:30–102`.
 
 ---
 
 ### L-5 🔴 — Commit messages too coarse for review
-**Not fixed** (cannot retroactively change merged commits). Still present in history: `"major update: multiple new features & improvements"`, `"overhaul: Frontend design and authentication"`. Future commits should use Conventional Commits spec (`feat:`, `fix:`, `refactor:`).
+**Not fixed** (cannot retroactively change merged commits). Apply Conventional Commits going forward.
 
 ---
 
-### L-6 🔴 — Typo trugglehog → trufflehog
-**Not verified in this pass.** Assumed still present unless CI workflow was renamed.
+### L-6 ✅ — Typo trugglehog → trufflehog
+**Fixed:** `.github/workflows/security_scan.yml` uses `trufflesecurity/trufflehog@main` (correct spelling).
 
 ---
 
-### L-7 🔴 — stores.userId nullable with no FK constraint
-**Not fixed.** `lib/db/src/schema/stores.ts` — `userId` still nullable, no `references(() => users.id)`. Now that `GET /stores` filters by userId, a `null` userId row is silently excluded from all user queries, creating invisible orphaned stores in the DB.
+### L-7 ✅ — stores.userId nullable with no FK constraint
+**Fixed:** `lib/db/src/schema/stores.ts` — `userId: text("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" })`. Non-nullable, FK with cascade delete.
 
 ---
 
-### L-8 🔴 — Score values render blank while summary is loading
-**Not verified in this pass.** Assumed still present.
+### L-8 ✅ — Score values render blank while summary is loading
+**Fixed:** `dashboard.tsx` uses `summary.overallScore ?? 0`, `summary.criticalIssues ?? 0`, `summary.pendingFixes ?? 0` throughout. Score sections only rendered inside `hasAnalysis && summary` guard.
 
 ---
 
 ### L-9 ✅ — Webhook registration failure silently discarded
-**Fixed:** `shopify.ts:129–144` — both `fetchAndUpsertProducts` failure and `registerStoreWebhooks` failure now logged via `req.log.error` and `req.log.warn` with `storeId` and `err`. Same logging added in `stores.ts:112–117`.
+**Fixed:** Errors logged via `logger.warn` / `req.log.warn` with `storeId` and `err`.
 
 ---
 
-### L-10 🔴 — rawBody typed with `any` instead of .d.ts augmentation
-**Regressed:** Was previously typed inline as `Request & { rawBody?: Buffer }`. `app.ts:96` now uses `(req: any, _res, buf)` — a looser cast. The augmentation was not moved to `.d.ts` as suggested and the type safety is worse than before.
+### L-10 ✅ — rawBody typed with `any` instead of .d.ts augmentation
+**Fixed:** `app.ts:96` now uses `(req: Request & { rawBody?: Buffer }, _res, buf)` — proper inline type extension, no `any` cast.
 
 ---
 
-## NEW ISSUES (introduced by fix round 1)
+## N-SERIES ISSUES (introduced by fix round 1, resolved in fix round 2)
 
-### N-1 🆕 — jobs table missing completedAt and errorMessage columns
-**File:** `lib/db/src/schema/jobs.ts`
-
-The `jobs` table only has `id`, `storeId`, `status`, `startedAt`. A client polling `GET /jobs/:jobId` can see `running` / `completed` / `failed` — but cannot see when a job finished or what error caused a failure. The activity log has the error message but the job endpoint does not.
-
-**Fix:** Add `completedAt: timestamp` and `errorMessage: text` (nullable) to the schema. Update the pipeline's finalize (step I) and error path to write these.
+### N-1 ✅ — jobs table missing completedAt and errorMessage columns
+**Fixed:** `lib/db/src/schema/jobs.ts` now includes `completedAt: timestamp` and `errorMessage: text` (nullable). Pipeline finalizes and error path both write these fields. `GET /jobs/:jobId` returns them.
 
 ---
 
-### N-2 🆕 CRITICAL — CSRF middleware added on backend but frontend never sends token
-**File:** `artifacts/api-server/src/app.ts:102–120` vs all of `artifacts/ai-readiness/src/`
-
-`csrf-sync` is now applied globally (with webhook exemption). The middleware validates `x-csrf-token` header on every non-GET request. The frontend has **zero references** to CSRF — it never calls `GET /api/csrf-token` and never attaches `x-csrf-token` to requests. This means:
-- Every `POST /api/stores/:id/analyze` returns 403
-- Every `POST /api/stores/:id/fixes/:fid/apply` returns 403
-- Every `POST /api/auth/logout` returns 403
-- Every `DELETE /api/stores/:id` returns 403
-
-**The fix for H-2 broke all write operations from the frontend.** This is currently the single highest-severity bug.
-
-**Fix:** In the frontend, create a `csrfService` that fetches `GET /api/csrf-token` once on app load (or per request), caches the token, and attaches it as `x-csrf-token` to all non-GET `fetch` calls. The generated API client (from Orval) will need a custom fetch wrapper or interceptor to add this header.
+### N-2 ✅ — CSRF middleware added on backend but frontend never sends token
+**Fixed:** `artifacts/ai-readiness/src/lib/csrf-service.ts` — `getCsrfToken()` fetches `GET /api/csrf-token`, caches in-memory, deduplicates concurrent requests. Used in:
+- `quick-fix-api.ts` — all POST/DELETE mutations
+- `auth-context.tsx` — logout with 403-retry logic
+- `features-api.ts`, `insights-api.ts` — wired for future mutations
 
 ---
 
-### N-3 🆕 — stale activeStoreId in store-context not validated against server list
-**File:** `artifacts/ai-readiness/src/context/store-context.tsx`
-
-`activeStoreId` is persisted in `localStorage` and never checked against the live store list from the server. If a store is deleted (on another device, or from Settings), the next session starts with a stale `activeStoreId`. Every query using it (summary, products, activity, gaps, fixes) hits 404 or returns empty data with no user-facing explanation.
-
-**Fix:** After `useListStores` resolves, check if `activeStoreId` exists in the returned list. If not, auto-select the first store and clear the stale localStorage key. Show a toast explaining the switch.
+### N-3 ✅ — stale activeStoreId in store-context not validated against server list
+**Fixed (round 2):** `dashboard.tsx useEffect` now checks `stores.some(s => s.id === activeStoreId)` — if the active store is not in the server-returned list (e.g. it was deleted), the first available store is automatically selected.
 
 ---
 
-### N-4 🆕 — POST /analyze and all analysis-scoped routes bypass userId ownership check
-**File:** `artifacts/api-server/src/routes/analysis.ts:36`
-
-```ts
-const [store] = await db.select().from(storesTable).where(eq(storesTable.id, storeId));
-```
-
-No `userId` filter. An authenticated user who knows another user's `storeId` can:
-- Trigger an analysis on their store (burning rate limit quota and LLM credits)
-- Read their gaps, consistency report, perception data, fixes
-- Apply fixes to their Shopify products
-
-This also applies to `products.ts`, `fixes.ts`, `insights.ts`, `features.ts` — none include a userId ownership check. The `storeId` in the URL is effectively a bearer token for the store's data.
-
-**Fix:** Add `and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session.userId!))` to every store lookup across all routes. Return 403 (not 404) on ownership mismatch to avoid leaking store existence.
+### N-4 ✅ — POST /analyze and all analysis-scoped routes bypass userId ownership check
+**Fixed:** `analysis.ts` defines `requireOwnedStore(storeId, userId)` with `and(eq(storesTable.id, storeId), eq(storesTable.userId, userId))`. Called on every route handler. Returns 403 on mismatch.
 
 ---
 
-### N-5 🆕 — P-5 persists: ALL gaps marked isFixed when any fix applied
-**File:** `artifacts/api-server/src/routes/fixes.ts:163–165`
+### N-5 ✅ — ALL gaps marked isFixed when any fix applied
+**Fixed:** `fixes.ts` defines `gapCategoryForFixType(fixType)` mapping:
+- `description` / `structure` → `"completeness"`
+- `tags` → `"tags"`
+- `title` → `"clarity"`
+- `schema` → `"trust"`
 
-```ts
-await db.update(gapsTable)
-  .set({ isFixed: true })
-  .where(and(eq(gapsTable.productId, fix.productId), eq(gapsTable.storeId, storeId)));
-```
+The `gapsTable` update WHERE clause now includes `eq(gapsTable.category, gapCategoryForFixType(fix.type))` — only gaps in the matching category are cleared.
 
-When a `description` fix is applied, ALL gaps for that product — including title gaps, tag gaps, trust gaps — are marked `isFixed: true`. The Issues tab then shows 0 remaining issues for that product even though only one was addressed. This inflates fix progress counts and hides real problems.
-
-**Fix:** Add `eq(gapsTable.category, fix.category)` or `eq(gapsTable.ruleId, fix.gapId)` to the WHERE clause so only relevant gaps are cleared. Requires storing the source `gapId` on the fix row or scoping by category.
+> ⚠ Note: gaps within the same category but with a different `ruleId` are still cleared together. True per-rule closure (Cursor finding #9) requires linking each fix to its source `gapId`. This is tracked as a P1 improvement item.
 
 ---
 
-### N-6 🆕 — GET /stores/:storeId/activity missing userId ownership check
-**File:** `artifacts/api-server/src/routes/stores.ts:181–196`
-
-The activity feed endpoint only filters by `storeId` — no `userId` check. An authenticated user who knows a `storeId` can read another merchant's activity log (analysis history, fix applications, product syncs).
-
-**Fix:** Join through `storesTable` to verify ownership, or add a separate `eq(activityTable.userId, req.session.userId!)` column (requires adding `userId` to the activity table), or use a subquery verifying the storeId belongs to the requesting user.
+### N-6 ✅ — GET /stores/:storeId/activity missing userId ownership check
+**Fixed:** `stores.ts:181–196` — verifies store ownership via `and(eq(storesTable.id, storeId), eq(storesTable.userId, userId))` before returning activity rows. Returns 403 on mismatch.
 
 ---
 
-### N-7 🆕 — session table requires manual Drizzle migration; silent crash if missing
-**File:** `artifacts/api-server/src/app.ts:82`
-
-```ts
-createTableIfMissing: false
-```
-
-The `session` table (defined in `lib/db/src/schema/session.ts`) must exist before the server starts. If a developer clones the repo and starts the API without running `drizzle-kit push`, the first request that creates a session silently crashes the app with a Postgres "relation does not exist" error. There is no startup check or meaningful error message.
-
-**Fix:** Either set `createTableIfMissing: true` in dev (connect-pg-simple supports this), or add an explicit startup health check that confirms required tables exist before accepting connections.
+### N-7 ✅ — session table requires manual Drizzle migration; silent crash if missing
+**Fixed:** `app.ts:82` — `createTableIfMissing: process.env.NODE_ENV !== "production"`. In dev the table is auto-created on first use. In production, requires `drizzle-kit push` (correct behaviour for a controlled deployment).
 
 ---
 
-### N-8 🆕 — home.tsx and login.tsx exist in pages/ but are not imported or routed
-**File:** `artifacts/ai-readiness/src/pages/home.tsx`, `artifacts/ai-readiness/src/pages/login.tsx`
+### N-8 ✅ — home.tsx and login.tsx orphaned in pages/ directory
+**Fixed:** Both files deleted from `artifacts/ai-readiness/src/pages/`. Only active page files remain.
 
-These two files exist in the pages directory but do not appear in `App.tsx`. `landing.tsx` handles `/` and `login.tsx` is superseded by it. These are orphaned files that add confusion when reading the pages directory — the same problem as the 13 pages removed in L-2.
+---
 
-**Fix:** Delete `home.tsx` and `login.tsx` if they are unused. If `login.tsx` contains unique logic (OAuth callbacks, error toast handling), verify it has been merged into `landing.tsx` and then delete.
+## Cursor Backend Feedback — Status After Fix Round 3
+
+| # | Sev | Issue | Status |
+|---|-----|-------|--------|
+| CB-1 | HIGH | In-process `setImmediate` analysis blocks event loop — needs BullMQ/Trigger.dev queue | 🔴 OPEN |
+| CB-2 | HIGH | Hard-delete during re-analysis causes 30–60s empty-DB window | ✅ FIXED — atomic swap: old IDs recorded before ingestion, deleted after all new rows inserted |
+| CB-3 | HIGH | `ai-features.ts` uses raw `JSON.parse` without Zod validation | ✅ FIXED — Zod schemas for all 6 functions; `safeParseJson` handles markdown code fences |
+| CB-4 | HIGH | No deterministic eval suite (labeled fixtures, precision/recall CI gate) | 🔴 OPEN |
+| CB-5 | MED | Shopify access tokens stored in plain text | ✅ FIXED — AES-256-GCM encryption in `crypto.ts`; `encryptToken` on write, `resolveAccessToken` transparent on read; TOKEN_ENCRYPTION_KEY env var |
+| CB-6 | MED | 24h fixed-TTL cache doesn't respond to catalog changes | ✅ FIXED — SHA-256 content hash per catalog; `computeCatalogHash` in `catalog-hash.ts`; 3 hash columns in store_summaries |
+| CB-7 | MED | Rule-engine keyword heuristics overfit English — no locale detection | 🔴 OPEN |
+| CB-8 | MED | Benchmark O(N) product read per request — needs materialized view | 🔴 OPEN |
+| CB-9 | MED | Gap closure scoped by category but not by ruleId | ✅ FIXED — `sourceGapId` column on fixes; analysis pipeline resolves highest-impact gap per product+category; apply handler uses exact ID with category fallback |
+| CB-10 | MED | No structured observability (metrics, step timing, fallback rate, correlation IDs) | 🔴 OPEN |
+| CB-11 | LOW | AI output provenance not exposed to frontend | ✅ FIXED — `scoringSource: "ai" \| "rule" \| "fallback"` on products table; set during analysis, exposed in product detail API |
+| CB-12 | LOW | No idempotency keys on analyze endpoint | ✅ FIXED — `Idempotency-Key` header supported on `POST /analyze`; stored in jobs.idempotencyKey; duplicate requests return existing job |
+
+---
+
+## AEO/GEO/SEO Upgrades — Status After Fix Round 3
+
+| # | Upgrade | Status |
+|---|---------|--------|
+| U-1 | Technical SEO + Crawlability module | ✅ DONE — `technical-seo.ts`: robots.txt, sitemap.xml, page sampling (meta desc, canonical); 5 store-level gap rules; integrated in analysis pipeline |
+| U-2 | Expanded data quality + taxonomy specificity | ✅ DONE — `TAXONOMY_TOO_GENERIC` rule in rule engine; `SCHEMA_OFFERS_INCOMPLETE` + `SCHEMA_MISSING_BRAND` schema rules |
+| U-3 | FAQ schema grounded in real policy bodies | ✅ DONE — `policyBodies` jsonb in perception_reports; passed to `generateFaqSchema`; prompt enforces "Not specified by this store" when policy missing |
+| U-4 | Answer-first structure fix template | ✅ DONE — `generateAnswerFirstStructure` in `ai-features.ts`; `GET /stores/:id/products/:pid/answer-first` endpoint; TL;DR + best-for + specs table + policy snippet |
+| U-5 | Structured data auditing (field-level) | ✅ DONE — `SCHEMA_OFFERS_INCOMPLETE` rule checks price/currency/availability; `SCHEMA_MISSING_BRAND` rule; wired into `checkStructuredData` |
+| U-6 | Brand authority signals | 🔴 OPEN — not yet implemented |
+| U-7 | GEO visibility / citation tracking | 🔴 OPEN — not yet implemented |
 
 ---
 
@@ -307,44 +262,55 @@ These two files exist in the pages directory but do not appear in `App.tsx`. `la
 |----|-----|--------|-------|
 | C-1 | CRITICAL | ✅ FIXED | Dashboard nav links |
 | C-2 | CRITICAL | ✅ FIXED | Webhook HMAC env var |
-| C-3 | CRITICAL | ✅ FIXED | Job persistence + status endpoint |
+| C-3 | CRITICAL | ✅ FIXED | Job persistence + status endpoint + completedAt/errorMessage |
 | H-1 | HIGH | ✅ FIXED | SESSION_SECRET throws in production |
-| H-2 | HIGH | ⚠ PARTIAL | CSRF added to backend; frontend never sends token → N-2 |
-| H-3 | HIGH | ⚠ PARTIAL | userId filter on most store routes; activity + analysis still open |
-| H-4 | HIGH | ✅ FIXED | connect-pg-simple session store |
+| H-2 | HIGH | ✅ FIXED | CSRF: backend + frontend fully wired |
+| H-3 | HIGH | ✅ FIXED | userId ownership check on all store-scoped routes |
+| H-4 | HIGH | ✅ FIXED | connect-pg-simple session store; auto-creates table in dev |
 | H-5 | HIGH | ✅ FIXED | Rate limiting on analyze (5/hr per userId) |
-| M-1 | MED | ✅ FIXED | Zod validation on LLM JSON |
+| M-1 | MED | ✅ FIXED | Zod validation on LLM JSON in ai-analyzer.ts |
 | M-2 | MED | ✅ FIXED | shopifySynced = false on verification exception |
 | M-3 | MED | ✅ FIXED | structure/schema fix types return manual-action message |
-| M-4 | MED | ⚠ PARTIAL | pendingStoreUrl read in connect.tsx; activeStoreId validation → N-3 |
-| M-5 | MED | ⚠ PARTIAL | .env.example still missing SESSION_SECRET, APP_BASE_URL, Google OAuth vars |
+| M-4 | MED | ✅ FIXED | pendingStoreUrl + stale activeStoreId auto-recovery |
+| M-5 | MED | ✅ FIXED | .env.example complete: all OAuth + APP_BASE_URL + SESSION_SECRET |
 | M-6 | MED | ✅ FIXED | pendingStoreUrl consumed in connect.tsx |
 | M-7 | MED | ✅ FIXED | Benchmark returns benchmarkSource flag + null gaps when aspirational |
-| M-8 | MED | 🔴 OPEN | No global React error boundary (not verified fixed) |
+| M-8 | MED | ✅ FIXED | Global React error boundary in App.tsx |
 | M-9 | MED | ✅ FIXED | implementation_plan.md updated to correct stack |
 | L-1 | LOW | ✅ FIXED | Fabricated social proof removed |
 | L-2 | LOW | ✅ FIXED | 13 orphaned pages deleted |
 | L-3 | LOW | ✅ FIXED | BENCHMARK_SCORES dead code removed |
 | L-4 | LOW | ✅ FIXED | apply/bulk-apply deduplicated into shared helper |
 | L-5 | LOW | 🔴 OPEN | Coarse commit messages (cannot retroactively fix) |
-| L-6 | LOW | 🔴 OPEN | trugglehog typo (not verified fixed) |
-| L-7 | LOW | 🔴 OPEN | stores.userId nullable with no FK constraint |
-| L-8 | LOW | 🔴 OPEN | Score values render blank while summary loading |
+| L-6 | LOW | ✅ FIXED | trufflehog typo fixed in CI workflow |
+| L-7 | LOW | ✅ FIXED | stores.userId non-nullable with FK + cascade delete |
+| L-8 | LOW | ✅ FIXED | Score values guarded with ?? 0 |
 | L-9 | LOW | ✅ FIXED | Webhook registration errors now logged |
-| L-10 | LOW | 🔴 REGRESSED | rawBody now typed as `any` (worse than before) |
-| N-1 | MED | 🆕 NEW | jobs table missing completedAt / errorMessage columns |
-| N-2 | CRITICAL | 🆕 NEW | CSRF middleware breaks all frontend mutations (token never sent) |
-| N-3 | MED | 🆕 NEW | stale activeStoreId not validated against live store list |
-| N-4 | HIGH | 🆕 NEW | analysis + products/fixes/insights routes skip userId ownership check |
-| N-5 | MED | 🆕 NEW | ALL gaps marked isFixed when any single fix applied (P-5 persists) |
-| N-6 | HIGH | 🆕 NEW | GET /stores/:storeId/activity missing userId ownership check |
-| N-7 | MED | 🆕 NEW | session table requires manual migration; silent crash if missing |
-| N-8 | LOW | 🆕 NEW | home.tsx and login.tsx orphaned in pages/ directory |
+| L-10 | LOW | ✅ FIXED | rawBody properly typed as `Request & { rawBody?: Buffer }` |
+| N-1 | MED | ✅ FIXED | jobs table has completedAt + errorMessage |
+| N-2 | CRITICAL | ✅ FIXED | CSRF frontend fully wired |
+| N-3 | MED | ✅ FIXED | stale activeStoreId validated and auto-recovered in dashboard |
+| N-4 | HIGH | ✅ FIXED | All analysis/products/fixes routes have userId ownership check |
+| N-5 | MED | ✅ FIXED | Gaps scoped by fix category (not all gaps cleared) |
+| N-6 | HIGH | ✅ FIXED | Activity route has userId ownership check |
+| N-7 | MED | ✅ FIXED | Session table auto-created in dev |
+| N-8 | LOW | ✅ FIXED | home.tsx and login.tsx deleted |
+| CB-1 | HIGH | 🔴 OPEN | In-process analysis blocks event loop |
+| CB-2 | HIGH | ✅ FIXED | Hard-delete window eliminated via atomic ID swap |
+| CB-3 | HIGH | ✅ FIXED | ai-features.ts fully Zod-validated + code-fence JSON parsing |
+| CB-4 | HIGH | 🔴 OPEN | No eval suite / CI quality gate |
+| CB-5 | MED | ✅ FIXED | AES-256-GCM token encryption at rest |
+| CB-6 | MED | ✅ FIXED | Content-hash cache invalidation on all 3 feature caches |
+| CB-7 | MED | 🔴 OPEN | Rule engine English-only heuristics |
+| CB-8 | MED | 🔴 OPEN | Benchmark O(N) per request |
+| CB-9 | MED | ✅ FIXED | Precise gap closure via sourceGapId |
+| CB-10 | MED | 🔴 OPEN | No structured observability/metrics |
+| CB-11 | LOW | ✅ FIXED | scoringSource provenance on products + API |
+| CB-12 | LOW | ✅ FIXED | Idempotency-Key header on analyze endpoint |
 
-**Score after fix round 1:**
-- Fixed: 19 of 27 original issues
-- Partially fixed: 4 (H-2, H-3, M-4, M-5)
-- Still open: 5 (M-8, L-5, L-6, L-7, L-8)
-- Regressed: 1 (L-10)
-- New issues introduced: 8 (N-1 through N-8)
-- **Net new critical:** N-2 (CSRF breaks all writes) must be fixed before the app is usable
+**Score after fix round 3:**
+- Original issues (C/H/M/L): **26 of 27 fixed** (L-5 cannot be retroactively fixed)
+- N-series issues: **8 of 8 fixed**
+- CB-series: **7 of 12 fixed** (CB-1, CB-4, CB-7, CB-8, CB-10 remain)
+- AEO/GEO/SEO upgrades: **5 of 7 implemented** (U-6, U-7 remain)
+- **Total fixed: 41 of 46 actionable items**

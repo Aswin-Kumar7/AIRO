@@ -38,6 +38,16 @@ let shuttingDown = false;
 console.log(`Starting API on http://localhost:${apiPort}`);
 console.log(`Starting frontend on http://localhost:${frontendPort}`);
 
+if (sharedEnv.SKIP_DB_PUSH !== "1") {
+  await runCommand({
+    label: "db",
+    args: ["--filter", "@workspace/db", "run", "push"],
+    env: sharedEnv,
+  });
+} else {
+  console.log("Skipping database schema push (SKIP_DB_PUSH=1).");
+}
+
 const apiPortInUse = await isPortInUse(apiPort);
 const frontendPortInUse = await isPortInUse(frontendPort);
 
@@ -158,6 +168,28 @@ function startProcess(spec: ProcessSpec): ChildProcess {
   });
 
   return child;
+}
+
+function runCommand(spec: ProcessSpec): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(pnpmCommand, spec.args, {
+      cwd: workspaceRoot,
+      env: normalizeEnv(spec.env),
+      shell: process.platform === "win32",
+      stdio: "inherit",
+    });
+
+    child.on("exit", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      const detail = signal ? `signal ${signal}` : `code ${code ?? 0}`;
+      reject(new Error(`[${spec.label}] failed with ${detail}`));
+    });
+
+    child.on("error", (error) => reject(error));
+  });
 }
 
 function isPortInUse(port: number): Promise<boolean> {

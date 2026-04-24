@@ -1,8 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, storesTable, productsTable, storeSummariesTable, perceptionReportsTable } from "@workspace/db";
-
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 import {
   runQuerySimulation,
   analyzeTopicalAuthority,
@@ -10,7 +8,11 @@ import {
   generateLlmsTxt,
   generateFaqSchema,
   runProductAiQa,
+  type PolicyBodies,
 } from "../lib/ai-features";
+import { computeCatalogHash } from "../lib/catalog-hash";
+
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const router: IRouter = Router();
 
@@ -70,9 +72,12 @@ router.get("/stores/:storeId/query-simulation", async (req, res): Promise<void> 
   }
 
   const [summary] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
+  const currentHash = computeCatalogHash(products);
   if (summary?.querySimulationCachedAt && summary.querySimulationResults) {
     const age = Date.now() - summary.querySimulationCachedAt.getTime();
-    if (age < CACHE_TTL_MS) {
+    // CB-6: invalidate if catalog changed OR TTL expired
+    const hashMatch = summary.queryCatalogHash === currentHash;
+    if (age < CACHE_TTL_MS && hashMatch) {
       const cached = summary.querySimulationResults as Array<{ wouldRecommend: boolean }>;
       const successCount = cached.filter(r => r.wouldRecommend).length;
       res.json({ storeId, results: cached, successCount, totalQueries: cached.length, generatedAt: summary.querySimulationCachedAt.toISOString(), cached: true });
@@ -95,7 +100,7 @@ router.get("/stores/:storeId/query-simulation", async (req, res): Promise<void> 
   );
 
   await db.update(storeSummariesTable)
-    .set({ querySimulationResults: results, querySimulationCachedAt: new Date() })
+    .set({ querySimulationResults: results, querySimulationCachedAt: new Date(), queryCatalogHash: currentHash })
     .where(eq(storeSummariesTable.storeId, storeId));
 
   const successCount = results.filter(r => r.wouldRecommend).length;
@@ -118,9 +123,12 @@ router.get("/stores/:storeId/topical-authority", async (req, res): Promise<void>
   }
 
   const [summary2] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
+  const topicalHash = computeCatalogHash(products);
   if (summary2?.topicalAuthorityCachedAt && summary2.topicalAuthorityResults) {
     const age = Date.now() - summary2.topicalAuthorityCachedAt.getTime();
-    if (age < CACHE_TTL_MS) {
+    // CB-6: invalidate on catalog change OR TTL expiry
+    const hashMatch = summary2.topicalCatalogHash === topicalHash;
+    if (age < CACHE_TTL_MS && hashMatch) {
       const cached = summary2.topicalAuthorityResults as Array<{ coverageScore: number }>;
       const avgCoverage = cached.length ? Math.round(cached.reduce((s, c) => s + c.coverageScore, 0) / cached.length) : 0;
       res.json({ storeId, clusters: cached, totalProducts: products.length, averageCoverageScore: avgCoverage, generatedAt: summary2.topicalAuthorityCachedAt.toISOString(), cached: true });
@@ -140,7 +148,7 @@ router.get("/stores/:storeId/topical-authority", async (req, res): Promise<void>
   );
 
   await db.update(storeSummariesTable)
-    .set({ topicalAuthorityResults: clusters, topicalAuthorityCachedAt: new Date() })
+    .set({ topicalAuthorityResults: clusters, topicalAuthorityCachedAt: new Date(), topicalCatalogHash: topicalHash })
     .where(eq(storeSummariesTable.storeId, storeId));
 
   const avgCoverage = clusters.length
@@ -166,9 +174,12 @@ router.get("/stores/:storeId/internal-links", async (req, res): Promise<void> =>
   }
 
   const [summary3] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
+  const linksHash = computeCatalogHash(products);
   if (summary3?.internalLinksCachedAt && summary3.internalLinksResults) {
     const age = Date.now() - summary3.internalLinksCachedAt.getTime();
-    if (age < CACHE_TTL_MS) {
+    // CB-6: invalidate on catalog change OR TTL expiry
+    const hashMatch = summary3.linksCatalogHash === linksHash;
+    if (age < CACHE_TTL_MS && hashMatch) {
       res.json({ storeId, suggestions: summary3.internalLinksResults, totalProducts: products.length, generatedAt: summary3.internalLinksCachedAt.toISOString(), cached: true });
       return;
     }
@@ -186,7 +197,7 @@ router.get("/stores/:storeId/internal-links", async (req, res): Promise<void> =>
   );
 
   await db.update(storeSummariesTable)
-    .set({ internalLinksResults: suggestions, internalLinksCachedAt: new Date() })
+    .set({ internalLinksResults: suggestions, internalLinksCachedAt: new Date(), linksCatalogHash: linksHash })
     .where(eq(storeSummariesTable.storeId, storeId));
 
   res.json({ storeId, suggestions, totalProducts: products.length, generatedAt: new Date().toISOString(), cached: false });
@@ -204,14 +215,18 @@ router.get("/stores/:storeId/faq-schema", async (req, res): Promise<void> => {
   const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
   const [report] = await db.select().from(perceptionReportsTable).where(eq(perceptionReportsTable.storeId, storeId));
 
-  req.log.info({ storeId }, "Generating FAQ schema");
+  // Upgrade 3: pass real policy text bodies so FAQ answers are grounded, not hallucinated
+  const policyBodies = (report?.policyBodies as PolicyBodies | null | undefined) ?? null;
+
+  req.log.info({ storeId, hasPolicyBodies: Boolean(policyBodies) }, "Generating FAQ schema");
   const result = await generateFaqSchema(
     store.name ?? store.domain,
     products.map(p => ({ title: p.title, description: p.description, productType: p.productType })),
-    (report?.faqGaps as string[] | undefined) ?? []
+    (report?.faqGaps as string[] | undefined) ?? [],
+    policyBodies
   );
 
-  res.json({ storeId, ...result, generatedAt: new Date().toISOString() });
+  res.json({ storeId, ...result, policyGrounded: Boolean(policyBodies), generatedAt: new Date().toISOString() });
 });
 
 // ─── Product AI Q&A Test ──────────────────────────────────────────────────────

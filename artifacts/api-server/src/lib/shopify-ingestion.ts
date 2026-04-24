@@ -135,9 +135,19 @@ export interface PolicyCoverage {
   terms: boolean;
 }
 
+/** Raw policy text bodies fetched from Shopify — used for FAQ schema grounding (Upgrade 3) */
+export interface PolicyBodies {
+  refund: string | null;
+  shipping: string | null;
+  privacy: string | null;
+  terms: string | null;
+}
+
 export interface StoreSnapshot {
   products: IngestedProduct[];
   policies: PolicyCoverage;
+  /** Raw policy text for FAQ grounding — null when policies couldn't be fetched */
+  policyBodies: PolicyBodies | null;
   faqPage: { title: string; body: string } | null;
 }
 
@@ -364,13 +374,25 @@ function isPolicySubstantive(body: string | null | undefined, keywords: string[]
   return keywords.some((kw) => text.includes(kw));
 }
 
-async function fetchPolicyCoverage(domain: string, accessToken: string): Promise<PolicyCoverage> {
+async function fetchPolicyCoverage(
+  domain: string,
+  accessToken: string,
+): Promise<{ coverage: PolicyCoverage; bodies: PolicyBodies }> {
   const result = await shopifyGraphQL<PoliciesQueryResult>(domain, accessToken, POLICIES_QUERY);
+  const { shop } = result;
   return {
-    refund: isPolicySubstantive(result.shop.refundPolicy?.body, ["refund", "return", "days", "exchange", "credit"]),
-    shipping: isPolicySubstantive(result.shop.shippingPolicy?.body, ["ship", "deliver", "transit", "order", "dispatch"]),
-    privacy: isPolicySubstantive(result.shop.privacyPolicy?.body, ["data", "information", "collect", "privacy", "personal"]),
-    terms: isPolicySubstantive(result.shop.termsOfService?.body, ["terms", "service", "agreement", "use", "conditions"]),
+    coverage: {
+      refund: isPolicySubstantive(shop.refundPolicy?.body, ["refund", "return", "days", "exchange", "credit"]),
+      shipping: isPolicySubstantive(shop.shippingPolicy?.body, ["ship", "deliver", "transit", "order", "dispatch"]),
+      privacy: isPolicySubstantive(shop.privacyPolicy?.body, ["data", "information", "collect", "privacy", "personal"]),
+      terms: isPolicySubstantive(shop.termsOfService?.body, ["terms", "service", "agreement", "use", "conditions"]),
+    },
+    bodies: {
+      refund: shop.refundPolicy?.body ?? null,
+      shipping: shop.shippingPolicy?.body ?? null,
+      privacy: shop.privacyPolicy?.body ?? null,
+      terms: shop.termsOfService?.body ?? null,
+    },
   };
 }
 
@@ -391,14 +413,12 @@ async function fetchFaqPage(
 export async function ingestStore(domain: string, accessToken: string): Promise<StoreSnapshot> {
   const products = await fetchAllProducts(domain, accessToken);
 
-  let policies: PolicyCoverage = {
-    refund: false,
-    shipping: false,
-    privacy: false,
-    terms: false,
-  };
+  let policies: PolicyCoverage = { refund: false, shipping: false, privacy: false, terms: false };
+  let policyBodies: PolicyBodies | null = null;
   try {
-    policies = await fetchPolicyCoverage(domain, accessToken);
+    const fetched = await fetchPolicyCoverage(domain, accessToken);
+    policies = fetched.coverage;
+    policyBodies = fetched.bodies;
   } catch {
     // Policy access varies by store configuration.
   }
@@ -410,5 +430,5 @@ export async function ingestStore(domain: string, accessToken: string): Promise<
     // FAQ pages are optional.
   }
 
-  return { products, policies, faqPage };
+  return { products, policies, policyBodies, faqPage };
 }

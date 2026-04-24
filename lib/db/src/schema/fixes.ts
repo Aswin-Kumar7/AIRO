@@ -6,6 +6,8 @@ export const fixesTable = pgTable("fixes", {
   id: text("id").primaryKey(),
   storeId: text("store_id").notNull(),
   productId: text("product_id"),
+  // CB-9: links fix back to the exact gap it resolves, enabling precise gap closure
+  sourceGapId: text("source_gap_id"),
   type: text("type").notNull(),
   status: text("status").notNull().default("pending"),
   title: text("title").notNull(),

@@ -2,6 +2,8 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, productsTable, gapsTable, fixesTable, storesTable } from "@workspace/db";
 import { generateFix } from "../lib/ai-analyzer";
+import { generateAnswerFirstStructure } from "../lib/ai-features";
+import { perceptionReportsTable } from "@workspace/db";
 import { fetchAndUpsertProducts } from "../lib/fetch-products";
 import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
@@ -161,6 +163,7 @@ router.get("/stores/:storeId/products/:productId", async (req, res): Promise<voi
       appliedAt: f.appliedAt?.toISOString() ?? null,
     })),
     aiPerceptionSummary: product.aiPerceptionSummary,
+    scoringSource: product.scoringSource ?? "rule", // CB-11: provenance
     suggestedTags: product.suggestedTags,
     analyzedAt: product.analyzedAt?.toISOString() ?? null,
   });
@@ -280,6 +283,48 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
       appliedAt: null,
     },
     generated: true,
+  });
+});
+
+// ─── Upgrade 4: Answer-first structure generator ───────────────────────────────
+
+router.get("/stores/:storeId/products/:productId/answer-first", async (req, res): Promise<void> => {
+  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  const store = await requireOwnedStore(storeId, userId);
+  if (!store) { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const [product] = await db.select().from(productsTable)
+    .where(and(eq(productsTable.id, productId), eq(productsTable.storeId, storeId)));
+  if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+
+  // Fetch policy bodies for grounding (from perceptionReport)
+  const [report] = await db.select().from(perceptionReportsTable)
+    .where(eq(perceptionReportsTable.storeId, storeId));
+
+  const policyBodies = report?.policyBodies as { shipping?: string | null; refund?: string | null } | null ?? null;
+
+  req.log.info({ storeId, productId }, "Generating answer-first structure");
+  const structure = await generateAnswerFirstStructure(
+    {
+      title: product.title,
+      description: product.description,
+      tags: product.tags,
+      productType: product.productType,
+      vendor: product.vendor,
+      price: product.price,
+    },
+    policyBodies ? { shipping: policyBodies.shipping ?? null, refund: policyBodies.refund ?? null } : null
+  );
+
+  res.json({
+    storeId,
+    productId,
+    productTitle: product.title,
+    structure,
+    generatedAt: new Date().toISOString(),
   });
 });
 

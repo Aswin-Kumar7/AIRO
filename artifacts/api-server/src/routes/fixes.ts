@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, fixesTable, productsTable, gapsTable, storeSummariesTable, storesTable, activityTable } from "@workspace/db";
 import { updateShopifyProduct, verifyShopifyUpdate } from "../lib/shopify-client";
+import { resolveAccessToken } from "../lib/crypto";
 import { generateId } from "../lib/id";
 
 const router: IRouter = Router();
@@ -48,7 +49,7 @@ async function applyFixToShopify(
       try {
         const result = await updateShopifyProduct(
           store.domain,
-          store.accessToken,
+          resolveAccessToken(store.accessToken),
           product.shopifyProductId,
           { type: fix.type as "description" | "tags" | "title", content: contentToApply },
         );
@@ -75,7 +76,7 @@ async function applyFixToShopify(
           try {
             const { verified, reason } = await verifyShopifyUpdate(
               store.domain,
-              store.accessToken,
+              resolveAccessToken(store.accessToken),
               product.shopifyProductId,
               { type: fix.type as "description" | "tags" | "title", content: contentToApply },
             );
@@ -126,6 +127,7 @@ router.get("/stores/:storeId/fixes", async (req, res): Promise<void> => {
     id: fix.id,
     storeId: fix.storeId,
     productId: fix.productId,
+    sourceGapId: fix.sourceGapId ?? null,
     productTitle: productTitle ?? null,
     type: fix.type,
     status: fix.status,
@@ -192,15 +194,24 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
       await db.update(productsTable).set({ overallScore: newScore, hasAppliedFixes: true })
         .where(eq(productsTable.id, fix.productId));
 
-      await db.update(gapsTable)
-        .set({ isFixed: true })
-        .where(
-          and(
-            eq(gapsTable.productId, fix.productId),
-            eq(gapsTable.storeId, storeId),
-            eq(gapsTable.category, gapCategoryForFixType(fix.type) ?? "__unmatched__"),
-          ),
-        );
+      // CB-9: precise gap closure — target the exact source gap when known;
+      // fall back to category-level closure for older fixes without a sourceGapId.
+      const category = gapCategoryForFixType(fix.type);
+      if (fix.sourceGapId) {
+        await db.update(gapsTable)
+          .set({ isFixed: true })
+          .where(eq(gapsTable.id, fix.sourceGapId));
+      } else if (category) {
+        await db.update(gapsTable)
+          .set({ isFixed: true })
+          .where(
+            and(
+              eq(gapsTable.productId, fix.productId),
+              eq(gapsTable.storeId, storeId),
+              eq(gapsTable.category, category),
+            ),
+          );
+      }
     }
   }
 
@@ -261,14 +272,20 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
 
     if (fix.productId) {
       await db.update(productsTable).set({ hasAppliedFixes: true }).where(eq(productsTable.id, fix.productId));
-      await db.update(gapsTable).set({ isFixed: true })
-        .where(
-          and(
-            eq(gapsTable.productId, fix.productId),
-            eq(gapsTable.storeId, storeId),
-            eq(gapsTable.category, gapCategoryForFixType(fix.type) ?? "__unmatched__"),
-          ),
-        );
+      // CB-9: precise gap closure (same logic as single-apply)
+      const category = gapCategoryForFixType(fix.type);
+      if (fix.sourceGapId) {
+        await db.update(gapsTable).set({ isFixed: true }).where(eq(gapsTable.id, fix.sourceGapId));
+      } else if (category) {
+        await db.update(gapsTable).set({ isFixed: true })
+          .where(
+            and(
+              eq(gapsTable.productId, fix.productId),
+              eq(gapsTable.storeId, storeId),
+              eq(gapsTable.category, category),
+            ),
+          );
+      }
     }
 
     await db.insert(activityTable).values({

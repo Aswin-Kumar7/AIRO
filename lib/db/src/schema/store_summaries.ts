@@ -25,6 +25,11 @@ export const storeSummariesTable = pgTable("store_summaries", {
   topicalAuthorityCachedAt: timestamp("topical_authority_cached_at", { withTimezone: true }),
   internalLinksResults: jsonb("internal_links_results"),
   internalLinksCachedAt: timestamp("internal_links_cached_at", { withTimezone: true }),
+  // CB-6: SHA-256 hash of catalog content at the time each feature was last computed.
+  // If the catalog changes, hashes diverge and the cache is invalidated automatically.
+  queryCatalogHash: text("query_catalog_hash"),
+  topicalCatalogHash: text("topical_catalog_hash"),
+  linksCatalogHash: text("links_catalog_hash"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

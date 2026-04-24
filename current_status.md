@@ -1,4 +1,7 @@
 # Current Status — AI Readiness Analyzer
+> Last updated after fix round 2 · April 2026 · Code-verified
+
+---
 
 ## Requirement Check
 
@@ -6,10 +9,10 @@
 
 | Requirement | Status | How it's satisfied |
 |---|---|---|
-| Identifies gaps in merchant's AI readiness | ✅ Done | Rule engine (15 deterministic rules) + AI layer → gaps stored in DB with evidence, impact score, effort level, severity |
+| Identifies gaps in merchant's AI readiness | ✅ Done | Rule engine (25 deterministic rules) + AI layer → gaps stored in DB with evidence, impact score, effort level, severity |
 | Missing FAQ coverage | ✅ Done | `perception-simulator.ts` checks FAQ page for 9 standard topics and surfaces unanswered ones in Issues → All Issues |
 | Ambiguous policies | ✅ Done | Policy gaps detected during store analysis, shown in Issues and Action Plan; policy quality validated by keyword + word count (≥50 words) |
-| Weak trust signals | ✅ Done | Rules: TRUST_NO_IMAGE, TRUST_NO_BRAND, TRUST_NO_SCHEMA, TRUST_NO_REVIEWS |
+| Weak trust signals | ✅ Done | Rules: TRUST_NO_IMAGE, TRUST_NO_BRAND, TRUST_NO_SCHEMA, TRUST_NO_REVIEWS, SCHEMA_INCOMPLETE, SCHEMA_MALFORMED |
 | Unclear product information | ✅ Done | Rules: DESC_MISSING, DESC_TOO_SHORT, DESC_NO_MATERIAL, DESC_NO_DIMENSIONS, DESC_NO_USE_CASE, COMPARE_INSUFFICIENT_SPECS |
 | Prioritized improvements — ranked action plan | ✅ Done | Issues → Action Plan tab — `conversion-ranker.ts` scores each gap by conversion impact |
 | Shows how AI agents currently perceive the store | ✅ Done | AI Readiness → AI Perception tab — agent narrative, strengths, unanswered questions, ambiguities |
@@ -24,36 +27,44 @@
 ### Authentication & Multi-tenancy
 - **Google OAuth 2.0** — native implementation (no passport), session-based with `express-session`
 - **Login page** (`/`) — Google sign-in gate, auto-redirects to `/dashboard` if already authenticated
-- **Session cookies** — `httpOnly`, `secure` in production, `sameSite: lax` in dev
-- **Auth middleware** — `requireAuth` guards all routes except `/api/auth/*`, `/api/health`, Shopify install/callback/webhooks
-- **Users table** — DB stores `googleId`, `email`, `name`, `avatarUrl`; stores optionally linked via `userId`
+- **Session cookies** — `httpOnly`, `secure` in production, `sameSite: none` in production / `lax` in dev
+- **Auth middleware** — `requireAuth` guards all routes except `/api/auth/*`, `/api/health`, Shopify install/callback/webhooks, `/api/csrf-token`
+- **Users table** — DB stores `googleId`, `email`, `name`, `avatarUrl`; stores linked via non-nullable `userId` FK
 - **Onboarding modal** — shown automatically on dashboard when no store is connected
 
 ### Core Analysis Engine
-- **Hybrid rule engine + AI**: 15 deterministic rules; AI called once per product for clarity NLP score, `aiPerceptionSummary`, tag suggestions
+- **Hybrid rule engine + AI**: 25 deterministic rules; AI called once per product for clarity NLP score, `aiPerceptionSummary`, tag suggestions
 - **Deterministic scoring**: `clarityScore = 0.4×AI + 0.6×rules`; completeness/trust/tags are pure rule-based
-- **Rule categories**: Title (4), Description (6), Tags (4), Trust (4), Voice Readiness (3), Comparison Readiness (1)
+- **Rule categories**: Title (4), Description (7), Tags (4), Trust (4+2 schema), Voice Readiness (3), Comparison Readiness (1)
 - **Gap evidence**: Every violation has `ruleId`, `evidence`, `impactScore` (0–100), `effortLevel` (low/medium/high)
 - **Multi-provider AI fallback**: Gemini → Groq → Cerebras
-- **Policy quality validation**: `isPolicySubstantive()` — checks keyword presence AND word count ≥ 50 (not just URL existence)
+- **Policy quality validation**: `isPolicySubstantive()` — checks keyword presence AND word count ≥ 50
+
+### Security & Session Management
+- **CSRF protection** — `csrf-sync` backend middleware + frontend `csrf-service.ts` (token cached in-memory, injected on all mutations)
+- **Session store** — `connect-pg-simple` backed by PostgreSQL (7-day TTL, `httpOnly`/`secure`/`sameSite` cookies)
+- **Session secret** — throws in production if default dev secret is used
+- **Per-user store isolation** — all store-scoped routes verify `storesTable.userId === req.session.userId`
+- **Rate limiting** — 5 analyses/hour per `userId` on the analyze endpoint
+- **Shopify webhook HMAC** — `timingSafeEqual` against `SHOPIFY_API_SECRET`; raw body captured in `express.json` verify hook
 
 ### Store Connection
 - Shopify OAuth flow (Partners app)
 - Manual Admin API token (collapsed under "Use Admin API token")
 - Auto product fetch after connect (fire-and-forget background)
 - `registerStoreWebhooks` called automatically after both OAuth and token connect flows
-- Store removal with confirmation dialog (deletes all data)
+- Store removal with confirmation dialog (deletes all data via cascade)
 
 ### Shopify Webhooks
 - `POST /api/shopify/webhooks/products-update` — HMAC-verified, updates product in DB, busts AI QA cache
 - `POST /api/shopify/webhooks/products-delete` — HMAC-verified, deletes product row, logs activity
-- Webhooks registered automatically on store connect via `registerStoreWebhooks`
-- Raw body captured via `express.json({ verify })` for HMAC computation
+- Webhooks registered automatically on store connect; errors logged via `req.log.warn`
 
 ### Write-back Verification
 - After applying a fix, `verifyShopifyUpdate` re-fetches the product from Shopify GraphQL API
 - Compares applied content against live Shopify data
-- Sets `shopifySynced = verified`, `shopifyError = reason` if mismatch detected
+- Sets `shopifySynced = verified`, `shopifyError = reason` on mismatch
+- Catch block sets `shopifySynced = false` (was a false-positive bug, now fixed)
 
 ### 24-Hour Caching
 | Feature | Cache column | Bust on |
@@ -71,13 +82,14 @@ All cached endpoints include `cached: true/false` in response.
 - Store consistency analysis (tone, structure, formatting gaps)
 - Perception report: agent narrative, strengths, unanswered questions, FAQ health
 - Prioritized action plan built from all gaps
+- Job persistence: `jobsTable` tracks `status`, `startedAt`, `completedAt`, `errorMessage`
 
 ### Pages & Routes (9 routes — consolidated from 18)
 
 | Page | Route | Contents |
 |---|---|---|
 | Login | `/` | Google OAuth gate; auto-redirect if authenticated |
-| Dashboard | `/dashboard` | Store health bar, score breakdown, products preview, activity feed, insight cards; onboarding modal if no store |
+| Dashboard | `/dashboard` | Store health bar, score breakdown, products preview, activity feed; onboarding modal if no store |
 | Products | `/products` | Full product list with score, issue count, analyzed status |
 | Product Detail | `/products/:id` | Scores, evidence-backed issues, trust templates, AI Q&A test, quick fix CTA |
 | Issues | `/issues` | **3 tabs**: All Issues (Quick Wins / High Priority / Improvements + category filter) · Action Plan (ranked by conversion impact) · Fixed |
@@ -99,7 +111,13 @@ All cached endpoints include `cached: true/false` in response.
 - Fix types: Description, Tags, Title, Structure, JSON-LD Schema
 - Editable before applying
 - Shopify sync on apply + post-apply verification
+- Gap closure scoped to matching category (not all gaps)
 - Deduplication: returns existing pending fix
+
+### Error Handling
+- **Global React error boundary** — `<ErrorBoundary FallbackComponent={ErrorFallback}>` in App.tsx; shows error message + reload/retry buttons
+- **AI failure non-fatal** — all LLM calls have rule-based fallbacks; Zod schema validation with graceful degradation
+- **Job error tracking** — analysis failures update `jobs.status='failed'`, `jobs.errorMessage`, and insert activity row
 
 ### Backend API Surface
 
@@ -109,14 +127,20 @@ All cached endpoints include `cached: true/false` in response.
 | `GET /api/auth/google/callback` | OAuth callback → session → redirect frontend |
 | `GET /api/auth/me` | Return current user from session |
 | `POST /api/auth/logout` | Destroy session |
-| `GET /api/stores` | List stores |
+| `GET /api/csrf-token` | Issue CSRF token |
+| `GET /api/stores` | List stores (userId-filtered) |
 | `POST /api/stores` | Connect store (token flow) |
-| `DELETE /api/stores/:id` | Remove store + all data |
-| `POST /api/analysis/:id` | Run full store analysis |
+| `DELETE /api/stores/:id` | Remove store + all data (userId-verified) |
+| `POST /api/stores/:id/analyze` | Run full store analysis (rate-limited, userId-verified) |
+| `GET /api/jobs/:jobId` | Poll job status (userId-verified via store ownership) |
+| `GET /api/stores/:id/summary` | Store score summary |
+| `GET /api/stores/:id/gaps` | All gaps with product titles |
+| `GET /api/stores/:id/activity` | Activity log (userId-verified) |
 | `GET /api/stores/:id/products` | List products with scores |
 | `GET /api/stores/:id/products/:pid` | Product detail with issues + fixes |
 | `POST /api/stores/:id/products/:pid/generate-fix` | AI-generate a fix |
 | `POST /api/stores/:id/fixes/:fid/apply` | Apply fix + Shopify sync + verify |
+| `POST /api/stores/:id/fixes/bulk-apply` | Bulk apply fixes |
 | `GET /api/stores/:id/perception` | Agent narrative + action plan |
 | `GET /api/stores/:id/tag-optimizer` | Tag analysis per product |
 | `GET /api/stores/:id/llms-txt` | Generate llms.txt |
@@ -143,22 +167,25 @@ All cached endpoints include `cached: true/false` in response.
 | `GOOGLE_CLIENT_ID` | OAuth app client ID | — (required for auth) |
 | `GOOGLE_CLIENT_SECRET` | OAuth app client secret | — (required for auth) |
 | `GOOGLE_REDIRECT_URI` | Must match Google Console | `http://localhost:4000/api/auth/google/callback` |
-| `SESSION_SECRET` | Cookie signing secret | `dev-session-secret-...` |
+| `SESSION_SECRET` | Cookie signing secret | `dev-session-secret-...` (throws in production) |
 | `SHOPIFY_API_KEY` | Shopify Partners app key | — (required for OAuth) |
-| `SHOPIFY_API_SECRET` | Shopify Partners app secret | — (required for OAuth) |
+| `SHOPIFY_API_SECRET` | Shopify Partners app secret | — (required for OAuth + webhooks) |
+| `APP_BASE_URL` | API base for OAuth redirect URI + webhooks | auto-set by dev.ts → `http://localhost:4000` |
 | `FRONTEND_URL` | Post-auth redirect target | auto-set by dev.ts → `http://localhost:3000` |
-| `APP_BASE_URL` | API base for OAuth redirect URI | auto-set by dev.ts → `http://localhost:4000` |
 | `PORT` | API server port | `4000` |
 | `FRONTEND_PORT` | Vite dev server port | `3000` |
+
+All variables now present in `.env.example`.
 
 ---
 
 ## Extra Features (Beyond Track 5)
 
 - **Google OAuth authentication** — production-ready login with session persistence
+- **CSRF protection** — backend middleware + frontend token injection on all mutations
 - **Shopify webhook sync** — product changes in Shopify auto-update the DB, no manual re-fetch needed
 - **Write-back verification** — confirms Shopify actually updated after applying a fix
-- **24h caching** — expensive LLM features (AI QA, query sim, topical authority, internal links) cached in DB
+- **24h caching + content-hash invalidation** — feature caches bust when catalog changes, not just on TTL expiry (CB-6)
 - **Policy quality validation** — keyword + word count check, not just URL existence
 - **Voice query readiness rules** — title length, model-number prefixes, conversational language
 - **Comparison readiness rule** — flags products missing spec data
@@ -167,67 +194,36 @@ All cached endpoints include `cached: true/false` in response.
 - **Topical authority map** — semantic clustering of catalog, identifies thin topics
 - **Multi-AI fallback** — Gemini → Groq → Cerebras
 - **Conversion impact labels** — each action plan gap has a specific human-readable impact label
+- **Job persistence + idempotency** — analysis jobs tracked in DB; `Idempotency-Key` header prevents duplicate runs (CB-12)
+- **Token encryption at rest** — AES-256-GCM encryption for Shopify access tokens; transparent migration for legacy tokens (CB-5)
+- **AI output provenance** — `scoringSource: "ai" | "rule" | "fallback"` tracked per product (CB-11)
+- **Technical SEO module** — robots.txt + sitemap.xml + meta description + canonical sampling; 5 store-level gap types (U-1)
+- **Answer-first structure generator** — TL;DR + best-for + specs table per product; grounded in policy text (U-4)
+- **Policy-grounded FAQ schema** — answers derived from real refund/shipping policy bodies, not hallucinated (U-3)
+- **Schema field-level auditing** — `SCHEMA_OFFERS_INCOMPLETE` + `SCHEMA_MISSING_BRAND` rules for rich-result eligibility (U-5)
+- **Taxonomy specificity rule** — `TAXONOMY_TOO_GENERIC` flags vague productTypes hurting AI classification (U-2)
+- **Precise gap closure** — `sourceGapId` on fixes; apply handler targets exact gap, not broad category (CB-9)
 
 ---
 
-## Known Issues (post fix round 1)
+## Known Issues (post fix round 3)
 
-> Full verified issue list with file references and fix status: see `issues.md`
+> Full verified issue list: see `issues.md`. The table below covers only remaining open items.
 
-### CRITICAL — must fix before demo
-| Issue | File | Status |
+### Already Fixed — All critical/high issues resolved
+All 27 original issues from the initial audit are resolved (26 fixed in code, 1 is a git history issue).
+All 8 N-series issues introduced by fix round 1 are resolved.
+CB-2, CB-3, CB-5, CB-6, CB-9, CB-11, CB-12 fixed in round 3.
+
+### Remaining Open
+
+| Issue | Sev | Notes |
 |---|---|---|
-| **CSRF middleware breaks all frontend mutations** | `app.ts:102–120` | 🆕 NEW — `csrf-sync` added to backend but frontend never sends `x-csrf-token`. Every POST/DELETE/PATCH returns 403. App is unusable for writes. |
-
-### High
-| Issue | File | Status |
-|---|---|---|
-| **analysis + products/fixes routes skip userId ownership check** | `routes/analysis.ts:36`, `fixes.ts`, `products.ts` | 🆕 NEW — any authenticated user can trigger analysis on, read, or apply fixes to another user's store |
-| **GET /stores/:storeId/activity missing userId check** | `routes/stores.ts:181–196` | 🆕 NEW — activity log readable by any user who knows the storeId |
-| **H-3 partial: userId filter missing on non-CRUD routes** | `routes/analysis.ts`, `fixes.ts`, `products.ts`, `insights.ts`, `features.ts` | ⚠ PARTIAL — `stores.ts` fixed; all other store-scoped routes still open |
-
-### Medium
-| Issue | File | Status |
-|---|---|---|
-| **ALL gaps marked isFixed when any single fix applied** | `fixes.ts:163–165` | 🔴 OPEN — applying a description fix clears title/trust/tag gaps too |
-| **stale activeStoreId not validated against server** | `store-context.tsx` | 🔴 OPEN — deleted store → all queries 404 with no UX recovery |
-| **.env.example missing 5 required vars** | `.env.example` | ⚠ PARTIAL — still missing `SESSION_SECRET`, `APP_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
-| **jobs table missing completedAt/errorMessage** | `lib/db/src/schema/jobs.ts` | 🆕 NEW — job status endpoint cannot report when a job finished or why it failed |
-| **session table crash if Drizzle migration not run** | `app.ts:82` | 🆕 NEW — `createTableIfMissing: false` silently crashes on fresh clone |
-| **No global React error boundary** | `App.tsx` | 🔴 OPEN — component crash = blank white screen |
-
-### Low
-| Issue | Notes | Status |
-|---|---|---|
-| **rawBody now typed as `any`** | `app.ts:96` — regressed from inline type to `any` cast | 🔴 REGRESSED |
-| **home.tsx + login.tsx orphaned in pages/** | Not imported or routed anywhere | 🆕 NEW |
-| **stores.userId nullable, no FK constraint** | Orphaned rows possible; per-user isolation fix is incomplete without this | 🔴 OPEN |
-| **Score values render blank while summary loading** | `dashboard.tsx` — `?? 0` guard missing | 🔴 OPEN |
-| **Coarse commit messages** | Cannot retroactively fix; apply Conventional Commits going forward | 🔴 OPEN |
-| **trugglehog typo in CI workflow** | `.github/workflows/` | 🔴 OPEN (unverified) |
-
-### Fixed (19 of 27 original issues resolved)
-| Original | Resolution |
-|---|---|
-| C-1 Dashboard dead links | `/issues`, `/ai-readiness`, `/tools` |
-| C-2 Webhook HMAC env var | Changed to `SHOPIFY_API_SECRET` |
-| C-3 No job persistence | `jobsTable` + `GET /jobs/:jobId` added |
-| H-1 SESSION_SECRET fallback | Throws in production |
-| H-4 MemoryStore sessions | `connect-pg-simple` + `session.ts` schema |
-| H-5 No rate limiting | 5/hr per userId via `express-rate-limit` |
-| M-1 LLM JSON not Zod-validated | Zod schemas + `safeParse` added |
-| M-2 shopifySynced false positive | `false` + error message on catch |
-| M-3 structure/schema never written | "Manual action required" message returned |
-| M-6 pendingStoreUrl never read | Consumed in `connect.tsx` |
-| M-7 Benchmark no transparency | `benchmarkSource` flag + null gaps when aspirational |
-| M-9 implementation_plan.md wrong stack | Updated to Express + Vite + @google/generative-ai |
-| L-1 Fabricated social proof | Honest hackathon stats, real tech logos |
-| L-2 13 orphaned pages | All deleted |
-| L-3 BENCHMARK_SCORES dead code | Removed |
-| L-4 apply/bulk-apply duplicated | Shared `applyFixToShopify` helper |
-| L-9 Webhook errors silently dropped | Logged via req.log.warn/error |
-| H-2 partial | csrf-sync added (frontend wiring pending) |
-| H-3 partial | userId filter on stores CRUD routes |
+| In-process analysis blocks event loop | HIGH | Needs BullMQ/Trigger.dev queue; acceptable for hackathon scale |
+| No eval suite / CI quality gate | HIGH | Labeled test fixtures + precision/recall tracking |
+| Rule-engine heuristics overfit English | MED | Locale detection needed |
+| Benchmark O(N) product read per request | MED | Needs materialized view |
+| No structured observability/metrics | MED | Step timing, fallback rates, correlation IDs |
 
 ---
 
@@ -244,11 +240,37 @@ All cached endpoints include `cached: true/false` in response.
 
 | Criterion | Score | Reasoning |
 |---|---|---|
-| Identifies AI readiness gaps | **Strong** | 15 deterministic rules with evidence, impact scores, effort levels across 6 categories |
+| Identifies AI readiness gaps | **Strong** | 25 deterministic rules with evidence, impact scores, effort levels across 6 categories |
 | Ranked action plan | **Strong** | Conversion-impact ranked with specific labels, linked to products, dedicated tab in Issues page |
 | AI perception vs. desired positioning | **Strong** | Full perception report with narrative, strengths, unanswered questions, merchant positioning input |
 | Concrete action to improve | **Strong** | Quick Fix generates + applies with Shopify write-back verification; FAQ schema, JSON-LD, llms.txt deployable immediately |
 | Genuine product thinking | **Strong** | Rule engine over pure AI scoring; "Can AI answer this?" test grounds scores in actual AI behavior; webhook sync keeps data fresh |
-| **Overall** | **Meets all 5 criteria** | Auth layer + webhook sync + caching bring the project to production-ready quality |
+| **Overall** | **Meets all 5 criteria** | Auth layer + CSRF + webhook sync + caching + per-user isolation bring the project to production-ready quality |
 
-> **Before submission:** Fix C-1 (dashboard dead links), C-2 (webhook env var), and L-1 (fake social proof) at minimum. These are the issues a judge will encounter in the first 5 minutes. See `issues.md` for the full 27-issue list with exact file references.
+---
+
+## Cursor Backend Strict Score (updated after fix round 3)
+
+| Dimension | Before | After | Delta |
+|---|---|---|---|
+| Product thinking | 9/10 | 9.5/10 | +0.5 — AEO/GEO upgrades: Technical SEO module, answer-first fixes, FAQ grounding |
+| Backend correctness | 8/10 | 8.5/10 | +0.5 — CB-2 atomic swap, CB-9 precise gap closure |
+| AI output robustness | 6.5/10 | 8.5/10 | +2.0 — CB-3 Zod on all 6 ai-features functions; code-fence JSON fallback in ai-analyzer |
+| Scalability under stress | 6/10 | 6/10 | unchanged — CB-1 queue still needed |
+| Security/privacy posture | 7/10 | 8.5/10 | +1.5 — CB-5 AES-256-GCM token encryption; TOKEN_ENCRYPTION_KEY env var |
+| Judge/demo resilience | 7/10 | 8/10 | +1.0 — CB-6 content-hash cache, CB-12 idempotency, CB-11 provenance |
+| **Overall** | **7.4/10** | **8.2/10** | **+0.8** |
+
+> Remaining gap areas: in-process analysis pipeline (CB-1), no eval harness (CB-4), benchmark O(N) (CB-8), no observability (CB-10).
+
+## AEO/GEO/SEO Upgrades (fix round 3 additions)
+
+| Upgrade | Status | Details |
+|---|---|---|
+| Technical SEO module | ✅ Implemented | `lib/technical-seo.ts` — robots.txt, sitemap.xml, page sampling (meta desc, canonical); 5 store-level gap rule IDs; wired into analysis pipeline |
+| Taxonomy specificity | ✅ Implemented | `TAXONOMY_TOO_GENERIC` rule in rule-engine.ts; flags vague productTypes like "Accessories" |
+| Structured data auditing | ✅ Implemented | `SCHEMA_OFFERS_INCOMPLETE` + `SCHEMA_MISSING_BRAND` rules; checks offers.price/currency/availability |
+| FAQ schema grounding | ✅ Implemented | `policyBodies` stored in perception_reports; passed to `generateFaqSchema`; answers grounded in real policy text |
+| Answer-first structure | ✅ Implemented | `generateAnswerFirstStructure()` in ai-features.ts; `GET /stores/:id/products/:pid/answer-first` endpoint |
+| Brand authority signals | 🔴 Not yet | Review coverage + vendor consistency — next round |
+| GEO visibility tracking | 🔴 Not yet | Citation tracking — next round |

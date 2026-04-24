@@ -28,7 +28,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ component: Component }: { component: ComponentType }) {
+function ProtectedRoute({ component: Component, ...props }: { component: ComponentType<any> } & any) {
   const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
 
@@ -45,7 +45,7 @@ function ProtectedRoute({ component: Component }: { component: ComponentType }) 
     return null;
   }
 
-  return <Component />;
+  return <Component {...props} />;
 }
 
 function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
@@ -80,7 +80,7 @@ function Router() {
           {() => <ProtectedRoute component={Products} />}
         </Route>
         <Route path="/products/:productId">
-          {() => <ProtectedRoute component={ProductDetail} />}
+          {(params) => <ProtectedRoute component={ProductDetail} params={params} />}
         </Route>
         <Route path="/issues">
           {() => <ProtectedRoute component={Issues} />}

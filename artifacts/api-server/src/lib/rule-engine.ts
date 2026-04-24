@@ -497,7 +497,13 @@ function analyzeComparisonReadiness(description: string | null, tags: string[], 
   }
 }
 
-// ─── Structured data check ────────────────────────────────────────────────────
+// ─── Structured data check (Upgrade 5: field-level auditing) ─────────────────
+
+const GENERIC_PRODUCT_TYPES = new Set([
+  "accessories", "footwear", "clothing", "apparel", "shoes",
+  "bags", "jewelry", "electronics", "home", "other", "misc",
+  "product", "item", "goods", "stuff",
+]);
 
 function checkStructuredData(description: string | null, violations: RuleViolation[]): void {
   // hasStructuredData is already computed during ingestion; trust violations cover this
@@ -513,8 +519,31 @@ function checkStructuredData(description: string | null, violations: RuleViolati
     if (!schema.name) missing.push("name");
     if (!schema.description) missing.push("description");
     if (!schema.brand) missing.push("brand");
-    if (!schema.offers) missing.push("offers (price)");
     if (!schema.image) missing.push("image");
+
+    // Upgrade 5: Offers completeness (price/currency/availability)
+    if (!schema.offers) {
+      missing.push("offers (price + availability)");
+    } else {
+      const offers = schema.offers as Record<string, unknown>;
+      const offersMissing: string[] = [];
+      if (!offers.price && !offers.lowPrice) offersMissing.push("price");
+      if (!offers.priceCurrency) offersMissing.push("priceCurrency");
+      if (!offers.availability) offersMissing.push("availability");
+      if (offersMissing.length > 0) {
+        violations.push({
+          ruleId: "SCHEMA_OFFERS_INCOMPLETE",
+          category: "trust",
+          severity: "medium",
+          title: "Schema.org Offers block missing required fields",
+          description: "Google's Product rich results and AI shopping require offers.price, offers.priceCurrency, and offers.availability to show pricing eligibility.",
+          suggestion: `Add missing Offers fields: ${offersMissing.join(", ")}. Use schema values like "https://schema.org/InStock" for availability.`,
+          evidence: `Offers found but missing: ${offersMissing.join(", ")}.`,
+          impactScore: 50,
+          effortLevel: "low",
+        });
+      }
+    }
 
     if (missing.length > 0) {
       violations.push({
@@ -526,6 +555,21 @@ function checkStructuredData(description: string | null, violations: RuleViolati
         suggestion: `Add missing schema fields: ${missing.join(", ")}.`,
         evidence: `JSON-LD found but missing: ${missing.join(", ")}.`,
         impactScore: 25,
+        effortLevel: "low",
+      });
+    }
+
+    // Upgrade 5: Missing brand entity in schema
+    if (!schema.brand) {
+      violations.push({
+        ruleId: "SCHEMA_MISSING_BRAND",
+        category: "trust",
+        severity: "low",
+        title: "Schema.org Product missing brand entity",
+        description: "The brand field helps AI agents attribute products to manufacturers and match brand-specific queries.",
+        suggestion: 'Add "brand": { "@type": "Brand", "name": "Your Brand Name" } to your Product JSON-LD.',
+        evidence: 'JSON-LD Product schema present but "brand" is missing.',
+        impactScore: 30,
         effortLevel: "low",
       });
     }
@@ -541,6 +585,26 @@ function checkStructuredData(description: string | null, violations: RuleViolati
       evidence: "JSON-LD script found but contains invalid JSON.",
       impactScore: 40,
       effortLevel: "medium",
+    });
+  }
+}
+
+// ─── Taxonomy specificity check (Upgrade 2) ───────────────────────────────────
+
+function checkTaxonomySpecificity(productType: string | null, violations: RuleViolation[]): void {
+  if (!productType) return;
+  const lower = productType.toLowerCase().trim();
+  if (GENERIC_PRODUCT_TYPES.has(lower) || lower.length < 5) {
+    violations.push({
+      ruleId: "TAXONOMY_TOO_GENERIC",
+      category: "completeness",
+      severity: "low",
+      title: "Product type/taxonomy is too generic",
+      description: "Vague product types like 'Accessories' or 'Footwear' reduce AI classification accuracy. AI agents match products to specific queries better when types are precise.",
+      suggestion: `Replace "${productType}" with a specific product type (e.g. "Women's Waterproof Hiking Boots" instead of "Footwear").`,
+      evidence: `productType is "${productType}" — too vague for precise AI category matching.`,
+      impactScore: 25,
+      effortLevel: "low",
     });
   }
 }
@@ -564,6 +628,7 @@ export function runRuleEngine(product: ProductInput): RuleEngineResult {
   const tagsScore = analyzeTags(product.tags, product.productType, violations);
   const trustScore = analyzeTrust(product, violations);
   checkStructuredData(product.description, violations);
+  checkTaxonomySpecificity(product.productType, violations);  // Upgrade 2
   analyzeVoiceReadiness(product.title, product.description, violations);
   analyzeComparisonReadiness(product.description, product.tags, violations);
 

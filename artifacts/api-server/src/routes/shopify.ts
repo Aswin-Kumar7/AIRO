@@ -10,6 +10,7 @@ import {
 } from "../lib/shopify-oauth";
 import { normalizeShopifyDomain, validateShopifyToken, registerStoreWebhooks } from "../lib/shopify-client";
 import { upsertConnectedStore } from "../lib/store-connection";
+import { resolveAccessToken } from "../lib/crypto";
 import { fetchAndUpsertProducts } from "../lib/fetch-products";
 
 const router: IRouter = Router();
@@ -136,7 +137,7 @@ router.get("/shopify/callback", async (req, res): Promise<void> => {
       const appBaseUrl = process.env.APP_BASE_URL ?? "";
       if (appBaseUrl) {
         try {
-          await registerStoreWebhooks(store.domain, store.accessToken, appBaseUrl);
+          await registerStoreWebhooks(store.domain, resolveAccessToken(store.accessToken), appBaseUrl);
         } catch (err) {
           req.log.warn({ err, storeId: store.id }, "Background webhook registration failed after OAuth");
         }

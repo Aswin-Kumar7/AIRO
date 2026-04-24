@@ -13,6 +13,8 @@ export interface ProductAnalysisResult {
   overallScore: number;
   aiPerceptionSummary: string;
   suggestedTags: string[];
+  /** CB-11: indicates whether AI was called, fell back to rules, or used fallback defaults */
+  scoringSource: "ai" | "rule" | "fallback";
   issues: Array<{
     category: "clarity" | "completeness" | "trust" | "tags" | "policy" | "consistency";
     severity: "high" | "medium" | "low";
@@ -64,6 +66,8 @@ Return ONLY valid JSON, no markdown.`;
   let aiClarityScore = ruleScores.clarity; // fallback if AI call fails
   let aiPerceptionSummary = "Limited product information makes it difficult for AI assistants to confidently recommend this product.";
   let suggestedTags: string[] = [];
+  // CB-11: track whether AI contributed to scoring
+  let scoringSource: "ai" | "rule" | "fallback" = "fallback";
 
   const aiSchema = z.object({
     clarityScore: z.number().min(0).max(100),
@@ -73,18 +77,30 @@ Return ONLY valid JSON, no markdown.`;
 
   try {
     const content = await chatCompletion([{ role: "user", content: aiPrompt }], 800);
-    const parsed = JSON.parse(content);
-    const result = aiSchema.safeParse(parsed);
-    
-    if (result.success) {
-      aiClarityScore = result.data.clarityScore;
-      aiPerceptionSummary = result.data.aiPerceptionSummary;
-      suggestedTags = result.data.suggestedTags;
+    // Use safeParseJson pattern: try direct parse, then strip code fences
+    let parsed: unknown = null;
+    try { parsed = JSON.parse(content); } catch {
+      const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenced) { try { parsed = JSON.parse(fenced[1]!.trim()); } catch { /* ignore */ } }
+    }
+    if (parsed !== null) {
+      const result = aiSchema.safeParse(parsed);
+      if (result.success) {
+        aiClarityScore = result.data.clarityScore;
+        aiPerceptionSummary = result.data.aiPerceptionSummary;
+        suggestedTags = result.data.suggestedTags;
+        scoringSource = "ai";
+      } else {
+        logger.warn({ issues: result.error.issues, productTitle: product.title }, "AI response validation failed — using rule scores");
+        scoringSource = "rule";
+      }
     } else {
-      logger.warn({ issues: result.error.issues, productTitle: product.title }, "AI response validation failed");
+      logger.warn({ productTitle: product.title }, "AI response JSON parse failed — using rule scores");
+      scoringSource = "rule";
     }
   } catch (err) {
     logger.warn({ err, productTitle: product.title }, "AI layer failed — using rule-only scores");
+    scoringSource = "rule";
   }
 
   // Step 3: deterministic score blending (AI only influences clarity)
@@ -115,6 +131,7 @@ Return ONLY valid JSON, no markdown.`;
     overallScore,
     aiPerceptionSummary,
     suggestedTags,
+    scoringSource,
     issues,
   };
 }

@@ -1,5 +1,5 @@
 import { Router, type IRouter, Request, Response } from "express";
-import { eq, avg, count, and, isNotNull, ne } from "drizzle-orm";
+import { eq, avg, count, and, isNotNull, ne, inArray } from "drizzle-orm";
 import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import {
   db,
@@ -17,6 +17,8 @@ import { analyzeProduct, analyzeStoreConsistency, generateFix } from "../lib/ai-
 import { buildPrioritizedActionPlan } from "../lib/conversion-ranker";
 import { simulateStorePerception } from "../lib/perception-simulator";
 import { ingestStore, type StoreSnapshot } from "../lib/shopify-ingestion";
+import { resolveAccessToken } from "../lib/crypto";
+import { runTechnicalSeoAudit } from "../lib/technical-seo";
 import { logger } from "../lib/logger";
 import { generateId } from "../lib/id";
 
@@ -55,6 +57,26 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
     return;
   }
 
+  // CB-12: Idempotency key — if the client retries with the same key, return the existing job
+  const idempotencyKey = req.headers["idempotency-key"] as string | undefined;
+  if (idempotencyKey) {
+    const [existingJob] = await db
+      .select()
+      .from(jobsTable)
+      .where(and(eq(jobsTable.storeId, storeId), eq(jobsTable.idempotencyKey, idempotencyKey)));
+    if (existingJob) {
+      res.json({
+        jobId: existingJob.id,
+        storeId,
+        status: existingJob.status,
+        startedAt: existingJob.startedAt.toISOString(),
+        idempotent: true,
+        message: "Returning existing job for this idempotency key",
+      });
+      return;
+    }
+  }
+
   const jobId = generateId();
   const startedAt = new Date().toISOString();
 
@@ -72,6 +94,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
     storeId,
     status: "running",
     startedAt: new Date(startedAt),
+    idempotencyKey: idempotencyKey ?? null,
   });
 
   res.json({
@@ -87,9 +110,13 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
       let policyScore = 70; // default when ingestion is unavailable
       let snapshot: StoreSnapshot | null = null;
       let ingestFailureMessage: string | null = null;
+      // CB-2: Track old row IDs so we can do an atomic swap after new data is fully written
+      let oldGapIds: string[] = [];
+      let oldFixIds: string[] = [];
+      let oldProductIds: string[] = [];
 
       try {
-        snapshot = await ingestStore(store.domain, store.accessToken);
+        snapshot = await ingestStore(store.domain, resolveAccessToken(store.accessToken));
 
         if (snapshot.products.length === 0) {
           throw new Error(
@@ -101,10 +128,17 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         const policiesPresent = Object.values(snapshot.policies).filter(Boolean).length;
         policyScore = Math.round((policiesPresent / 4) * 100);
 
-        // Delete old fixes and gaps before re-ingestion so scores are fresh
-        await db.delete(fixesTable).where(eq(fixesTable.storeId, storeId));
-        await db.delete(gapsTable).where(eq(gapsTable.storeId, storeId));
-        await db.delete(productsTable).where(eq(productsTable.storeId, storeId));
+        // CB-2: Record existing IDs *before* inserting new data.
+        // New data will be written alongside old data; once everything is in DB
+        // we delete old rows via their IDs — eliminating the 30-60s empty window.
+        const [preGaps, preFixes, preProducts] = await Promise.all([
+          db.select({ id: gapsTable.id }).from(gapsTable).where(eq(gapsTable.storeId, storeId)),
+          db.select({ id: fixesTable.id }).from(fixesTable).where(eq(fixesTable.storeId, storeId)),
+          db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.storeId, storeId)),
+        ]);
+        oldGapIds = preGaps.map(g => g.id);
+        oldFixIds = preFixes.map(f => f.id);
+        oldProductIds = preProducts.map(p => p.id);
 
         // Insert freshly ingested products
         if (snapshot.products.length > 0) {
@@ -169,6 +203,41 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
           });
         }
 
+        // Upgrade 1: Technical SEO + crawlability audit (store-level gaps)
+        try {
+          // Use product handle for clean Shopify URLs (e.g. /products/my-product-slug)
+          const productPageUrls = snapshot.products.slice(0, 5).map(p =>
+            `https://${store.domain}/products/${p.handle}`
+          );
+          const seoResult = await runTechnicalSeoAudit(store.domain, productPageUrls);
+          if (seoResult.gaps.length > 0) {
+            await db.insert(gapsTable).values(
+              seoResult.gaps.map(gap => ({
+                id: generateId(),
+                storeId,
+                productId: null,
+                category: gap.category,
+                severity: gap.severity,
+                title: gap.title,
+                description: gap.description,
+                suggestion: gap.suggestion,
+                evidence: gap.evidence,
+                impactScore: gap.impactScore,
+                effortLevel: gap.effortLevel,
+                ruleId: gap.ruleId,
+                isFixed: false,
+              }))
+            );
+          }
+          logger.info(
+            { storeId, seoGaps: seoResult.gaps.length, robotsTxtFound: seoResult.robotsTxtFound, sitemapFound: seoResult.sitemapFound },
+            "Technical SEO audit completed",
+          );
+        } catch (seoErr) {
+          // Non-fatal: SEO audit failure should not block the rest of analysis
+          logger.warn({ seoErr, storeId }, "Technical SEO audit failed — skipping store-level SEO gaps");
+        }
+
         logger.info(
           { storeId, productCount: snapshot.products.length },
           "Shopify ingestion completed",
@@ -179,6 +248,10 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
           { ingestErr, storeId },
           "Shopify ingestion failed — analyzing existing products in database",
         );
+        // Ingestion failed: existing products stay in DB (no empty window).
+        // Clear old gaps and fixes so re-analysis can insert fresh ones without duplicates.
+        // Product rows are unchanged, so we scope deletes by storeId (safe here — no new
+        // products are being inserted concurrently on this path).
         await db.delete(fixesTable).where(eq(fixesTable.storeId, storeId));
         await db.delete(gapsTable).where(eq(gapsTable.storeId, storeId));
       }
@@ -244,6 +317,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
           issueCount: analysis.issues.length,
           aiPerceptionSummary: analysis.aiPerceptionSummary,
           suggestedTags: analysis.suggestedTags,
+          scoringSource: analysis.scoringSource, // CB-11: provenance
           analyzedAt: new Date(),
         }).where(eq(productsTable.id, product.id));
 
@@ -266,6 +340,19 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         }
       }
 
+      // Build a gap-lookup map keyed by (productId + category) → highest-impact gapId
+      // Used to link each generated fix to its source gap (CB-9 precise closure)
+      const allInsertedGaps = await db
+        .select({ id: gapsTable.id, productId: gapsTable.productId, category: gapsTable.category, impactScore: gapsTable.impactScore })
+        .from(gapsTable)
+        .where(eq(gapsTable.storeId, storeId));
+
+      function pickGapId(productId: string, category: string): string | null {
+        const matches = allInsertedGaps.filter(g => g.productId === productId && g.category === category);
+        if (matches.length === 0) return null;
+        return matches.reduce((best, g) => ((g.impactScore ?? 0) > (best.impactScore ?? 0) ? g : best)).id;
+      }
+
       // Generate fixes in parallel for products that need them
       const fixTasks = analysisResults.flatMap(({ product, analysis }) => {
         const tasks: Array<() => Promise<typeof allFixes[number]>> = [];
@@ -280,6 +367,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
               id: generateId(),
               storeId,
               productId: product.id,
+              sourceGapId: pickGapId(product.id, "completeness"),
               type: "description",
               status: "pending",
               title: `Improve description: ${product.title}`,
@@ -301,6 +389,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
               id: generateId(),
               storeId,
               productId: product.id,
+              sourceGapId: pickGapId(product.id, "tags"),
               type: "tags",
               status: "pending",
               title: `Optimize tags: ${product.title}`,
@@ -318,6 +407,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         id: string;
         storeId: string;
         productId: string | null;
+        sourceGapId: string | null;
         type: string;
         status: string;
         title: string;
@@ -336,6 +426,20 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
 
       if (allFixes.length > 0) {
         await db.insert(fixesTable).values(allFixes);
+      }
+
+      // CB-2: Atomic swap — all new products/gaps/fixes are now in DB.
+      // Delete the old rows by their pre-recorded IDs so the UI never sees an empty store.
+      if (snapshot) {
+        if (oldFixIds.length > 0) {
+          await db.delete(fixesTable).where(inArray(fixesTable.id, oldFixIds));
+        }
+        if (oldGapIds.length > 0) {
+          await db.delete(gapsTable).where(inArray(gapsTable.id, oldGapIds));
+        }
+        if (oldProductIds.length > 0) {
+          await db.delete(productsTable).where(inArray(productsTable.id, oldProductIds));
+        }
       }
 
       const productCount = products.length;
@@ -419,6 +523,16 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         faqPage: snapshot?.faqPage ?? null,
       });
 
+      // Upgrade 3: persist policy bodies for FAQ schema grounding
+      const storedPolicyBodies = snapshot?.policyBodies
+        ? {
+            refund: snapshot.policyBodies.refund,
+            shipping: snapshot.policyBodies.shipping,
+            privacy: snapshot.policyBodies.privacy,
+            terms: snapshot.policyBodies.terms,
+          }
+        : null;
+
       await db.insert(perceptionReportsTable).values({
         storeId,
         agentNarrative: perception.agentNarrative,
@@ -429,6 +543,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         faqPageTitle: snapshot?.faqPage?.title ?? null,
         faqQuestionCount: perception.faqQuestionCount,
         faqGaps: perception.faqGaps,
+        policyBodies: storedPolicyBodies,
         updatedAt: new Date(),
       }).onConflictDoUpdate({
         target: perceptionReportsTable.storeId,
@@ -441,6 +556,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
           faqPageTitle: snapshot?.faqPage?.title ?? null,
           faqQuestionCount: perception.faqQuestionCount,
           faqGaps: perception.faqGaps,
+          policyBodies: storedPolicyBodies,
           updatedAt: new Date(),
         },
       });

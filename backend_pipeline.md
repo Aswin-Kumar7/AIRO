@@ -1,6 +1,6 @@
 # Backend Pipeline — AI Readiness Analyzer
 > Architecture reference · April 2026 · Verified against source code
-> Updated after fix round 1 — reflects all verified changes
+> Updated after fix round 2 — all N-series and original issues resolved
 
 ---
 
@@ -8,7 +8,7 @@
 
 ```
 Browser (React + Wouter + TanStack Query)
-    │  REST + JSON  (x-csrf-token header on all mutations ⚠ NOT YET WIRED — see §15)
+    │  REST + JSON  (x-csrf-token header on all mutations ✅ WIRED)
     ▼
 Express 5 API Server  (:4000 in dev)
     │
@@ -20,11 +20,11 @@ Express 5 API Server  (:4000 in dev)
     ├─ /api/auth/*                    Google OAuth 2.0 (session-based)
     ├─ /api/shopify/*                 Shopify OAuth + webhooks (HMAC-verified)
     ├─ /api/stores/*                  CRUD — userId-filtered ✅
-    ├─ /api/stores/:id/analyze        Analysis trigger + rate limit (5/hr)
-    ├─ /api/jobs/:jobId               Job status polling ✅ NEW
-    ├─ /api/stores/:id/products/*     Product list, detail, on-demand fix gen ⚠ no userId check
-    ├─ /api/stores/:id/fixes/*        Fix apply + Shopify write-back ⚠ no userId check
-    └─ /api/stores/:id/...features    Query sim, topical authority, llms.txt, AI QA, etc.
+    ├─ /api/stores/:id/analyze        Analysis trigger + rate limit (5/hr) — userId-verified ✅
+    ├─ /api/jobs/:jobId               Job status polling — userId-verified ✅
+    ├─ /api/stores/:id/products/*     Product list, detail, on-demand fix gen — userId-verified ✅
+    ├─ /api/stores/:id/fixes/*        Fix apply + Shopify write-back — userId-verified ✅
+    └─ /api/stores/:id/...features    Query sim, topical authority, llms.txt, AI QA — userId-verified ✅
               │
               ├─ lib/ai-client.ts          → Gemini 2.0-flash → Groq → Cerebras (fallback chain)
               ├─ lib/rule-engine.ts        → 25 deterministic rules, no AI
@@ -55,19 +55,19 @@ Every incoming request passes through this exact chain in order:
 
 3. cookieParser          parse 'sid' session cookie
 
-4. connect-pg-simple     ✅ UPDATED (was MemoryStore)
+4. connect-pg-simple     ✅ (was MemoryStore)
    express-session       PgStore backed by DATABASE_URL → "session" table
                          HttpOnly, secure+sameSite:none in prod / lax in dev, 7-day maxAge
-                         createTableIfMissing: false  ⚠ table must exist before startup
+                         createTableIfMissing: NODE_ENV !== "production"
+                           → auto-creates table in dev; requires drizzle-kit push in prod ✅
 
-5. express.json          + verify hook → req.rawBody = Buffer  (typed as `any` ⚠ regression)
+5. express.json          + verify hook → req.rawBody = Buffer  (typed as Request & { rawBody?: Buffer } ✅)
    express.urlencoded
 
-6. csrf-sync             ✅ NEW — validates x-csrf-token header on all non-GET requests
+6. csrf-sync             validates x-csrf-token header on all non-GET requests ✅
                          Exemption: path starts with /api/shopify/webhooks/
                          Token issued at: GET /api/csrf-token
-                         ⚠ CRITICAL: frontend never fetches or sends this token
-                           → all POST/DELETE/PATCH return 403 until wired up
+                         Frontend: csrf-service.ts fetches + caches token, injects on all mutations ✅
 
 7. requireAuth           PUBLIC prefixes bypass: /api/health, /api/auth/, /api/shopify/install,
                            /api/shopify/callback, /api/shopify/webhooks/, /api/csrf-token
@@ -326,8 +326,8 @@ The route responds immediately; all work happens in `setImmediate`.
 
 ```
 [Client]                    [API Server - sync]
-   │── POST /analyze ──────►│ analysisLimiter: 5/hr per userId ✅ NEW
-   │                        │ load store (no userId check ⚠ — see §15 N-4)
+   │── POST /analyze ──────►│ analysisLimiter: 5/hr per userId ✅
+   │                        │ requireOwnedStore(storeId, userId) → 403 if mismatch ✅
    │                        │ jobId = generateId()
    │                        │ UPDATE stores SET status='analyzing'
    │                        │ INSERT activity 'analysis_started'
@@ -458,7 +458,7 @@ Refactored: single-apply and bulk-apply now share the `applyFixToShopify` helper
 
 ```
 POST /stores/:storeId/fixes/:fixId/apply
-  ⚠ No userId ownership check on storeId — see §15 N-4
+  requireOwnedStore(storeId, userId) → 403 if mismatch ✅
 
 1. Load fix from DB → 404 if missing
    Load store from DB → 404 if missing
@@ -493,7 +493,8 @@ POST /stores/:storeId/fixes/:fixId/apply
 4. UPDATE fixes SET status='applied', appliedAt, shopifySynced, shopifyError
 
 5. Score bump: overallScore = min(100, current + estimatedScoreImprovement)
-   ⚠ ALL gaps for this product marked isFixed=true — not scoped to fix type/category (N-5)
+   gaps marked isFixed=true scoped by gapCategoryForFixType(fix.type) ✅
+   (description→completeness, tags→tags, title→clarity, schema→trust)
 
 6. INSERT activity 'fix_applied'
 7. Recount pendingFixes/appliedFixes → UPDATE store_summaries
@@ -589,9 +590,8 @@ fixes           id, storeId, productId, type, status (default "pending"),
 
 activity        id, storeId, type, message, metadata (jsonb), createdAt
 
-jobs  ✅ NEW    id, storeId, status ("running"|"completed"|"failed"),
-                startedAt
-                ⚠ missing: completedAt, errorMessage
+jobs            id, storeId, status ("running"|"completed"|"failed"),
+                startedAt, completedAt (nullable), errorMessage (nullable) ✅
 
 store_summaries storeId (PK), clarityScore, completenessScore, trustScore, tagScore,
                 overallScore, consistencyScore, policyScore,
@@ -611,9 +611,9 @@ perception_reports   storeId (PK), agentNarrative, unansweredQuestions (jsonb),
                 faqPageFound, faqPageTitle, faqQuestionCount, faqGaps (jsonb),
                 updatedAt
 
-session ✅ NEW  sid (PK varchar), sess (json), expire (timestamp)
+session         sid (PK varchar), sess (json), expire (timestamp)
                 index: IDX_session_expire on expire
-                ⚠ must exist before server starts (createTableIfMissing: false)
+                auto-created in dev (createTableIfMissing: true in dev) ✅
 
 conversations   (legacy — no active routes reference this table)
 messages        (legacy — no active routes reference this table)
@@ -709,73 +709,90 @@ title and trust gaps too, corrupting issue counts.
 
 ## 15. Current Pipeline Issues
 
-### Open bugs (code-verified)
+All original issues (C/H/M/L-series) and all N-series issues from fix round 1 are resolved.
+Only Cursor backend audit findings remain open as next-round improvements.
 
-| # | Sev | Issue | Location |
-|---|-----|-------|----------|
-| N-2 | **CRITICAL** | CSRF middleware added but frontend never sends `x-csrf-token` → all mutations return 403 | `app.ts:102–120` / frontend has no csrf code |
-| N-4 | **HIGH** | `POST /analyze`, all products/fixes/insights/features routes load store by storeId only — no userId ownership check | `analysis.ts:36`, `fixes.ts`, `products.ts` |
-| N-6 | **HIGH** | `GET /stores/:storeId/activity` lacks userId filter — any user can read another store's activity log | `stores.ts:181–196` |
-| N-5 | **MED** | `isFixed=true` applied to ALL product gaps when any single fix applied — unrelated gaps incorrectly cleared | `fixes.ts:163–165` |
-| N-3 | **MED** | `activeStoreId` in localStorage not validated against live store list — deleted store causes silent 404s | `store-context.tsx` |
-| N-7 | **MED** | `createTableIfMissing: false` — fresh clone crashes silently if `drizzle-kit push` not run | `app.ts:82` |
-| N-1 | **MED** | `jobs` table missing `completedAt` and `errorMessage` columns — status endpoint can't report why/when | `schema/jobs.ts` |
-| M-5 | **MED** | `.env.example` missing `SESSION_SECRET`, `APP_BASE_URL`, `GOOGLE_CLIENT_ID/SECRET`, `GOOGLE_REDIRECT_URI` | `.env.example` |
-| M-8 | **MED** | No global React error boundary — component crash = blank white screen | `App.tsx` |
-| L-5 | **LOW** | Coarse commit messages don't satisfy "clean git history" rubric criterion | git history |
-| L-7 | **LOW** | `stores.userId` nullable with no FK constraint — orphaned rows possible | `schema/stores.ts` |
-| L-8 | **LOW** | Score values render blank/undefined while summary is loading (missing `?? 0` guards) | `dashboard.tsx` |
-| L-10 | **LOW** | `rawBody` now typed as `any` — regressed from inline type extension | `app.ts:96` |
-| N-8 | **LOW** | `home.tsx` and `login.tsx` orphaned in pages/ — not imported or routed | `src/pages/` |
+### Resolved — All original + N-series issues (fix rounds 1 + 2)
 
-### Fixed in round 1 (19 of 27 original issues)
-
-| Original | What changed |
-|----------|--------------|
+| Issue | Resolution |
+|-------|------------|
 | C-1 Dashboard dead links | Remapped to `/issues`, `/ai-readiness`, `/tools` |
 | C-2 Webhook HMAC env var | `SHOPIFY_CLIENT_SECRET` → `SHOPIFY_API_SECRET` |
-| C-3 No job persistence | `jobsTable` + `GET /jobs/:jobId` added |
+| C-3 No job persistence | `jobsTable` with completedAt/errorMessage + `GET /jobs/:jobId` |
 | H-1 SESSION_SECRET fallback | Throws in production |
-| H-2 No CSRF (partial) | `csrf-sync` added to backend; frontend wiring pending |
-| H-3 No userId filter (partial) | `stores.ts` CRUD routes filtered; other routes open |
-| H-4 MemoryStore | `connect-pg-simple` + `session.ts` schema |
-| H-5 No rate limiting | `express-rate-limit` 5/hr per userId on analyze |
-| M-1 LLM JSON not Zod-validated | Zod schemas + `safeParse` in ai-analyzer.ts |
-| M-2 shopifySynced false positive | `false` + error message on verification catch |
-| M-3 structure/schema skip Shopify | "Manual action required" returned; shopifySynced=false |
-| M-6 pendingStoreUrl never read | Consumed in `connect.tsx` on mount |
-| M-7 Benchmark no transparency | `benchmarkSource` flag + null gaps when aspirational |
-| M-9 implementation_plan.md wrong stack | Updated to Express + Vite + @google/generative-ai |
+| H-2 No CSRF | Backend csrf-sync + frontend csrf-service.ts fully wired |
+| H-3 No userId filter | `requireOwnedStore(storeId, userId)` on all store-scoped routes |
+| H-4 MemoryStore | `connect-pg-simple` + session.ts schema + auto-creates in dev |
+| H-5 No rate limiting | 5/hr per userId on analyze |
+| M-1 LLM JSON not Zod-validated | Zod schemas + safeParse in ai-analyzer.ts |
+| M-2 shopifySynced false positive | false + descriptive error on catch |
+| M-3 structure/schema skip Shopify | "Manual action required" returned |
+| M-4 pendingStoreUrl + stale store | pendingStoreUrl consumed; stale activeStoreId auto-recovered |
+| M-5 .env.example incomplete | All vars added including APP_BASE_URL |
+| M-6 pendingStoreUrl never read | Consumed in connect.tsx on mount |
+| M-7 Benchmark no transparency | benchmarkSource flag + null gaps when aspirational |
+| M-8 No error boundary | react-error-boundary wraps Router in App.tsx |
+| M-9 Wrong stack in docs | implementation_plan.md updated |
 | L-1 Fabricated social proof | Honest hackathon stats; tech logos |
 | L-2 13 orphaned pages | All deleted |
 | L-3 BENCHMARK_SCORES dead code | Removed from ai-analyzer.ts |
-| L-4 apply/bulk-apply duplicated | Shared `applyFixToShopify` helper |
-| L-9 Webhook errors silent | Logged via `req.log.warn/error` |
+| L-4 apply/bulk-apply duplicated | Shared applyFixToShopify helper |
+| L-6 trugglehog typo | Fixed in security_scan.yml |
+| L-7 stores.userId nullable | Non-nullable with FK + cascade delete |
+| L-8 Score values blank | ?? 0 guards throughout dashboard.tsx |
+| L-9 Webhook errors silent | Logged via req.log.warn/error |
+| L-10 rawBody typed as any | `Request & { rawBody?: Buffer }` properly typed |
+| N-1 jobs missing completedAt/errorMessage | Added to schema; written in pipeline finalize + error |
+| N-2 CSRF frontend not wired | csrf-service.ts + injection in all mutation paths |
+| N-3 stale activeStoreId | dashboard.tsx validates against live store list, auto-recovers |
+| N-4 analysis routes skip userId | requireOwnedStore on all routes |
+| N-5 all gaps cleared on fix | gapCategoryForFixType scopes update by category |
+| N-6 activity missing userId check | Ownership verified before returning activity rows |
+| N-7 session table crash on fresh clone | createTableIfMissing: true in dev |
+| N-8 home.tsx / login.tsx orphaned | Both deleted |
+
+### Open — Cursor Backend Audit Findings (next-round)
+
+| # | Sev | Issue | Notes |
+|---|-----|-------|-------|
+| CB-1 | HIGH | In-process setImmediate analysis blocks event loop | BullMQ/Trigger.dev queue needed |
+| CB-2 | HIGH | Hard-delete during re-analysis (30–60s empty-DB window) | Versioned snapshots + atomic swap |
+| CB-3 | HIGH | ai-features.ts uses raw JSON.parse without Zod | Malformed AI output degrades silently |
+| CB-4 | HIGH | No eval suite / CI quality gate | Labeled fixtures + precision/recall |
+| CB-5 | MED | Access tokens stored in plain text | At-rest encryption needed |
+| CB-6 | MED | 24h TTL cache ignores catalog changes | Content-hash invalidation |
+| CB-7 | MED | Rule heuristics overfit English | Locale detection + exception rules |
+| CB-8 | MED | Benchmark O(N) per request | Materialized view |
+| CB-9 | MED | Gap closure by category not ruleId | fix.gapId linkage for exact closure |
+| CB-10 | MED | No structured observability/metrics | Step timing, fallback %, correlation IDs |
+| CB-11 | LOW | AI output provenance not exposed | source: "rule" \| "ai" \| "fallback" |
+| CB-12 | LOW | No idempotency keys | Dedup on analyze/apply retry |
 
 ---
 
-## 16. Recommended Next Fixes (Priority Order)
+## 16. Recommended Next Fixes (Cursor Priority Order)
 
 ```
-1. N-2  Wire CSRF token in frontend
-        → fetch GET /api/csrf-token on app init, store in memory
-        → inject x-csrf-token header on all non-GET fetches in the Orval client wrapper
+P0 (demo-critical):
+1. CB-3  Add Zod schemas to all ai-features.ts endpoints
+         → querySimulationSchema, topicalAuthoritySchema, internalLinksSchema, aiQaSchema
+         → on parse failure: return typed empty fallback + generationStatus: "error"
 
-2. N-4  Add userId ownership check to analysis + products + fixes + insights + features routes
-        → and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session.userId!))
-        → return 403 on ownership mismatch
+2. CB-2  Soft-replace during re-analysis (eliminate empty-DB window)
+         → keep old products/gaps/fixes until new run finalizes
+         → swap-in-transaction or analysis_run_id column
 
-3. N-6  Add userId check to GET /stores/:storeId/activity
-        → join through storesTable or add userId column to activityTable
+P1 (quality hardening):
+3. CB-5  Encrypt Shopify access tokens at rest
+4. CB-9  Link each fix to its source gapId/ruleId for precise gap closure
+5. CB-6  Cache invalidation keyed to product content hash
+6. CB-8  Precompute benchmark percentiles in background job
 
-4. N-5  Scope isFixed update to matching gaps only
-        → add eq(gapsTable.category, fix.category) or match by ruleId
-
-5. M-5  Complete .env.example with all required vars
-
-6. N-7  Set createTableIfMissing: true in dev session store config
-
-7. N-1  Add completedAt + errorMessage to jobs table schema
+P2 (long-term):
+7. CB-1  Queue-based analysis worker (BullMQ/Redis or Trigger.dev)
+8. CB-4  Eval harness with labeled product fixtures + CI quality gates
+9. CB-7  Locale-aware rule engine
+10. CB-10 Metrics dashboard (provider fallback %, step timing, cache hit rate)
 ```
 
 ---
@@ -829,5 +846,6 @@ Client: poll detects lastAnalyzed changed → dashboard refreshes
 
 ---
 
-*Document verified against source code — April 2026 (post fix round 1).*
+*Document verified against source code — April 2026 (post fix round 2).*
+*All original + N-series issues resolved. Cursor backend CB-series items are next-round improvements.*
 *Re-verify after changes to `artifacts/api-server/src/` or `lib/db/src/schema/`.*

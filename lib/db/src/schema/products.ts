@@ -25,6 +25,8 @@ export const productsTable = pgTable("products", {
   issueCount: integer("issue_count").notNull().default(0),
   hasAppliedFixes: boolean("has_applied_fixes").notNull().default(false),
   aiPerceptionSummary: text("ai_perception_summary"),
+  // CB-11: AI output provenance — was clarity score from AI, rule-based fallback, or hard fallback?
+  scoringSource: text("scoring_source").$type<"ai" | "rule" | "fallback">(),
   suggestedTags: text("suggested_tags").array().notNull().default([]),
   aiQaResults: jsonb("ai_qa_results"),
   aiQaCachedAt: timestamp("ai_qa_cached_at", { withTimezone: true }),

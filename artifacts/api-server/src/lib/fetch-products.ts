@@ -5,13 +5,14 @@
 import { eq } from "drizzle-orm";
 import { db, storesTable, productsTable, activityTable, type Store } from "@workspace/db";
 import { ingestStore } from "./shopify-ingestion";
+import { resolveAccessToken } from "./crypto";
 import { generateId } from "./id";
 import { logger } from "./logger";
 
 export async function fetchAndUpsertProducts(store: Store): Promise<{ productCount: number }> {
   logger.info({ storeId: store.id }, "Fetching products from Shopify");
 
-  const snapshot = await ingestStore(store.domain, store.accessToken);
+  const snapshot = await ingestStore(store.domain, resolveAccessToken(store.accessToken));
 
   if (snapshot.products.length === 0) {
     logger.warn({ storeId: store.id }, "Shopify returned zero products during fetch");
