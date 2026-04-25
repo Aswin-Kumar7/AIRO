@@ -30,6 +30,12 @@ export const storeSummariesTable = pgTable("store_summaries", {
   queryCatalogHash: text("query_catalog_hash"),
   topicalCatalogHash: text("topical_catalog_hash"),
   linksCatalogHash: text("links_catalog_hash"),
+  // CB-8: Precomputed benchmark scores to avoid O(N) product scan on every request.
+  // Populated during analysis from store_summaries of peer stores (O(stores) not O(products)).
+  benchmarkScores: jsonb("benchmark_scores"),        // {clarity, completeness, trust, tags, overall, consistency, policy}
+  benchmarkSource: text("benchmark_source"),         // "real-p90" | "aspirational"
+  benchmarkSampleSize: integer("benchmark_sample_size"),
+  benchmarkComputedAt: timestamp("benchmark_computed_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

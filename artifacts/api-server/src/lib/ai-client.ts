@@ -2,8 +2,16 @@
  * Multi-provider AI client with automatic fallback.
  * Order: Gemini (primary) → Groq → Cerebras
  */
+import { performance } from "perf_hooks";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { logger } from "./logger";
+
+const _fallbackStats = { gemini: 0, groq: 0, cerebras: 0, failed: 0, total: 0 };
+
+/** Returns a snapshot of AI provider usage since server start. */
+export function getAiFallbackStats(): Record<string, number> {
+  return { ..._fallbackStats };
+}
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -100,14 +108,16 @@ export async function chatCompletion(messages: ChatMessage[], maxTokens = 2000):
     { name: "cerebras", fn: () => callCerebras(messages, maxTokens) },
   ];
 
+  _fallbackStats.total++;
   let lastError: unknown;
   for (const provider of providers) {
     try {
+      const t0 = performance.now();
       const text = await provider.fn();
+      const ms = Math.round(performance.now() - t0);
       if (text) {
-        if (provider.name !== "gemini") {
-          logger.info({ provider: provider.name }, "Used fallback AI provider");
-        }
+        _fallbackStats[provider.name as keyof typeof _fallbackStats]++;
+        logger.info({ provider: provider.name, durationMs: ms, fallback: provider.name !== "gemini" }, "AI provider responded");
         return text;
       }
     } catch (err) {
@@ -116,6 +126,7 @@ export async function chatCompletion(messages: ChatMessage[], maxTokens = 2000):
     }
   }
 
+  _fallbackStats.failed++;
   throw new Error(
     `All AI providers failed. Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
   );

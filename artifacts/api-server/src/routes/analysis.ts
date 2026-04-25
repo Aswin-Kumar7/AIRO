@@ -1,3 +1,4 @@
+import { performance } from "perf_hooks";
 import { Router, type IRouter, Request, Response } from "express";
 import { eq, avg, count, and, isNotNull, ne, inArray } from "drizzle-orm";
 import { rateLimit, ipKeyGenerator } from "express-rate-limit";
@@ -14,6 +15,7 @@ import {
   jobsTable,
 } from "@workspace/db";
 import { analyzeProduct, analyzeStoreConsistency, generateFix } from "../lib/ai-analyzer";
+import { getAiFallbackStats } from "../lib/ai-client";
 import { buildPrioritizedActionPlan } from "../lib/conversion-ranker";
 import { simulateStorePerception } from "../lib/perception-simulator";
 import { ingestStore, type StoreSnapshot } from "../lib/shopify-ingestion";
@@ -21,6 +23,7 @@ import { resolveAccessToken } from "../lib/crypto";
 import { runTechnicalSeoAudit } from "../lib/technical-seo";
 import { logger } from "../lib/logger";
 import { generateId } from "../lib/id";
+import { analysisQueue } from "../lib/analysis-queue";
 
 const router: IRouter = Router();
 
@@ -105,7 +108,18 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
     message: "Analysis started — analyzing your store with AI",
   });
 
-  setImmediate(async () => {
+  analysisQueue.enqueue(jobId, async () => {
+    const analysisStart = performance.now();
+    const stepTimings: Record<string, number> = {};
+
+    function timeStep<T>(name: string, fn: () => Promise<T>): Promise<T> {
+      const t0 = performance.now();
+      return fn().then(
+        (v) => { stepTimings[name] = Math.round(performance.now() - t0); return v; },
+        (e) => { stepTimings[name] = Math.round(performance.now() - t0); throw e; }
+      );
+    }
+
     try {
       let policyScore = 70; // default when ingestion is unavailable
       let snapshot: StoreSnapshot | null = null;
@@ -116,7 +130,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
       let oldProductIds: string[] = [];
 
       try {
-        snapshot = await ingestStore(store.domain, resolveAccessToken(store.accessToken));
+        snapshot = await timeStep("ingestion", () => ingestStore(store.domain, resolveAccessToken(store.accessToken)));
 
         if (snapshot.products.length === 0) {
           throw new Error(
@@ -230,22 +244,22 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
             );
           }
           logger.info(
-            { storeId, seoGaps: seoResult.gaps.length, robotsTxtFound: seoResult.robotsTxtFound, sitemapFound: seoResult.sitemapFound },
+            { storeId, jobId, correlationId: jobId, seoGaps: seoResult.gaps.length, robotsTxtFound: seoResult.robotsTxtFound, sitemapFound: seoResult.sitemapFound },
             "Technical SEO audit completed",
           );
         } catch (seoErr) {
           // Non-fatal: SEO audit failure should not block the rest of analysis
-          logger.warn({ seoErr, storeId }, "Technical SEO audit failed — skipping store-level SEO gaps");
+          logger.warn({ seoErr, storeId, correlationId: jobId }, "Technical SEO audit failed — skipping store-level SEO gaps");
         }
 
         logger.info(
-          { storeId, productCount: snapshot.products.length },
+          { storeId, jobId, correlationId: jobId, productCount: snapshot.products.length },
           "Shopify ingestion completed",
         );
       } catch (ingestErr) {
         ingestFailureMessage = ingestErr instanceof Error ? ingestErr.message : "Unknown Shopify ingestion error";
         logger.warn(
-          { ingestErr, storeId },
+          { ingestErr, storeId, correlationId: jobId },
           "Shopify ingestion failed — analyzing existing products in database",
         );
         // Ingestion failed: existing products stay in DB (no empty window).
@@ -273,6 +287,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         analysis: Awaited<ReturnType<typeof analyzeProduct>>;
       }> = [];
 
+      const analysisT0 = performance.now();
       for (let i = 0; i < products.length; i += CONCURRENCY) {
         const batch = products.slice(i, i + CONCURRENCY);
         const batchResults = await Promise.all(
@@ -293,6 +308,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         );
         analysisResults.push(...batchResults);
       }
+      stepTimings["product_analysis"] = Math.round(performance.now() - analysisT0);
 
       // Flush scores and gaps to DB
       let totalClarity = 0;
@@ -418,11 +434,13 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
       }> = [];
 
       // Run fix generation in parallel batches
+      const fixT0 = performance.now();
       for (let i = 0; i < fixTasks.length; i += CONCURRENCY) {
         const batch = fixTasks.slice(i, i + CONCURRENCY);
         const results = await Promise.all(batch.map((task) => task()));
         allFixes.push(...results);
       }
+      stepTimings["fix_generation"] = Math.round(performance.now() - fixT0);
 
       if (allFixes.length > 0) {
         await db.insert(fixesTable).values(allFixes);
@@ -449,11 +467,11 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
       const avgTags = productCount > 0 ? totalTags / productCount : 0;
       const avgOverall = productCount > 0 ? totalOverall / productCount : 0;
 
-      const consistency = await analyzeStoreConsistency(products.map(p => ({
+      const consistency = await timeStep("consistency", () => analyzeStoreConsistency(products.map(p => ({
         title: p.title,
         description: p.description,
         tags: p.tags,
-      })));
+      }))));
 
       await db.insert(consistencyReportsTable).values({
         storeId,
@@ -499,7 +517,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         reviewRating: product.reviewRating,
         hasStructuredData: product.hasStructuredData,
       })));
-      const perception = await simulateStorePerception({
+      const perception = await timeStep("perception", () => simulateStorePerception({
         storeName: store.name,
         domain: store.domain,
         desiredPositioning: store.desiredPositioning ?? null,
@@ -521,7 +539,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
           terms: false,
         },
         faqPage: snapshot?.faqPage ?? null,
-      });
+      }));
 
       // Upgrade 3: persist policy bodies for FAQ schema grounding
       const storedPolicyBodies = snapshot?.policyBodies
@@ -605,6 +623,56 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         },
       });
 
+      // CB-8: Compute and cache benchmark scores from peer store summaries (O(stores) not O(products)).
+      // This runs once per analysis rather than on every benchmark request.
+      try {
+        const peerSummaries = await db
+          .select({
+            clarityScore: storeSummariesTable.clarityScore,
+            completenessScore: storeSummariesTable.completenessScore,
+            trustScore: storeSummariesTable.trustScore,
+            tagScore: storeSummariesTable.tagScore,
+            overallScore: storeSummariesTable.overallScore,
+            consistencyScore: storeSummariesTable.consistencyScore,
+            policyScore: storeSummariesTable.policyScore,
+          })
+          .from(storeSummariesTable)
+          .where(and(ne(storeSummariesTable.storeId, storeId), isNotNull(storeSummariesTable.updatedAt)));
+
+        const MIN_SAMPLE = 5; // lower threshold for store-level P90 vs product-level
+        let bScores: Record<string, number>;
+        let bSource: "real-p90" | "aspirational";
+
+        if (peerSummaries.length >= MIN_SAMPLE) {
+          const sortedVals = (key: keyof typeof peerSummaries[0]) =>
+            peerSummaries.map(s => (s[key] as number) ?? 0).filter(v => v > 0).sort((a, b) => a - b);
+          bScores = {
+            clarity:      Math.round(percentile(sortedVals("clarityScore"),      90)),
+            completeness: Math.round(percentile(sortedVals("completenessScore"), 90)),
+            trust:        Math.round(percentile(sortedVals("trustScore"),        90)),
+            tags:         Math.round(percentile(sortedVals("tagScore"),          90)),
+            overall:      Math.round(percentile(sortedVals("overallScore"),      90)),
+            consistency:  Math.round(percentile(sortedVals("consistencyScore"),  90)),
+            policy:       Math.round(percentile(sortedVals("policyScore"),       90)),
+          };
+          bSource = "real-p90";
+        } else {
+          bScores = { clarity: 82, completeness: 78, trust: 75, tags: 72, overall: 79, consistency: 80, policy: 85 };
+          bSource = "aspirational";
+        }
+
+        await db.update(storeSummariesTable).set({
+          benchmarkScores: bScores,
+          benchmarkSource: bSource,
+          benchmarkSampleSize: peerSummaries.length,
+          benchmarkComputedAt: new Date(),
+        }).where(eq(storeSummariesTable.storeId, storeId));
+
+        logger.info({ storeId, jobId, benchmarkSource: bSource, benchmarkSampleSize: peerSummaries.length }, "Benchmark scores precomputed");
+      } catch (benchmarkErr) {
+        logger.warn({ benchmarkErr, storeId, jobId }, "Benchmark precomputation failed — will fall back to on-demand O(N) query");
+      }
+
       await db.update(storesTable).set({
         status: "analyzed",
         lastAnalyzed: new Date(),
@@ -620,14 +688,19 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
         metadata: { overallScore: avgOverall, productCount, criticalIssues },
       });
 
-      logger.info({ storeId, avgOverall, productCount }, "Store analysis completed");
+      const totalMs = Math.round(performance.now() - analysisStart);
+      logger.info(
+        { storeId, jobId, totalDurationMs: totalMs, stepTimings, aiFallbackStats: getAiFallbackStats(), productCount },
+        "Analysis pipeline completed — timing breakdown",
+      );
+      logger.info({ storeId, jobId, avgOverall, productCount }, "Store analysis completed");
       await db
         .update(jobsTable)
         .set({ status: "completed", completedAt: new Date(), errorMessage: null })
         .where(eq(jobsTable.id, jobId));
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown analysis error";
-      logger.error({ err, storeId }, "Store analysis failed");
+      logger.error({ err, storeId, correlationId: jobId }, "Store analysis failed");
       await db.update(storesTable).set({ status: "error" }).where(eq(storesTable.id, storeId));
       await db.insert(activityTable).values({
         id: generateId(),
@@ -797,41 +870,60 @@ router.get("/stores/:storeId/benchmark", async (req: Request, res: Response): Pr
 
   const [summary] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
 
-  // Fetch all analyzed products EXCEPT from this store to compute a real benchmark
-  const allProducts = await db
-    .select({
-      clarityScore: productsTable.clarityScore,
-      completenessScore: productsTable.completenessScore,
-      trustScore: productsTable.trustScore,
-      tagScore: productsTable.tagScore,
-      overallScore: productsTable.overallScore,
-    })
-    .from(productsTable)
-    .where(and(ne(productsTable.storeId, storeId), isNotNull(productsTable.analyzedAt)));
+  // CB-8: Read precomputed benchmark from store_summaries (O(1)) instead of scanning all products (O(N))
+  const cachedBenchmark = summary?.benchmarkScores as Record<string, number> | null;
+  const cachedSource = (summary?.benchmarkSource as "real-p90" | "aspirational" | null) ?? null;
+  const cachedSampleSize = summary?.benchmarkSampleSize ?? 0;
 
-  // Compute P90 benchmarks from real data; fall back to aspirational if too few samples
-  const MIN_SAMPLE = 10;
   let benchmarkScores: typeof ASPIRATIONAL_BENCHMARK;
   let benchmarkSource: "real-p90" | "aspirational";
+  let benchmarkSampleSize: number;
 
-  if (allProducts.length >= MIN_SAMPLE) {
-    const sorted = (key: keyof typeof allProducts[0]) =>
-      allProducts.map(p => p[key] ?? 0).filter(v => v > 0).sort((a, b) => a - b);
-
+  if (cachedBenchmark && cachedSource) {
+    // Use precomputed data
     benchmarkScores = {
-      clarity:      Math.round(percentile(sorted("clarityScore"),      90)),
-      completeness: Math.round(percentile(sorted("completenessScore"), 90)),
-      trust:        Math.round(percentile(sorted("trustScore"),        90)),
-      tags:         Math.round(percentile(sorted("tagScore"),          90)),
-      overall:      Math.round(percentile(sorted("overallScore"),      90)),
-      // Consistency and policy come from store-level, not per-product — use aspirational
-      consistency:  ASPIRATIONAL_BENCHMARK.consistency,
-      policy:       ASPIRATIONAL_BENCHMARK.policy,
+      clarity:      cachedBenchmark.clarity      ?? ASPIRATIONAL_BENCHMARK.clarity,
+      completeness: cachedBenchmark.completeness ?? ASPIRATIONAL_BENCHMARK.completeness,
+      trust:        cachedBenchmark.trust        ?? ASPIRATIONAL_BENCHMARK.trust,
+      tags:         cachedBenchmark.tags         ?? ASPIRATIONAL_BENCHMARK.tags,
+      overall:      cachedBenchmark.overall      ?? ASPIRATIONAL_BENCHMARK.overall,
+      consistency:  cachedBenchmark.consistency  ?? ASPIRATIONAL_BENCHMARK.consistency,
+      policy:       cachedBenchmark.policy       ?? ASPIRATIONAL_BENCHMARK.policy,
     };
-    benchmarkSource = "real-p90";
+    benchmarkSource = cachedSource;
+    benchmarkSampleSize = cachedSampleSize;
   } else {
-    benchmarkScores = ASPIRATIONAL_BENCHMARK;
-    benchmarkSource = "aspirational";
+    // Fallback: on-demand O(N) scan (only if benchmark was never precomputed)
+    const allProducts = await db
+      .select({
+        clarityScore: productsTable.clarityScore,
+        completenessScore: productsTable.completenessScore,
+        trustScore: productsTable.trustScore,
+        tagScore: productsTable.tagScore,
+        overallScore: productsTable.overallScore,
+      })
+      .from(productsTable)
+      .where(and(ne(productsTable.storeId, storeId), isNotNull(productsTable.analyzedAt)));
+
+    const MIN_SAMPLE = 10;
+    if (allProducts.length >= MIN_SAMPLE) {
+      const sorted = (key: keyof typeof allProducts[0]) =>
+        allProducts.map(p => p[key] ?? 0).filter(v => v > 0).sort((a, b) => a - b);
+      benchmarkScores = {
+        clarity:      Math.round(percentile(sorted("clarityScore"),      90)),
+        completeness: Math.round(percentile(sorted("completenessScore"), 90)),
+        trust:        Math.round(percentile(sorted("trustScore"),        90)),
+        tags:         Math.round(percentile(sorted("tagScore"),          90)),
+        overall:      Math.round(percentile(sorted("overallScore"),      90)),
+        consistency:  ASPIRATIONAL_BENCHMARK.consistency,
+        policy:       ASPIRATIONAL_BENCHMARK.policy,
+      };
+      benchmarkSource = "real-p90";
+    } else {
+      benchmarkScores = ASPIRATIONAL_BENCHMARK;
+      benchmarkSource = "aspirational";
+    }
+    benchmarkSampleSize = allProducts.length;
   }
 
   const storeScores = {
@@ -876,7 +968,7 @@ router.get("/stores/:storeId/benchmark", async (req: Request, res: Response): Pr
     })),
     topImprovements: benchmarkSource === "real-p90" ? topImprovements : [],
     benchmarkSource,
-    benchmarkSampleSize: allProducts.length,
+    benchmarkSampleSize,
   });
 });
 

@@ -21,6 +21,9 @@ import ContentPage from "@/pages/content-page";
 import ToolsPage from "@/pages/tools-page";
 import ConnectStore from "@/pages/connect";
 import Settings from "@/pages/settings";
+import AeoScorePage from "@/pages/aeo-score";
+import SeoAuditPage from "@/pages/seo-audit";
+import GeoTrackerPage from "@/pages/geo-tracker";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +99,15 @@ function Router() {
         </Route>
         <Route path="/tools">
           {() => <ProtectedRoute component={ToolsPage} />}
+        </Route>
+        <Route path="/intelligence/aeo">
+          {() => <ProtectedRoute component={AeoScorePage} />}
+        </Route>
+        <Route path="/intelligence/seo">
+          {() => <ProtectedRoute component={SeoAuditPage} />}
+        </Route>
+        <Route path="/intelligence/geo">
+          {() => <ProtectedRoute component={GeoTrackerPage} />}
         </Route>
         <Route path="/connect">
           {() => <ProtectedRoute component={ConnectStore} />}

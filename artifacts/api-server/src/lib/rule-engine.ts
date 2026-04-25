@@ -86,6 +86,18 @@ const SPEC_TERMS = [
   "gtin", "mpn", "sku", "model number", "model no",
 ];
 
+// ─── CB-7: Locale / language detection ────────────────────────────────────────
+
+function detectIsEnglish(text: string): boolean {
+  const plain = stripHtml(text);
+  if (plain.length < 10) return true;
+  // Count word characters outside the Latin extended block (code points > 591)
+  const wordChars = plain.match(/\S/g) ?? [];
+  if (wordChars.length === 0) return true;
+  const nonLatinCount = wordChars.filter((ch) => ch.codePointAt(0)! > 591).length;
+  return nonLatinCount / wordChars.length <= 0.2;
+}
+
 const VOICE_FILLER_PREFIXES = /^(\d{3,}|[A-Z]{2,}\d+|[A-Z0-9]{6,})\b/;
 const CONVERSATIONAL_TERMS = [
   "you ", "your ", "you'll ", "you're ", "you've ",
@@ -228,49 +240,51 @@ function analyzeDescription(description: string | null, violations: RuleViolatio
     score -= 15;
   }
 
-  if (!hasKeyword(plain, MATERIAL_TERMS)) {
-    violations.push({
-      ruleId: "DESC_NO_MATERIAL",
-      category: "completeness",
-      severity: "medium",
-      title: "No material or composition mentioned",
-      description: "Material information is one of the top attributes AI assistants use for product matching.",
-      suggestion: "Mention what the product is made from (e.g. '100% organic cotton', 'aircraft-grade aluminum').",
-      evidence: "No material, fabric, or ingredient terms detected in description.",
-      impactScore: 45,
-      effortLevel: "medium",
-    });
-    score -= 20;
-  }
+  if (detectIsEnglish(plain)) {
+    if (!hasKeyword(plain, MATERIAL_TERMS)) {
+      violations.push({
+        ruleId: "DESC_NO_MATERIAL",
+        category: "completeness",
+        severity: "medium",
+        title: "No material or composition mentioned",
+        description: "Material information is one of the top attributes AI assistants use for product matching.",
+        suggestion: "Mention what the product is made from (e.g. '100% organic cotton', 'aircraft-grade aluminum').",
+        evidence: "No material, fabric, or ingredient terms detected in description.",
+        impactScore: 45,
+        effortLevel: "medium",
+      });
+      score -= 20;
+    }
 
-  if (!hasKeyword(plain, DIMENSION_TERMS)) {
-    violations.push({
-      ruleId: "DESC_NO_DIMENSIONS",
-      category: "completeness",
-      severity: "low",
-      title: "No size or dimension information",
-      description: "Dimensions and sizing help AI filter products for size-specific queries.",
-      suggestion: "Add measurements, weight, or sizing guide information.",
-      evidence: "No size, weight, or dimension terms found in description.",
-      impactScore: 30,
-      effortLevel: "medium",
-    });
-    score -= 10;
-  }
+    if (!hasKeyword(plain, DIMENSION_TERMS)) {
+      violations.push({
+        ruleId: "DESC_NO_DIMENSIONS",
+        category: "completeness",
+        severity: "low",
+        title: "No size or dimension information",
+        description: "Dimensions and sizing help AI filter products for size-specific queries.",
+        suggestion: "Add measurements, weight, or sizing guide information.",
+        evidence: "No size, weight, or dimension terms found in description.",
+        impactScore: 30,
+        effortLevel: "medium",
+      });
+      score -= 10;
+    }
 
-  if (!hasKeyword(plain, USE_CASE_TERMS)) {
-    violations.push({
-      ruleId: "DESC_NO_USE_CASE",
-      category: "completeness",
-      severity: "low",
-      title: "No use case or target audience",
-      description: "Without a clear use case, AI assistants cannot confidently recommend this product for specific needs.",
-      suggestion: "Add a sentence like: 'Designed for intermediate riders who want all-mountain versatility.'",
-      evidence: "No use case, target audience, or 'designed for' language detected.",
-      impactScore: 25,
-      effortLevel: "low",
-    });
-    score -= 10;
+    if (!hasKeyword(plain, USE_CASE_TERMS)) {
+      violations.push({
+        ruleId: "DESC_NO_USE_CASE",
+        category: "completeness",
+        severity: "low",
+        title: "No use case or target audience",
+        description: "Without a clear use case, AI assistants cannot confidently recommend this product for specific needs.",
+        suggestion: "Add a sentence like: 'Designed for intermediate riders who want all-mountain versatility.'",
+        evidence: "No use case, target audience, or 'designed for' language detected.",
+        impactScore: 25,
+        effortLevel: "low",
+      });
+      score -= 10;
+    }
   }
 
   return Math.max(0, score);
@@ -455,7 +469,7 @@ function analyzeVoiceReadiness(title: string, description: string | null, violat
     });
   }
 
-  if (plain && !hasKeyword(plain, CONVERSATIONAL_TERMS)) {
+  if (plain && detectIsEnglish(plain) && !hasKeyword(plain, CONVERSATIONAL_TERMS)) {
     violations.push({
       ruleId: "VOICE_NOT_CONVERSATIONAL",
       category: "clarity",
@@ -475,6 +489,8 @@ function analyzeVoiceReadiness(title: string, description: string | null, violat
 function analyzeComparisonReadiness(description: string | null, tags: string[], violations: RuleViolation[]): void {
   const plain = stripHtml(description);
   if (!plain || wordCount(plain) < 30) return; // already flagged by DESC_TOO_SHORT
+
+  if (!detectIsEnglish(plain)) { return; }
 
   const hasSpecs = hasKeyword(plain, SPEC_TERMS);
   const hasDimensions = hasKeyword(plain, DIMENSION_TERMS);
@@ -609,6 +625,47 @@ function checkTaxonomySpecificity(productType: string | null, violations: RuleVi
   }
 }
 
+// ─── U-6: Brand authority signal rules ───────────────────────────────────────
+
+function analyzeBrandAuthority(product: ProductInput, violations: RuleViolation[]): void {
+  // BRAND_LOW_REVIEW_COVERAGE: brand is set but no reviews (brand authority undermined)
+  if (product.vendor && product.reviewCount === 0) {
+    violations.push({
+      ruleId: "BRAND_LOW_REVIEW_COVERAGE",
+      category: "trust",
+      severity: "medium",
+      title: "Brand has no review coverage",
+      description: `"${product.vendor}" products appear in AI brand queries, but zero reviews undermine brand authority signals.`,
+      suggestion: `Send a post-purchase review request to customers who bought ${product.vendor} products. Even 3–5 reviews significantly improve brand authority in AI recommendations.`,
+      evidence: `Vendor/brand "${product.vendor}" is set but reviewCount is 0.`,
+      impactScore: 35,
+      effortLevel: "high",
+    });
+  }
+
+  // BRAND_INCONSISTENT_VENDOR: vendor set but not mentioned in title or description
+  if (product.vendor) {
+    const vendorLower = product.vendor.toLowerCase();
+    const titleLower = product.title.toLowerCase();
+    const descPlain = stripHtml(product.description).toLowerCase();
+    const mentionedInTitle = titleLower.includes(vendorLower);
+    const mentionedInDesc = descPlain.includes(vendorLower);
+    if (!mentionedInTitle && !mentionedInDesc) {
+      violations.push({
+        ruleId: "BRAND_INCONSISTENT_VENDOR",
+        category: "trust",
+        severity: "low",
+        title: "Brand name absent from product content",
+        description: "AI agents attribute products to brands by reading titles and descriptions. If the vendor name never appears in content, AI cannot associate this product with your brand.",
+        suggestion: `Mention "${product.vendor}" in the product title or first paragraph of the description so AI assistants can attribute this product to your brand.`,
+        evidence: `Vendor is "${product.vendor}" but it does not appear in the title or description text.`,
+        impactScore: 20,
+        effortLevel: "low",
+      });
+    }
+  }
+}
+
 // ─── Score from violations ────────────────────────────────────────────────────
 
 function computeScore(violations: RuleViolation[], category: string): number {
@@ -627,6 +684,7 @@ export function runRuleEngine(product: ProductInput): RuleEngineResult {
   const completenessFromDesc = analyzeDescription(product.description, violations);
   const tagsScore = analyzeTags(product.tags, product.productType, violations);
   const trustScore = analyzeTrust(product, violations);
+  analyzeBrandAuthority(product, violations);
   checkStructuredData(product.description, violations);
   checkTaxonomySpecificity(product.productType, violations);  // Upgrade 2
   analyzeVoiceReadiness(product.title, product.description, violations);

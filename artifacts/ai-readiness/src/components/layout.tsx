@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Package, Wrench, CheckSquare,
   Brain, GitBranch, Settings, BarChart3, Store,
-  ChevronDown, LogOut, Plus, Check,
+  ChevronDown, LogOut, Plus, Check, Search, LineChart, Globe,
 } from "lucide-react";
 import { useStore } from "@/context/store-context";
 import { useAuth } from "@/context/auth-context";
@@ -32,15 +32,23 @@ const navGroups = [
   {
     label: null,
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard", label: "Home", icon: LayoutDashboard },
       { href: "/products", label: "Products", icon: Package },
     ],
   },
   {
-    label: "Analyze",
+    label: "ANALYZE",
     items: [
       { href: "/issues", label: "Issues", icon: Wrench },
       { href: "/fixes", label: "Quick Fixes", icon: CheckSquare },
+    ],
+  },
+  {
+    label: "INTELLIGENCE",
+    items: [
+      { href: "/intelligence/aeo", label: "AEO Score", icon: Search, isNew: true },
+      { href: "/intelligence/seo", label: "SEO Audit", icon: LineChart, isNew: false },
+      { href: "/intelligence/geo", label: "GEO Tracker", icon: Globe, isNew: true },
     ],
   },
   {
@@ -56,8 +64,14 @@ const navGroups = [
 // ─── Nav item ─────────────────────────────────────────────────────────────────
 
 function NavItem({
-  href, label, icon: Icon, badge,
-}: { href: string; label: string; icon: React.FC<{ className?: string }>; badge?: number }) {
+  href, label, icon: Icon, badge, isNew,
+}: {
+  href: string;
+  label: string;
+  icon: React.FC<{ className?: string }>;
+  badge?: number;
+  isNew?: boolean;
+}) {
   const [location] = useLocation();
   const isActive = location === href || (href !== "/dashboard" && location.startsWith(href));
   return (
@@ -65,13 +79,16 @@ function NavItem({
       <div className={cn(
         "flex items-center gap-2.5 px-3 py-[7px] rounded-md text-[13px] font-medium transition-colors cursor-pointer group",
         isActive
-          ? "bg-indigo-50 text-indigo-700"
-          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+          ? "bg-emerald-50 text-emerald-700 font-semibold"
+          : "text-slate-600 hover:bg-slate-50 hover:text-slate-700",
       )}>
-        <Icon className={cn("w-[15px] h-[15px] flex-shrink-0", isActive ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600")} />
+        <Icon className={cn("w-[15px] h-[15px] flex-shrink-0", isActive ? "text-emerald-600" : "text-slate-400 group-hover:text-slate-600")} />
         <span>{label}</span>
         {badge !== undefined && badge > 0 && !isActive && (
           <Badge variant="destructive" className="ml-auto text-[10px] h-4 px-1.5">{badge}</Badge>
+        )}
+        {isNew && (
+          <span className="ml-auto text-[9px] font-bold uppercase tracking-wide bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">New</span>
         )}
       </div>
     </Link>
@@ -110,7 +127,7 @@ function StoreSelector() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors max-w-[220px] focus:outline-none focus:ring-2 focus:ring-indigo-200">
+        <button className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors max-w-[220px] focus:outline-none focus:ring-2 focus:ring-emerald-200">
           <Store className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
           <span className="truncate text-slate-700 text-xs font-medium">
             {activeStore?.name ?? activeStore?.domain ?? "Select store"}
@@ -129,11 +146,11 @@ function StoreSelector() {
           >
             <Store className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
             <span className="truncate text-sm flex-1">{store.name ?? store.domain}</span>
-            {store.id === activeStoreId && <Check className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />}
+            {store.id === activeStoreId && <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="gap-2 cursor-pointer text-indigo-600" onClick={() => navigate("/connect")}>
+        <DropdownMenuItem className="gap-2 cursor-pointer text-emerald-600" onClick={() => navigate("/connect")}>
           <Plus className="w-3.5 h-3.5" />
           <span className="text-sm">Add store</span>
         </DropdownMenuItem>
@@ -153,10 +170,10 @@ function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center focus:outline-none focus:ring-2 focus:ring-indigo-200 rounded-full">
+        <button className="flex items-center focus:outline-none focus:ring-2 focus:ring-emerald-200 rounded-full">
           <Avatar className="w-7 h-7">
             <AvatarImage src={user?.avatarUrl ?? undefined} />
-            <AvatarFallback className="text-[10px] bg-indigo-100 text-indigo-700 font-semibold">{initials}</AvatarFallback>
+            <AvatarFallback className="text-[10px] bg-emerald-100 text-emerald-700 font-semibold">{initials}</AvatarFallback>
           </Avatar>
         </button>
       </DropdownMenuTrigger>
@@ -199,15 +216,18 @@ export function AppLayout({ children }: { children: ReactNode }) {
   });
 
   return (
-    <div className="h-screen flex flex-col bg-[#F8FAFC] overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#f0f7f4] overflow-hidden">
       {/* ── Fixed top header ── */}
       <header className="fixed top-0 left-0 right-0 z-50 h-14 bg-white border-b border-slate-200 flex items-center px-5 gap-4">
         <Link href="/dashboard">
           <div className="flex items-center gap-2.5 cursor-pointer flex-shrink-0 mr-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
               <BarChart3 className="w-4 h-4 text-white" />
             </div>
-            <span className="text-sm font-bold text-slate-900 hidden md:block">AI Readiness</span>
+            <div className="hidden md:flex flex-col leading-tight">
+              <span className="text-sm font-bold text-slate-900">AI Readiness</span>
+              <span className="text-[10px] text-slate-400 tracking-wide uppercase font-medium">Shopify Intelligence</span>
+            </div>
           </div>
         </Link>
 
@@ -241,6 +261,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       href={item.href}
                       label={item.label}
                       icon={item.icon}
+                      isNew={"isNew" in item ? item.isNew : undefined}
                       badge={
                         item.href === "/fixes" ? (summary?.pendingFixes ?? undefined) :
                         item.href === "/issues" ? (summary?.criticalIssues ?? undefined) :
@@ -252,10 +273,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
               </div>
             ))}
           </nav>
+
+          {/* ── Bottom nav ── */}
+          <div className="px-3 py-3 border-t border-slate-200">
+            <NavItem href="/settings" label="Settings" icon={Settings} />
+          </div>
         </aside>
 
         {/* ── Scrollable content ── */}
-        <main className="flex-1 ml-[220px] overflow-y-auto">
+        <main className="flex-1 ml-[220px] overflow-y-auto bg-[#f0f7f4]">
           {children}
         </main>
       </div>

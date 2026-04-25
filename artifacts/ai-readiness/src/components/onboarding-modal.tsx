@@ -5,7 +5,7 @@ import { useConnectStore } from "@workspace/api-client-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BarChart3, Store, Zap, Key, AlertCircle, Loader2, ChevronDown, ArrowRight, CheckCircle } from "lucide-react";
+import { BarChart3, Store, Zap, Key, AlertCircle, Loader2, ChevronDown, ArrowRight, CheckCircle, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface OnboardingModalProps {

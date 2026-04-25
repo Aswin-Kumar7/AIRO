@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useStore } from "@/context/store-context";
 import { AppLayout } from "@/components/layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertCircle, Zap, Store } from "lucide-react";
@@ -42,19 +41,20 @@ export default function ConnectStore() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-lg mx-auto">
-        <div className="mb-6">
-          <h1 className="text-xl font-bold text-slate-900">Connect a store</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Add a Shopify store to analyze its AI readiness</p>
-        </div>
+      <div className="min-h-[60vh] flex items-center justify-center p-6">
+        <div className="w-full max-w-md">
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Store className="w-4 h-4 text-indigo-500" /> Shopify store
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+              <Store className="h-6 w-6 text-emerald-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900">Connect your store</h1>
+            <p className="text-slate-500 text-sm mt-2">Enter your Shopify domain to get started</p>
+          </div>
+
+          {/* Card */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
             <div>
               <label className="text-xs font-medium text-slate-700 mb-1 block">Store domain</label>
               <Input
@@ -68,16 +68,21 @@ export default function ConnectStore() {
 
             <form onSubmit={handleOAuth}>
               {error && (
-                <div className="flex items-center gap-2 text-red-600 text-xs mb-2">
+                <div className="flex items-center gap-2 bg-red-50 text-red-600 text-xs rounded-lg px-3 py-2 mb-3">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />{error}
                 </div>
               )}
-              <Button type="submit" className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700">
+              <Button type="submit" className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
                 <Zap className="w-3.5 h-3.5" />Connect with Shopify OAuth
               </Button>
             </form>
-          </CardContent>
-        </Card>
+          </div>
+
+          {/* Footer note */}
+          <p className="text-center text-xs text-slate-400 mt-4">
+            You'll need a Shopify Admin API token with read_products scope
+          </p>
+        </div>
       </div>
     </AppLayout>
   );

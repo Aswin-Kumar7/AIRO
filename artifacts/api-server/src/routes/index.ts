@@ -9,6 +9,7 @@ import insightsRouter from "./insights";
 import shopifyRouter from "./shopify";
 import featuresRouter from "./features";
 import webhooksRouter from "./webhooks";
+import visibilityRouter from "./visibility";
 
 import { db, storesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
@@ -44,5 +45,6 @@ router.use(insightsRouter);
 router.use(shopifyRouter);
 router.use(featuresRouter);
 router.use(webhooksRouter);
+router.use(visibilityRouter);
 
 export default router;
