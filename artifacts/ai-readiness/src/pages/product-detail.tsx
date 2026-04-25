@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { useStore } from "@/context/store-context";
-import { useGetProduct, getGetProductQueryKey, getListProductsQueryKey } from "@workspace/api-client-react";
+import {
+  useGetProduct,
+  getGetProductQueryKey,
+  getListProductsQueryKey,
+} from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout";
-import { ScoreRing, ScoreBar } from "@/components/score-ring";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Loader2, Package, Tag, AlertTriangle, CheckCircle, ChevronLeft,
-  Sparkles, Zap, Shield, Copy, Check, Code2, MessageSquare, XCircle,
+  Loader2, Package, Tag, AlertTriangle, CheckCircle2, ChevronLeft,
+  Sparkles, Zap, XCircle, ChevronDown, ChevronUp, MessageSquare,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -16,7 +18,8 @@ import { QuickFixSheet } from "@/components/quick-fix-sheet";
 import { useToast } from "@/hooks/use-toast";
 import { getProductAiQa, type ProductQaResult } from "@/lib/features-api";
 
-// Extended gap type (backend returns these extra fields now)
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type EnrichedGap = {
   id: string;
   category: string;
@@ -31,489 +34,559 @@ type EnrichedGap = {
   isFixed: boolean;
 };
 
-const categoryIcons: Record<string, string> = {
-  clarity: "🔍", completeness: "📋", trust: "🛡️",
-  tags: "🏷️", policy: "📄", consistency: "🔄",
+// ─── Severity config ──────────────────────────────────────────────────────────
+
+const SEV_BAR: Record<string, string> = {
+  high: "bg-red-500",
+  medium: "bg-amber-500",
+  low: "bg-violet-400",
 };
 
-const severityBorder: Record<string, string> = {
-  high: "border-l-red-500",
-  medium: "border-l-amber-400",
-  low: "border-l-blue-400",
+const SEV_DOT: Record<string, string> = {
+  high: "bg-red-500",
+  medium: "bg-amber-400",
+  low: "bg-violet-400",
 };
 
-const effortConfig: Record<string, { label: string; className: string }> = {
-  low: { label: "Easy", className: "bg-green-100 text-green-700" },
-  medium: { label: "Medium", className: "bg-amber-100 text-amber-700" },
-  high: { label: "High effort", className: "bg-red-100 text-red-700" },
+const EFFORT_PILL: Record<string, string> = {
+  low: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  medium: "bg-amber-50 text-amber-700 border-amber-200",
+  high: "bg-red-50 text-red-700 border-red-200",
 };
 
-// Pre-written trust copy templates for common gaps
-const TRUST_TEMPLATES: Record<string, { label: string; templates: string[] }> = {
-  TRUST_NO_REVIEWS: {
-    label: "Review prompts",
-    templates: [
-      "⭐ Be the first to review this product — your feedback helps others make confident purchases.",
-      "Verified customer reviews coming soon. Purchase today and share your experience.",
-    ],
-  },
-  TRUST_NO_BRAND: {
-    label: "Brand copy",
-    templates: [
-      "Handcrafted by [Your Brand] — quality you can trust.",
-      "[Your Brand]: designed with care, built to last.",
-    ],
-  },
-  TRUST_NO_SCHEMA: {
-    label: "Schema note",
-    templates: [
-      "Use the 'Generate JSON-LD' button in Quick Fix to add machine-readable product markup.",
-    ],
-  },
+const EFFORT_LABEL: Record<string, string> = {
+  low: "Easy",
+  medium: "Medium",
+  high: "Effort",
 };
 
-function ImpactBar({ score }: { score: number }) {
-  const color = score >= 70 ? "bg-red-500" : score >= 40 ? "bg-amber-500" : "bg-blue-400";
+// ─── Score bar ────────────────────────────────────────────────────────────────
+
+function ScoreLine({
+  label,
+  score,
+  color,
+}: {
+  label: string;
+  score: number;
+  color: string;
+}) {
   return (
-    <div className="flex items-center gap-1.5">
-      <div className="h-1.5 w-14 bg-muted rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${score}%` }} />
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-24 flex-shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${color}`}
+          style={{ width: `${score}%` }}
+        />
       </div>
-      <span className="text-[10px] text-muted-foreground tabular-nums">{score}</span>
+      <span className="text-xs font-semibold text-slate-700 w-6 text-right tabular-nums">
+        {score}
+      </span>
     </div>
   );
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  function handleCopy() {
-    void navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }
-  return (
-    <button onClick={handleCopy} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors">
-      {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-      {copied ? "Copied" : "Copy"}
-    </button>
-  );
-}
+// ─── Issue row ────────────────────────────────────────────────────────────────
 
-function IssueCard({ issue, onOpenQuickFix }: { issue: EnrichedGap; onOpenQuickFix?: () => void }) {
-  const effort = issue.effortLevel ? effortConfig[issue.effortLevel] : null;
+function IssueRow({
+  issue,
+  onFix,
+}: {
+  issue: EnrichedGap;
+  onFix: () => void;
+}) {
+  const [open, setOpen] = useState(false);
   const impact = issue.impactScore ?? 50;
-  const canAutoFix = ["clarity", "completeness", "tags"].includes(issue.category);
-  const trustTemplates = issue.ruleId ? TRUST_TEMPLATES[issue.ruleId] : null;
+  const canAutoFix = ["clarity", "completeness", "tags"].includes(
+    issue.category,
+  );
 
   return (
-    <div className={`p-3 rounded-lg border-l-4 border border-border ${severityBorder[issue.severity] ?? "border-l-gray-400"} ${issue.isFixed ? "opacity-60" : ""}`}>
-      <div className="flex items-start gap-2.5">
-        <span className="text-base flex-shrink-0">{categoryIcons[issue.category] ?? "⚠️"}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 mb-1">
-            <p className="text-xs font-semibold text-foreground">{issue.title}</p>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              {effort && (
-                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${effort.className}`}>
-                  {effort.label}
-                </span>
-              )}
-              {issue.isFixed && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
-            </div>
+    <div
+      className={`border-b border-slate-100 last:border-0 ${issue.isFixed ? "opacity-50" : ""}`}
+    >
+      {/* Row header */}
+      <button
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50/60 text-left transition-colors"
+        onClick={() => setOpen((p) => !p)}
+      >
+        <span
+          className={`w-2 h-2 rounded-full flex-shrink-0 mt-0.5 ${SEV_DOT[issue.severity] ?? "bg-slate-300"}`}
+        />
+        <p className="flex-1 text-sm font-medium text-slate-800 truncate">
+          {issue.title}
+        </p>
+        {issue.isFixed && (
+          <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+        )}
+        {issue.effortLevel && (
+          <span
+            className={`text-[10px] font-medium px-2 py-0.5 rounded-full border hidden sm:inline-flex flex-shrink-0 ${EFFORT_PILL[issue.effortLevel] ?? ""}`}
+          >
+            {EFFORT_LABEL[issue.effortLevel] ?? issue.effortLevel}
+          </span>
+        )}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="w-10 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+            <div
+              className={`h-full rounded-full ${SEV_BAR[issue.severity] ?? "bg-slate-300"}`}
+              style={{ width: `${impact}%` }}
+            />
           </div>
+          {open ? (
+            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          )}
+        </div>
+      </button>
 
+      {/* Expanded details */}
+      {open && (
+        <div className="px-4 pb-4 ml-5 space-y-2.5">
           {issue.evidence && (
-            <div className="mb-1.5 px-2 py-1 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded text-[10px] text-amber-800 dark:text-amber-300 font-medium">
-              {issue.evidence}
+            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-800">{issue.evidence}</p>
             </div>
           )}
-
-          <p className="text-[11px] text-muted-foreground mb-1.5 leading-relaxed">{issue.description}</p>
-
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] text-foreground flex-1">
-              <span className="font-medium">Fix: </span>{issue.suggestion}
-            </p>
-            <ImpactBar score={impact} />
+          <p className="text-xs text-slate-500 leading-relaxed">
+            {issue.description}
+          </p>
+          <div className="flex items-start gap-2 bg-slate-50 rounded-lg px-3 py-2">
+            <Zap className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-slate-700">{issue.suggestion}</p>
           </div>
-
-          {/* Trust copy templates */}
-          {trustTemplates && (
-            <div className="mt-2 space-y-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{trustTemplates.label}</p>
-              {trustTemplates.templates.map((t, i) => (
-                <div key={i} className="flex items-start justify-between gap-2 px-2 py-1.5 bg-muted/50 rounded text-[11px] text-foreground">
-                  <span className="flex-1">{t}</span>
-                  <CopyButton text={t} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Quick Fix link for auto-fixable issues */}
-          {canAutoFix && !issue.isFixed && onOpenQuickFix && (
+          {canAutoFix && !issue.isFixed && (
             <button
-              onClick={onOpenQuickFix}
-              className="mt-2 flex items-center gap-1 text-[10px] text-primary font-medium hover:underline"
+              onClick={onFix}
+              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
             >
               <Zap className="w-3 h-3" />
-              Open Quick Fix →
+              Fix with Quick Fix
             </button>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-export default function ProductDetail({ params }: { params: { productId: string } }) {
+// ─── AI Q&A panel ─────────────────────────────────────────────────────────────
+
+function AiQaPanel({
+  storeId,
+  productId,
+}: {
+  storeId: string;
+  productId: string;
+}) {
+  const [enabled, setEnabled] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: ["product-ai-qa", storeId, productId],
+    queryFn: () => getProductAiQa(storeId, productId),
+    enabled,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  if (!enabled) {
+    return (
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-500">
+          Test whether AI can answer buyer questions about this product.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs flex-shrink-0"
+          onClick={() => setEnabled(true)}
+        >
+          Run test
+        </Button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-2">
+        <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
+        <span className="text-xs text-slate-400">Testing AI answers…</span>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const color =
+    data.answerabilityScore >= 60
+      ? "text-emerald-600"
+      : data.answerabilityScore >= 40
+        ? "text-amber-600"
+        : "text-red-500";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs text-slate-500">
+          {data.answerableCount}/{data.totalQuestions} questions answerable
+        </span>
+        <span className={`text-sm font-bold tabular-nums ${color}`}>
+          {data.answerabilityScore}%
+        </span>
+      </div>
+      {data.results.map((qa: ProductQaResult, i: number) => (
+        <div
+          key={i}
+          className={`rounded-lg border px-3 py-2.5 ${
+            qa.canAnswer
+              ? "border-emerald-200 bg-emerald-50/40"
+              : "border-red-200 bg-red-50/40"
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            {qa.canAnswer ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
+            ) : (
+              <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-medium text-slate-800 mb-1">
+                {qa.question}
+              </p>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                {qa.answer}
+              </p>
+              {qa.missingInfo && (
+                <p className="text-[10px] text-amber-700 mt-1 font-medium">
+                  Missing: {qa.missingInfo}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function ProductDetail({
+  params,
+}: {
+  params: { productId: string };
+}) {
   const { activeStoreId } = useStore();
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [quickFixOpen, setQuickFixOpen] = useState(false);
-  const [aiQaEnabled, setAiQaEnabled] = useState(false);
 
-  const { data: product, isLoading } = useGetProduct(activeStoreId!, params.productId, {
-    query: {
-      enabled: !!activeStoreId && !!params.productId,
-      queryKey: getGetProductQueryKey(activeStoreId!, params.productId),
+  const { data: product, isLoading } = useGetProduct(
+    activeStoreId!,
+    params.productId,
+    {
+      query: {
+        enabled: !!activeStoreId && !!params.productId,
+        queryKey: getGetProductQueryKey(activeStoreId!, params.productId),
+      },
     },
-  });
+  );
 
-  const { data: aiQa, isLoading: aiQaLoading } = useQuery({
-    queryKey: ["product-ai-qa", activeStoreId, params.productId],
-    queryFn: () => getProductAiQa(activeStoreId!, params.productId),
-    enabled: !!activeStoreId && !!params.productId && aiQaEnabled,
-    staleTime: 10 * 60 * 1000,
-  });
-
-  // Cast issues to enriched type
   const issues = (product?.issues ?? []) as unknown as EnrichedGap[];
+  const openIssues = issues.filter((i) => !i.isFixed);
   const isAnalyzed = !!product?.analyzedAt;
 
-  if (!activeStoreId) { navigate("/"); return null; }
+  if (!activeStoreId) {
+    navigate("/");
+    return null;
+  }
 
   return (
     <AppLayout>
       <div className="p-6 max-w-5xl mx-auto">
+        {/* Back */}
         <Link href="/products">
-          <Button variant="ghost" size="sm" className="mb-4 text-muted-foreground -ml-2">
-            <ChevronLeft className="w-4 h-4 mr-1" />
+          <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 mb-5 transition-colors">
+            <ChevronLeft className="w-3.5 h-3.5" />
             Products
-          </Button>
+          </button>
         </Link>
 
         {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
           </div>
         ) : product ? (
-          <>
-            {/* Header */}
-            <div className="flex items-start gap-4 mb-6">
+          <div className="space-y-5">
+            {/* ── Product header ── */}
+            <div className="flex items-start gap-4 bg-white rounded-xl border border-slate-200 p-5">
               {product.imageUrl ? (
-                <img src={product.imageUrl} alt={product.title} className="w-16 h-16 rounded-xl object-cover border border-border flex-shrink-0" />
+                <img
+                  src={product.imageUrl}
+                  alt={product.title}
+                  className="w-14 h-14 rounded-lg object-cover border border-slate-200 flex-shrink-0"
+                />
               ) : (
-                <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
-                  <Package className="w-7 h-7 text-muted-foreground" />
+                <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                  <Package className="w-6 h-6 text-slate-400" />
                 </div>
               )}
-              <div className="flex-1">
-                <h1 className="text-xl font-bold text-foreground">{product.title}</h1>
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  {product.productType && <Badge variant="secondary" className="text-[10px]">{product.productType}</Badge>}
-                  {product.vendor && <span className="text-xs text-muted-foreground">by {product.vendor}</span>}
-                  {product.price && <span className="text-xs text-muted-foreground">${product.price}</span>}
+              <div className="flex-1 min-w-0">
+                <h1 className="text-lg font-bold text-slate-900 leading-snug">
+                  {product.title}
+                </h1>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  {product.productType && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {product.productType}
+                    </Badge>
+                  )}
+                  {product.vendor && (
+                    <span className="text-xs text-slate-400">
+                      {product.vendor}
+                    </span>
+                  )}
+                  {product.price && (
+                    <span className="text-xs font-medium text-slate-600">
+                      ${product.price}
+                    </span>
+                  )}
                   {!isAnalyzed && (
-                    <Badge variant="outline" className="text-[10px] text-muted-foreground">Not analyzed yet</Badge>
+                    <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                      Not analyzed
+                    </span>
                   )}
                 </div>
+                {product.aiPerceptionSummary && (
+                  <p className="text-xs text-slate-500 italic mt-2 leading-relaxed">
+                    "{product.aiPerceptionSummary}"
+                  </p>
+                )}
               </div>
-              <div className="flex items-center gap-3 flex-shrink-0">
-                {isAnalyzed && <ScoreRing score={product.score?.overall ?? 0} size={68} label="Overall" />}
-                <Button size="sm" onClick={() => setQuickFixOpen(true)} className="h-8">
-                  <Zap className="w-3.5 h-3.5 mr-1.5" />
+              <div className="flex-shrink-0 text-right">
+                {isAnalyzed && (
+                  <div className="mb-3">
+                    <p
+                      className={`text-3xl font-bold tabular-nums ${
+                        (product.score?.overall ?? 0) >= 70
+                          ? "text-emerald-600"
+                          : (product.score?.overall ?? 0) >= 50
+                            ? "text-amber-600"
+                            : "text-red-500"
+                      }`}
+                    >
+                      {Math.round(product.score?.overall ?? 0)}
+                    </p>
+                    <p className="text-[10px] text-slate-400">/ 100</p>
+                  </div>
+                )}
+                <Button
+                  size="sm"
+                  onClick={() => setQuickFixOpen(true)}
+                  className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                >
+                  <Zap className="w-3.5 h-3.5" />
                   Quick Fix
                 </Button>
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              {/* Left: scores + issues */}
-              <div className="col-span-2 space-y-4">
-                {isAnalyzed && (
-                  <Card className="border-border">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm">Score Breakdown</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <ScoreBar score={product.score?.clarity ?? 0} label="Clarity — How clearly is this product described for AI?" />
-                      <ScoreBar score={product.score?.completeness ?? 0} label="Completeness — Specs, dimensions, materials present?" />
-                      <ScoreBar score={product.score?.trust ?? 0} label="Trust Signals — Brand, reviews, structured data?" />
-                      <ScoreBar score={product.score?.tags ?? 0} label="Tag Quality — Semantic and AI-retrieval-ready?" />
-                    </CardContent>
-                  </Card>
-                )}
+            {/* ── Main content ── */}
+            <div className="grid grid-cols-3 gap-5">
 
-                {product.aiPerceptionSummary && (
-                  <Card className="border-violet-200 bg-violet-50/40 dark:bg-violet-950/20 dark:border-violet-800">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-violet-500" />
-                        How AI Agents Perceive This Product
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-foreground leading-relaxed italic">"{product.aiPerceptionSummary}"</p>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {issues.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-amber-500" />
-                        Issues ({issues.filter(i => !i.isFixed).length} open)
-                      </h3>
-                      <button
-                        onClick={() => setQuickFixOpen(true)}
-                        className="text-xs text-primary font-medium hover:underline flex items-center gap-1"
-                      >
-                        <Zap className="w-3 h-3" /> Fix all →
-                      </button>
+              {/* Left: Issues */}
+              <div className="col-span-2 space-y-5">
+                {isAnalyzed ? (
+                  <>
+                    {/* Issues list */}
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-amber-500" />
+                          <span className="text-sm font-semibold text-slate-800">
+                            Issues
+                          </span>
+                          {openIssues.length > 0 && (
+                            <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-medium">
+                              {openIssues.length} open
+                            </span>
+                          )}
+                        </div>
+                        {openIssues.length > 0 && (
+                          <button
+                            onClick={() => setQuickFixOpen(true)}
+                            className="text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                          >
+                            <Zap className="w-3 h-3" />
+                            Fix all
+                          </button>
+                        )}
+                      </div>
+                      {issues.length === 0 ? (
+                        <div className="py-12 text-center">
+                          <CheckCircle2 className="w-8 h-8 text-emerald-300 mx-auto mb-2" />
+                          <p className="text-sm text-slate-400">No issues found</p>
+                        </div>
+                      ) : (
+                        issues.map((issue) => (
+                          <IssueRow
+                            key={issue.id}
+                            issue={issue}
+                            onFix={() => setQuickFixOpen(true)}
+                          />
+                        ))
+                      )}
                     </div>
-                    <div className="space-y-2">
-                      {issues.map((issue) => (
-                        <IssueCard
-                          key={issue.id}
-                          issue={issue}
-                          onOpenQuickFix={() => setQuickFixOpen(true)}
+
+                    {/* AI Q&A */}
+                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
+                        <MessageSquare className="w-4 h-4 text-slate-400" />
+                        <span className="text-sm font-semibold text-slate-800">
+                          Can AI answer this?
+                        </span>
+                      </div>
+                      <div className="px-4 py-4">
+                        <AiQaPanel
+                          storeId={activeStoreId}
+                          productId={params.productId}
                         />
-                      ))}
+                      </div>
                     </div>
+                  </>
+                ) : (
+                  <div className="bg-white rounded-xl border border-dashed border-slate-200 py-16 text-center">
+                    <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-slate-600 mb-1">
+                      Not analyzed yet
+                    </p>
+                    <p className="text-xs text-slate-400 mb-4 max-w-xs mx-auto">
+                      Run an analysis from the Dashboard to get scores and issues
+                      for this product.
+                    </p>
+                    <Link href="/dashboard">
+                      <Button size="sm" variant="outline" className="text-xs">
+                        Go to Dashboard
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+
+              {/* Right: meta panel */}
+              <div className="space-y-4">
+                {/* Scores */}
+                {isAnalyzed && (
+                  <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      Score breakdown
+                    </p>
+                    <ScoreLine
+                      label="Clarity"
+                      score={product.score?.clarity ?? 0}
+                      color="bg-teal-500"
+                    />
+                    <ScoreLine
+                      label="Completeness"
+                      score={product.score?.completeness ?? 0}
+                      color="bg-violet-500"
+                    />
+                    <ScoreLine
+                      label="Trust"
+                      score={product.score?.trust ?? 0}
+                      color="bg-rose-500"
+                    />
+                    <ScoreLine
+                      label="Tags"
+                      score={product.score?.tags ?? 0}
+                      color="bg-amber-500"
+                    />
                   </div>
                 )}
 
-                {/* AI Q&A Test */}
-                <Card className="border-border">
-                  <CardHeader className="pb-2 pt-4 px-4 flex-row items-center justify-between space-y-0">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-primary" />
-                      Can AI Answer This?
-                    </CardTitle>
-                    {!aiQaEnabled && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setAiQaEnabled(true)}>
-                        Run test
-                      </Button>
-                    )}
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4">
-                    {!aiQaEnabled ? (
-                      <p className="text-xs text-muted-foreground">
-                        Test whether an AI assistant can answer 5 standard buyer questions from this product page alone.
-                      </p>
-                    ) : aiQaLoading ? (
-                      <div className="flex items-center gap-2 py-4">
-                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Testing AI answers…</span>
-                      </div>
-                    ) : aiQa ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between mb-3">
-                          <span className="text-xs text-muted-foreground">{aiQa.answerableCount}/{aiQa.totalQuestions} questions answerable</span>
-                          <span className={`text-sm font-bold ${aiQa.answerabilityScore >= 60 ? "text-green-600" : aiQa.answerabilityScore >= 40 ? "text-amber-600" : "text-red-600"}`}>
-                            {aiQa.answerabilityScore}%
-                          </span>
-                        </div>
-                        {aiQa.results.map((qa: ProductQaResult, i: number) => (
-                          <div key={i} className={`rounded-md p-3 border ${qa.canAnswer ? "border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900" : "border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900"}`}>
-                            <div className="flex items-start gap-2">
-                              {qa.canAnswer
-                                ? <CheckCircle className="w-3.5 h-3.5 text-green-600 flex-shrink-0 mt-0.5" />
-                                : <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                              }
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[11px] font-medium text-foreground mb-1">{qa.question}</p>
-                                <p className="text-[11px] text-muted-foreground leading-relaxed">{qa.answer}</p>
-                                {qa.missingInfo && (
-                                  <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-1 font-medium">
-                                    Missing: {qa.missingInfo}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </CardContent>
-                </Card>
-
-                {!isAnalyzed && (
-                  <Card className="border-dashed border-border">
-                    <CardContent className="py-10 text-center">
-                      <Sparkles className="w-7 h-7 text-muted-foreground mx-auto mb-3" />
-                      <p className="text-sm font-medium text-foreground mb-1">Not yet analyzed</p>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Run an analysis from the dashboard to get AI readiness scores and issues for this product.
-                      </p>
-                      <Link href="/dashboard">
-                        <Button size="sm" variant="outline">Go to Dashboard</Button>
-                      </Link>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-
-              {/* Right: tags + suggestions + JSON-LD + description */}
-              <div className="space-y-4">
-                {/* Quick Fix CTA */}
-                <Card className="border-primary/30 bg-primary/5">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Zap className="w-4 h-4 text-primary" />
-                      <p className="text-xs font-semibold text-foreground">Quick Fix Available</p>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mb-3">
-                      AI-generate improved descriptions, tags, title, and JSON-LD markup — then push directly to Shopify.
-                    </p>
-                    <Button size="sm" className="w-full h-7 text-xs" onClick={() => setQuickFixOpen(true)}>
-                      <Zap className="w-3.5 h-3.5 mr-1.5" />
-                      Open Quick Fix
-                    </Button>
-                  </CardContent>
-                </Card>
-
                 {/* Tags */}
-                <Card className="border-border">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs flex items-center gap-2">
-                      <Tag className="w-3.5 h-3.5" />
-                      Tags ({product.tags.length})
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {product.tags.length > 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-4">
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <Tag className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                      Tags
+                    </span>
+                    <span className="ml-auto text-xs text-slate-400">
+                      {product.tags.length}
+                    </span>
+                  </div>
+                  {product.tags.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {product.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400">
+                      No tags — add 5–10 descriptive tags.
+                    </p>
+                  )}
+                  {product.suggestedTags.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-1.5 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" /> AI suggestions
+                      </p>
                       <div className="flex flex-wrap gap-1">
-                        {product.tags.map(tag => (
-                          <span key={tag} className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded border border-border">{tag}</span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">No tags — add 5–10 semantic tags for AI retrieval</p>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Suggested tags */}
-                {product.suggestedTags.length > 0 && (
-                  <Card className="border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20 dark:border-emerald-800">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        AI Suggested Tags
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {product.suggestedTags.map(tag => (
-                          <span key={tag} className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-700">{tag}</span>
+                        {product.suggestedTags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full"
+                          >
+                            {tag}
+                          </span>
                         ))}
                       </div>
                       <button
                         onClick={() => setQuickFixOpen(true)}
-                        className="text-[10px] text-primary hover:underline font-medium"
+                        className="text-[10px] text-emerald-600 hover:text-emerald-700 mt-2 font-medium"
                       >
                         Apply via Quick Fix →
                       </button>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* JSON-LD quick action */}
-                {issues.some(i => i.ruleId === "TRUST_NO_SCHEMA" && !i.isFixed) && (
-                  <Card className="border-border">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs flex items-center gap-2">
-                        <Code2 className="w-3.5 h-3.5 text-emerald-500" />
-                        JSON-LD Markup Missing
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-[11px] text-muted-foreground mb-2">
-                        Schema.org Product markup lets AI systems directly read your price, brand, and availability.
-                      </p>
-                      <Button size="sm" variant="outline" className="w-full h-7 text-xs" onClick={() => setQuickFixOpen(true)}>
-                        <Code2 className="w-3.5 h-3.5 mr-1.5" />
-                        Generate JSON-LD
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Trust signals */}
-                {issues.some(i => i.category === "trust" && !i.isFixed) && (
-                  <Card className="border-border">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs flex items-center gap-2">
-                        <Shield className="w-3.5 h-3.5 text-blue-500" />
-                        Trust Signal Gaps
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {issues
-                        .filter(i => i.category === "trust" && !i.isFixed)
-                        .map(i => (
-                          <div key={i.id} className="text-[11px] flex gap-1.5">
-                            <span className="text-red-400 flex-shrink-0">✗</span>
-                            <span className="text-foreground">{i.title}</span>
-                          </div>
-                        ))}
-                      <p className="text-[10px] text-muted-foreground pt-1">
-                        Trust signals are critical for AI shopping assistant recommendations.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* Description preview */}
-                {product.description && (
-                  <Card className="border-border">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xs">Current Description</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-6">
-                        {product.description.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()}
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-
-            {/* Quick Fix Sheet */}
-            <QuickFixSheet
-              storeId={activeStoreId}
-              productId={product.id}
-              productTitle={product.title}
-              isOpen={quickFixOpen}
-              onClose={() => {
-                setQuickFixOpen(false);
-                void queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(activeStoreId, params.productId) });
-                void queryClient.invalidateQueries({ queryKey: getListProductsQueryKey(activeStoreId) });
-              }}
-            />
-          </>
+          </div>
         ) : (
-          <Card className="border-dashed">
-            <CardContent className="py-16 text-center text-muted-foreground">
-              Product not found
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
+            Product not found
+          </div>
         )}
       </div>
+
+      {product && (
+        <QuickFixSheet
+          storeId={activeStoreId}
+          productId={product.id}
+          productTitle={product.title}
+          isOpen={quickFixOpen}
+          onClose={() => {
+            setQuickFixOpen(false);
+            void queryClient.invalidateQueries({
+              queryKey: getGetProductQueryKey(
+                activeStoreId,
+                params.productId,
+              ),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: getListProductsQueryKey(activeStoreId),
+            });
+          }}
+        />
+      )}
     </AppLayout>
   );
 }

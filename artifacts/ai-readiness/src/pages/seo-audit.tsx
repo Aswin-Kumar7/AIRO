@@ -12,7 +12,10 @@ import {
 } from "lucide-react";
 import {
   useListGaps, getListGapsQueryKey,
+  useAnalyzeStore,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 // ─── SEO rule metadata ─────────────────────────────────────────────────────────
 
@@ -165,13 +168,28 @@ function HealthPill({ label, count, color }: { label: string; count: number; col
 export default function SeoAuditPage() {
   const { activeStoreId } = useStore();
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const analyzeMutation = useAnalyzeStore();
 
-  const { data: allGaps, isLoading } = useListGaps(activeStoreId ?? "", {
+  const { data: allGaps, isLoading, refetch } = useListGaps(activeStoreId ?? "", {
     query: {
       queryKey: getListGapsQueryKey(activeStoreId ?? ""),
       enabled: !!activeStoreId,
     },
   });
+
+  async function handleRunAnalysis() {
+    if (!activeStoreId) return;
+    try {
+      await analyzeMutation.mutateAsync({ storeId: activeStoreId });
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: getListGapsQueryKey(activeStoreId) });
+      toast({ title: "Analysis complete", description: "SEO gaps updated." });
+    } catch {
+      toast({ title: "Analysis failed", variant: "destructive" });
+    }
+  }
 
   if (!activeStoreId) {
     return (
@@ -248,10 +266,20 @@ export default function SeoAuditPage() {
             <Search className="w-10 h-10 text-slate-200 mb-4" />
             <p className="text-sm font-semibold text-slate-600 mb-1">No SEO gaps found</p>
             <p className="text-xs text-slate-400 mb-4 max-w-xs">
-              Run a store analysis to detect SEO and structured data issues. This requires the Technical SEO module to be enabled.
+              Run a store analysis to detect SEO and structured data issues.
             </p>
-            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")}>
-              Run analysis
+            <Button
+              size="sm"
+              onClick={handleRunAnalysis}
+              disabled={analyzeMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+            >
+              {analyzeMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5" />
+              )}
+              {analyzeMutation.isPending ? "Analyzing…" : "Run analysis"}
             </Button>
           </div>
         )}
