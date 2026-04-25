@@ -54,32 +54,32 @@ const TYPE_CONFIG: Record<
   description: {
     label: "Description",
     dot: "bg-teal-500",
-    pill: "bg-teal-50 text-teal-700 border-teal-200",
+    pill: "bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400 ring-1 ring-teal-200/50 dark:ring-teal-500/20",
   },
   tags: {
     label: "Tags",
     dot: "bg-violet-500",
-    pill: "bg-violet-50 text-violet-700 border-violet-200",
+    pill: "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 ring-1 ring-violet-200/50 dark:ring-violet-500/20",
   },
   title: {
     label: "Title",
     dot: "bg-amber-500",
-    pill: "bg-amber-50 text-amber-700 border-amber-200",
+    pill: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-1 ring-amber-200/50 dark:ring-amber-500/20",
   },
   structure: {
     label: "Structure",
-    dot: "bg-blue-500",
-    pill: "bg-blue-50 text-blue-700 border-blue-200",
+    dot: "bg-blue-50 dark:bg-blue-500/100",
+    pill: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 ring-1 ring-blue-200/50",
   },
   schema: {
     label: "Schema",
     dot: "bg-rose-500",
-    pill: "bg-rose-50 text-rose-700 border-rose-200",
+    pill: "bg-rose-50 text-rose-700 ring-1 ring-rose-200/50",
   },
 };
 
 function getTypeConfig(type: string) {
-  return TYPE_CONFIG[type] ?? { label: type, dot: "bg-slate-400", pill: "bg-slate-50 text-slate-600 border-slate-200" };
+  return TYPE_CONFIG[type] ?? { label: type, dot: "bg-slate-400", pill: "bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-zinc-200 ring-1 ring-slate-200/50 dark:ring-white/10" };
 }
 
 // ─── Single fix row ───────────────────────────────────────────────────────────
@@ -95,35 +95,35 @@ function PendingRow({
 }) {
   const cfg = getTypeConfig(fix.type);
   return (
-    <div className="flex items-center gap-4 px-4 py-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors group">
+    <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-slate-800 truncate">
+        <p className="text-[14px] font-semibold text-slate-800 dark:text-slate-200 tracking-tight truncate group-hover:text-slate-900 dark:text-white transition-colors">
           {fix.productTitle ?? fix.title}
         </p>
-        <p className="text-xs text-slate-400 truncate mt-0.5">
+        <p className="text-[12px] text-slate-400 dark:text-zinc-400 truncate mt-0.5">
           {fix.improvedContent.replace(/<[^>]+>/g, " ").trim().slice(0, 80)}
           {fix.improvedContent.length > 80 ? "…" : ""}
         </p>
       </div>
       <span
-        className={`hidden sm:inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full border flex-shrink-0 ${cfg.pill}`}
+        className={`hidden sm:inline-flex text-[11px] font-bold px-2.5 py-0.5 rounded-full flex-shrink-0 ${cfg.pill}`}
       >
         {cfg.label}
       </span>
-      <span className="text-xs text-slate-400 flex-shrink-0 hidden md:block tabular-nums">
+      <span className="text-[12px] text-emerald-600 dark:text-emerald-400 font-medium flex-shrink-0 hidden md:block tabular-nums">
         +{fix.estimatedScoreImprovement} pts
       </span>
       <Button
         size="sm"
         onClick={() => onApply(fix.id)}
         disabled={applying}
-        className="h-7 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 flex-shrink-0"
+        className="h-8 px-4 text-[12px] bg-white dark:bg-[#111214] hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 hover:border-emerald-300 dark:hover:border-emerald-500/40 gap-1.5 rounded-[8px] flex-shrink-0 shadow-sm ml-2 transition-colors"
       >
         {applying ? (
-          <Loader2 className="w-3 h-3 animate-spin" />
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
         ) : (
-          <>Apply <ChevronRight className="w-3 h-3" /></>
+          <>Apply <ChevronRight className="w-3.5 h-3.5 text-emerald-500" /></>
         )}
       </Button>
     </div>
@@ -139,37 +139,37 @@ function AppliedRow({ fix }: { fix: Fix }) {
       })
     : null;
   return (
-    <div className="flex items-center gap-4 px-4 py-3 border-b border-slate-100 last:border-0">
+    <div className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors">
       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot} opacity-50`} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-slate-500 truncate">
+        <p className="text-[14px] font-semibold text-slate-500 dark:text-zinc-300 tracking-tight truncate">
           {fix.productTitle ?? fix.title}
         </p>
-        <p className="text-xs text-slate-400 truncate mt-0.5">
+        <p className="text-[12px] text-slate-400 dark:text-zinc-400 truncate mt-0.5">
           {fix.explanation.slice(0, 80)}{fix.explanation.length > 80 ? "…" : ""}
         </p>
       </div>
       <span
-        className={`hidden sm:inline-flex text-[11px] font-medium px-2 py-0.5 rounded-full border flex-shrink-0 opacity-60 ${cfg.pill}`}
+        className={`hidden sm:inline-flex text-[11px] font-bold px-2.5 py-0.5 rounded-full flex-shrink-0 opacity-60 ${cfg.pill}`}
       >
         {cfg.label}
       </span>
       {fix.shopifySynced ? (
-        <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium flex-shrink-0">
-          <CheckCircle2 className="w-3.5 h-3.5" /> Synced
+        <span className="flex items-center gap-1.5 text-[12px] text-emerald-600 dark:text-emerald-400 font-medium flex-shrink-0">
+          <CheckCircle2 className="w-4 h-4" /> Synced
         </span>
       ) : fix.shopifyError ? (
         <span
-          className="flex items-center gap-1 text-[11px] text-amber-600 font-medium flex-shrink-0"
+          className="flex items-center gap-1.5 text-[12px] text-amber-600 font-medium flex-shrink-0"
           title={fix.shopifyError}
         >
-          <AlertCircle className="w-3.5 h-3.5" /> Manual
+          <AlertCircle className="w-4 h-4" /> Manual
         </span>
       ) : (
-        <span className="text-[11px] text-slate-400 flex-shrink-0">Applied</span>
+        <span className="text-[12px] text-slate-400 dark:text-zinc-400 flex-shrink-0 font-medium">Applied</span>
       )}
       {date && (
-        <span className="text-[11px] text-slate-400 flex-shrink-0 hidden md:block">
+        <span className="text-[12px] text-slate-400 dark:text-zinc-400 flex-shrink-0 hidden md:block">
           {date}
         </span>
       )}
@@ -189,14 +189,16 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100 bg-slate-50/80">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+    <div className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm overflow-hidden mb-6">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5">
+        <span className="text-[11px] font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-widest">
           {label}
         </span>
-        <span className="text-xs text-slate-400">{count}</span>
+        <span className="text-[12px] font-medium text-slate-400 dark:text-zinc-400">{count}</span>
       </div>
-      {children}
+      <div className="divide-y divide-slate-50 dark:divide-white/5">
+        {children}
+      </div>
     </div>
   );
 }
@@ -213,9 +215,9 @@ function Stat({
   color: string;
 }) {
   return (
-    <div className="text-center">
-      <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
-      <p className="text-xs text-slate-500 mt-0.5">{label}</p>
+    <div className="text-center flex flex-col items-center justify-center h-full">
+      <p className={`text-3xl font-bold tabular-nums tracking-tight leading-none ${color}`}>{value}</p>
+      <p className="text-[13px] font-medium text-slate-500 dark:text-zinc-300 mt-2">{label}</p>
     </div>
   );
 }
@@ -307,20 +309,20 @@ export default function Fixes() {
       <div className="p-6 max-w-4xl mx-auto">
 
         {/* Header */}
-        <div className="flex items-start justify-between mb-6">
+        <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Quick Fixes</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Quick Fixes</h1>
+            <p className="text-[13px] text-slate-500 dark:text-zinc-300 mt-1">
               AI-generated improvements ready to push to Shopify
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {failedCount > 0 && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleRetryFailed}
-                className="text-xs gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50"
+                className="text-[13px] gap-2 text-amber-600 border-amber-200 hover:bg-amber-50 h-9 px-4 rounded-[10px]"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 Retry {failedCount} failed
@@ -330,9 +332,9 @@ export default function Fixes() {
               <Button
                 size="sm"
                 onClick={handleBulkApply}
-                className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="text-[13px] gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[10px] h-9 px-5 shadow-sm transition-all"
               >
-                <Zap className="w-3.5 h-3.5" />
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
                 Apply all ({pending.length})
               </Button>
             )}
@@ -346,45 +348,26 @@ export default function Fixes() {
         ) : !fixes?.length ? (
           /* Empty state */
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-4">
-              <Zap className="w-6 h-6 text-slate-400" />
+            <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-white/10 flex items-center justify-center mb-4">
+              <Zap className="w-6 h-6 text-slate-400 dark:text-zinc-400" />
             </div>
-            <p className="text-sm font-semibold text-slate-700 mb-1">No fixes yet</p>
-            <p className="text-xs text-slate-400 max-w-xs">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">No fixes yet</p>
+            <p className="text-xs text-slate-400 dark:text-zinc-400 max-w-xs">
               Run an analysis from the Dashboard to generate AI-powered
               improvements for your products.
             </p>
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-6">
             {/* Stats bar */}
-            <div className="grid grid-cols-4 gap-px bg-slate-200 rounded-xl overflow-hidden border border-slate-200">
+            <div className="grid grid-cols-4 gap-4">
               {[
-                {
-                  label: "Pending",
-                  value: pending.length,
-                  color: "text-slate-900",
-                },
-                {
-                  label: "Applied",
-                  value: applied.length,
-                  color: "text-emerald-600",
-                },
-                {
-                  label: "Shopify synced",
-                  value: syncedCount,
-                  color: "text-emerald-600",
-                },
-                {
-                  label: "Need attention",
-                  value: failedCount,
-                  color: failedCount > 0 ? "text-amber-600" : "text-slate-400",
-                },
+                { label: "Pending", value: pending.length, color: "text-slate-900 dark:text-white" },
+                { label: "Applied", value: applied.length, color: "text-emerald-600" },
+                { label: "Shopify synced", value: syncedCount, color: "text-emerald-600" },
+                { label: "Need attention", value: failedCount, color: failedCount > 0 ? "text-amber-600" : "text-slate-400 dark:text-zinc-400" },
               ].map((s) => (
-                <div
-                  key={s.label}
-                  className="bg-white px-5 py-4 text-center"
-                >
+                <div key={s.label} className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm p-5 flex items-center justify-center">
                   <Stat label={s.label} value={s.value} color={s.color} />
                 </div>
               ))}

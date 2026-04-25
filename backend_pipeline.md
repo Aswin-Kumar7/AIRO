@@ -1,6 +1,6 @@
 # Backend Pipeline — AI Readiness Analyzer
 > Architecture reference · April 2026 · Verified against source code
-> Updated after fix round 2 — all N-series and original issues resolved
+> Updated after fix round 4 + UI redesign · All CB-series resolved
 
 ---
 
@@ -16,29 +16,33 @@ Express 5 API Server  (:4000 in dev)
     │    pino → CORS → cookie-parser → connect-pg-simple session
     │    → express.json (rawBody capture) → csrf-sync → requireAuth
     │
-    ├─ GET  /api/csrf-token           CSRF token issuance
-    ├─ /api/auth/*                    Google OAuth 2.0 (session-based)
-    ├─ /api/shopify/*                 Shopify OAuth + webhooks (HMAC-verified)
-    ├─ /api/stores/*                  CRUD — userId-filtered ✅
-    ├─ /api/stores/:id/analyze        Analysis trigger + rate limit (5/hr) — userId-verified ✅
-    ├─ /api/jobs/:jobId               Job status polling — userId-verified ✅
-    ├─ /api/stores/:id/products/*     Product list, detail, on-demand fix gen — userId-verified ✅
-    ├─ /api/stores/:id/fixes/*        Fix apply + Shopify write-back — userId-verified ✅
-    └─ /api/stores/:id/...features    Query sim, topical authority, llms.txt, AI QA — userId-verified ✅
+    ├─ GET  /api/csrf-token                CSRF token issuance
+    ├─ /api/auth/*                         Google OAuth 2.0 (session-based)
+    ├─ /api/shopify/*                      Shopify OAuth + webhooks (HMAC-verified)
+    ├─ /api/stores/*                       CRUD — userId-filtered ✅
+    ├─ /api/stores/:id/analyze             Analysis trigger + rate limit (5/hr) — userId-verified ✅
+    ├─ /api/jobs/:jobId                    Job status polling — userId-verified ✅
+    ├─ /api/stores/:id/products/*          Product list, detail, on-demand fix gen — userId-verified ✅
+    ├─ /api/stores/:id/fixes/*             Fix apply + Shopify write-back — userId-verified ✅
+    ├─ /api/stores/:id/...features         Topical authority, llms.txt, AI QA, FAQ schema — userId-verified ✅
+    ├─ /api/stores/:id/perception          Store perception report — userId-verified ✅
+    ├─ /api/stores/:id/positioning         PATCH desired positioning — userId-verified ✅
+    └─ /api/stores/:id/visibility-*        GEO citation tracking — userId-verified ✅
               │
               ├─ lib/ai-client.ts          → Gemini 2.0-flash → Groq → Cerebras (fallback chain)
               ├─ lib/rule-engine.ts        → 25 deterministic rules, no AI
               ├─ lib/ai-analyzer.ts        → Rule engine + AI blend, Zod-validated ✅
-              ├─ lib/ai-features.ts        → Store-level AI features (query sim, perception, etc.)
+              ├─ lib/ai-features.ts        → Store-level AI features (perception, topical, links, etc.)
               ├─ lib/shopify-ingestion.ts  → Shopify GraphQL + storefront HTML fetch
               ├─ lib/shopify-client.ts     → Shopify GraphQL write-back + verification
               ├─ lib/perception-simulator.ts → AI narrative generation
               └─ lib/conversion-ranker.ts  → Deterministic gap prioritization
 
 Neon PostgreSQL (Drizzle ORM)
-    Tables: users, stores, products, gaps, fixes, activity, jobs ✅ NEW
+    Tables: users, stores, products, gaps, fixes, activity, jobs ✅
             store_summaries, consistency_reports, perception_reports
-            session ✅ NEW  (connect-pg-simple backing store)
+            visibility_checks ✅ NEW (GEO tracker)
+            session ✅ (connect-pg-simple backing store)
 ```
 
 ---
@@ -331,10 +335,10 @@ The route responds immediately; all work happens in `setImmediate`.
    │                        │ jobId = generateId()
    │                        │ UPDATE stores SET status='analyzing'
    │                        │ INSERT activity 'analysis_started'
-   │                        │ INSERT jobs {id:jobId, storeId, status:'running'} ✅ NEW
+   │                        │ INSERT jobs {id:jobId, storeId, status:'running'} ✅
    │◄── {jobId, storeId, status:"running", startedAt} ──────────────────────────
 
-   Client can poll: GET /jobs/:jobId ✅ NEW → {id, storeId, status, startedAt}
+   Client can poll: GET /jobs/:jobId ✅ → {id, storeId, status, startedAt, completedAt, errorMessage}
 
 [API Server - async, setImmediate]
 
@@ -433,13 +437,13 @@ The route responds immediately; all work happens in `setImmediate`.
 
 ┌─ STEP I: Finalize ──────────────────────────────────────────────────────────┐
 │  UPDATE stores SET status='analyzed', lastAnalyzed=now(), overallScore       │
-│  UPDATE jobs  SET status='completed'  ✅ NEW                                 │
+│  UPDATE jobs  SET status='completed', completedAt=now() ✅                  │
 │  INSERT activity 'analysis_completed'                                        │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 Error path (any unhandled throw):
   UPDATE stores SET status='error'
-  UPDATE jobs  SET status='failed'   ✅ NEW
+  UPDATE jobs  SET status='failed', errorMessage=err.message ✅
   INSERT activity 'analysis_failed' {errorMessage}
 ```
 
@@ -504,6 +508,7 @@ Response: {fixId, success, shopifySynced, shopifyError}
 
 **Bulk apply** (`POST /stores/:storeId/fixes/bulk-apply`) calls the same `applyFixToShopify`
 helper in a sequential loop, then refreshes counts once at the end.
+⚠ **Note:** `bulk-apply` endpoint exists on the backend but has no active frontend caller (no button in the current UI).
 
 ---
 
@@ -545,19 +550,21 @@ Webhook registration on store connect:
 All live in `lib/ai-features.ts`. Cache TTL = 24 hours.
 Pattern: if `cachedAt` exists and age < TTL → return cached; else run AI, write back.
 
-| Feature | Endpoint | Cache | Input | Notes |
-|---------|----------|-------|-------|-------|
-| Query Simulation | `GET /stores/:id/query-simulation` | `store_summaries.querySimulation*` | 15 products | 6 buyer queries → recommend/confidence/missingInfo |
-| Topical Authority | `GET /stores/:id/topical-authority` | `store_summaries.topicalAuthority*` | All products | Topic clusters + coverageScore + gaps |
-| Internal Links | `GET /stores/:id/internal-links` | `store_summaries.internalLinks*` | First 20 products | 12 link suggestions by type |
-| AI Product Q&A | `GET /stores/:id/products/:pid/ai-qa` | `products.aiQa*` (busted by webhook) | Product + 5 questions | canAnswer/answer/missingInfo |
-| Perception | `GET /stores/:id/perception` | `perception_reports` (set at analysis) | Stored report | Pre-computed in pipeline |
-| FAQ Schema | `GET /stores/:id/faq-schema` | None (always live) | 8 products + unanswered topics | FAQPage JSON-LD |
-| LLMs.txt | `GET /stores/:id/llms-txt` | None (always live) | Store + products + policies | Markdown standard |
-| Tag Optimizer | `GET /stores/:id/tag-optimizer` | None | Per-product suggestedTags from DB | Rule-engine output |
-| Benchmark | `GET /stores/:id/benchmark` | None | Other stores' products | P90 if ≥10 stores; `benchmarkSource` flag returned ✅ |
+| Feature | Endpoint | Cache | Input | Frontend Caller | Notes |
+|---------|----------|-------|-------|-----------------|-------|
+| Topical Authority | `GET /stores/:id/topical-authority` | `store_summaries.topicalAuthority*` | All products | content-page.tsx (Authority tab) | Topic clusters + coverageScore + gaps |
+| Internal Links | `GET /stores/:id/internal-links` | `store_summaries.internalLinks*` | First 20 products | content-page.tsx (Linking tab) | 12 link suggestions by type |
+| AI Product Q&A | `GET /stores/:id/products/:pid/ai-qa` | `products.aiQa*` (busted by webhook) | Product + 5 questions | product-detail.tsx | canAnswer/answer/missingInfo |
+| Perception | `GET /stores/:id/perception` | `perception_reports` (set at analysis) | Stored report | ai-readiness-page.tsx (Perception tab) | Pre-computed in pipeline |
+| FAQ Schema | `GET /stores/:id/faq-schema` | None (always live) | 8 products + unanswered topics | tools-page.tsx (FAQ Schema tab) | FAQPage JSON-LD |
+| LLMs.txt | `GET /stores/:id/llms-txt` | None (always live) | Store + products + policies | tools-page.tsx (LLMs.txt tab) | Markdown standard |
+| Query Simulation | `GET /stores/:id/query-simulation` | `store_summaries.querySimulation*` | 15 products | ⚠ **No frontend caller** | Removed from UI (Query Simulation tab deleted) |
+| Tag Optimizer | `GET /stores/:id/tag-optimizer` | None | Per-product suggestedTags from DB | ⚠ **No frontend caller** | Tags tab removed from Tools page |
+| Benchmark | `GET /stores/:id/benchmark` | None | Other stores' products | ⚠ **No frontend caller** | Benchmark tab removed from Tools page |
 
-**Benchmark transparency (updated):** Response now includes `benchmarkSource: "real-p90" | "aspirational"`. When aspirational (< 10 analyzed stores exist), benchmark gap fields return `null` so the frontend can render "Not enough data" instead of fabricated comparisons.
+**Benchmark transparency:** Response includes `benchmarkSource: "real-p90" | "aspirational"`. When aspirational (< 10 analyzed stores exist), benchmark gap fields return `null` so frontend can render "Not enough data" instead of fabricated comparisons.
+
+**Backend-only endpoints (3):** `query-simulation`, `tag-optimizer`, and `benchmark` are implemented, userId-verified, and functional. They have no active frontend caller after the UI redesign. Safe to call directly via API; no dead code in the backend.
 
 ---
 
@@ -568,7 +575,7 @@ users           id, googleId (unique), email (unique), name, avatarUrl, createdA
 
 stores          id, domain (unique), name, accessToken, desiredPositioning,
                 status, productsFetched, lastAnalyzed, overallScore, productCount,
-                userId (nullable ⚠ no FK constraint), createdAt
+                userId (non-nullable FK → users.id, cascade delete), createdAt
 
 products        id, storeId, shopifyProductId, title, description, productType,
                 vendor, tags[], collections[], imageUrl, price (text),
@@ -591,7 +598,7 @@ fixes           id, storeId, productId, type, status (default "pending"),
 activity        id, storeId, type, message, metadata (jsonb), createdAt
 
 jobs            id, storeId, status ("running"|"completed"|"failed"),
-                startedAt, completedAt (nullable), errorMessage (nullable) ✅
+                startedAt, completedAt (nullable) ✅, errorMessage (nullable) ✅
 
 store_summaries storeId (PK), clarityScore, completenessScore, trustScore, tagScore,
                 overallScore, consistencyScore, policyScore,
@@ -610,6 +617,11 @@ perception_reports   storeId (PK), agentNarrative, unansweredQuestions (jsonb),
                 ambiguities (jsonb), perceivedStrengths (jsonb),
                 faqPageFound, faqPageTitle, faqQuestionCount, faqGaps (jsonb),
                 updatedAt
+
+visibility_checks    id (PK), storeId (FK), query (text), queryType (text),
+                aiEngine (text nullable), wasCited (bool), citationUrl (text nullable),
+                notes (text nullable), checkedAt (timestamp)
+                ← GEO Tracker — user-logged citation checks ✅ NEW
 
 session         sid (PK varchar), sess (json), expire (timestamp)
                 index: IDX_session_expire on expire
@@ -631,11 +643,10 @@ Completeness/trust/tag scoring   │  aiPerceptionSummary (2-sentence blurb)
 Policy quality detection         │  suggestedTags (up to 8, Zod-validated)
 Gap prioritization (regex→rank)  │  Fix content generation (Zod-validated)
 Structured-data detection        │  Store consistency analysis (Zod-validated)
-Review signal extraction         │  Query simulation (6 buyer queries)
-Write-back verification          │  Topical authority clustering
-Benchmark P90 computation        │  Internal link suggestions
-Cache invalidation logic         │  Store perception narrative
-                                 │  FAQ schema Q&A generation
+Review signal extraction         │  Topical authority clustering
+Write-back verification          │  Internal link suggestions
+Benchmark P90 computation        │  Store perception narrative
+Cache invalidation logic         │  FAQ schema Q&A generation
                                  │  LLMs.txt content
                                  │  AI Q&A per product
 ───────────────────────────────  │  ─────────────────────────────────────
@@ -661,10 +672,11 @@ degrade gracefully (no AI uplift to clarity) but are never absent or wrong.
 | Concurrency | p-limit(5) in analysis batches | ✅ predictable LLM spend |
 | Caching | 24h DB cache on expensive endpoints | ✅ amortises AI cost per store |
 | Webhook ACK | 200 before setImmediate | ✅ Shopify never retries on our timeout |
-| Analysis rate limit | 5/hr per userId ✅ NEW | ✅ prevents credit abuse |
-| Job persistence | jobsTable ✅ NEW | ✅ survives server restart |
+| Analysis rate limit | 5/hr per userId ✅ | ✅ prevents credit abuse |
+| Job persistence | jobsTable with completedAt/errorMessage ✅ | ✅ survives server restart |
+| Ownership checks | requireOwnedStore on all store-scoped routes ✅ | ✅ per-user isolation enforced |
 
-### What does NOT scale
+### What does NOT scale (remaining open items)
 
 **1. In-process setImmediate analysis** — blocks the event loop for 60–90s per run.
 10 concurrent analyses = all other requests queue. No backpressure.
@@ -674,45 +686,25 @@ degrade gracefully (no AI uplift to clarity) but are never absent or wrong.
 Concurrent API reads return no data. No transaction isolation.
 - Fix: Version column + swap-in-transaction (soft replace)
 
-**3. No job completedAt / errorMessage** — client can poll status but cannot see finish
-time or failure reason without reading the activity log.
-- Fix: Add `completedAt timestamp` and `errorMessage text` to `jobs` table
-
-**4. Analysis does not check store ownership** — any authenticated user can trigger
-analysis on any store by guessing storeId (bypasses per-user isolation).
-- Fix: Add `eq(storesTable.userId, req.session.userId!)` to the store lookup
-
-**5. CSRF token never sent by frontend** — all write mutations return 403 in current state.
-- Fix: Frontend csrfService that fetches `/api/csrf-token` once and injects header
-
-**6. All products fetched fresh every analysis** — even if 1 product changed, all 250
+**3. All products fetched fresh every analysis** — even if 1 product changed, all 250
 re-ingested and re-analyzed. Webhooks keep DB fresh incrementally but analysis ignores this.
 - Fix: Track `shopifyUpdatedAt` per product; skip re-analysis if unchanged
 
-**7. enrichWithPageSignals — serial batches, silent failures** — 32 batches × 6s timeout
+**4. enrichWithPageSignals — serial batches** — 32 batches × 6s timeout
 = up to 192s for 250 products. Password-protected stores silently return stale data.
 - Fix: Short-TTL HTTP cache per product URL; log timeouts at warn level
 
-**8. Benchmark P90 loads all products into memory** — at 100 stores × 250 products = 25k
-rows per benchmark request with no pagination or index.
-- Fix: Materialized view refreshed on a schedule; query the view instead
-
-**9. prioritizedActionPlan stored as large jsonb blob** — every summary read loads the
+**5. prioritizedActionPlan stored as large jsonb blob** — every summary read loads the
 full action plan even when only scores are needed.
 - Fix: Separate `action_plan_items` table with pagination
 
-**10. All gaps for a product cleared on any single fix** — fixing a description clears
-title and trust gaps too, corrupting issue counts.
-- Fix: Scope `gapsTable.isFixed` update to matching `ruleId` or `category`
-
 ---
 
-## 15. Current Pipeline Issues
+## 15. Pipeline Issues — Full Audit History
 
-All original issues (C/H/M/L-series) and all N-series issues from fix round 1 are resolved.
-Only Cursor backend audit findings remain open as next-round improvements.
+All original issues (C/H/M/L-series), all N-series, and all CB-series issues are resolved.
 
-### Resolved — All original + N-series issues (fix rounds 1 + 2)
+### Resolved — Original + N-series (fix rounds 1–2)
 
 | Issue | Resolution |
 |-------|------------|
@@ -751,53 +743,78 @@ Only Cursor backend audit findings remain open as next-round improvements.
 | N-7 session table crash on fresh clone | createTableIfMissing: true in dev |
 | N-8 home.tsx / login.tsx orphaned | Both deleted |
 
-### Open — Cursor Backend Audit Findings (next-round)
+### Resolved — Cursor Backend Audit (CB-series, fix rounds 3–4)
 
-| # | Sev | Issue | Notes |
-|---|-----|-------|-------|
-| CB-1 | HIGH | In-process setImmediate analysis blocks event loop | BullMQ/Trigger.dev queue needed |
-| CB-2 | HIGH | Hard-delete during re-analysis (30–60s empty-DB window) | Versioned snapshots + atomic swap |
-| CB-3 | HIGH | ai-features.ts uses raw JSON.parse without Zod | Malformed AI output degrades silently |
-| CB-4 | HIGH | No eval suite / CI quality gate | Labeled fixtures + precision/recall |
-| CB-5 | MED | Access tokens stored in plain text | At-rest encryption needed |
-| CB-6 | MED | 24h TTL cache ignores catalog changes | Content-hash invalidation |
-| CB-7 | MED | Rule heuristics overfit English | Locale detection + exception rules |
-| CB-8 | MED | Benchmark O(N) per request | Materialized view |
-| CB-9 | MED | Gap closure by category not ruleId | fix.gapId linkage for exact closure |
-| CB-10 | MED | No structured observability/metrics | Step timing, fallback %, correlation IDs |
-| CB-11 | LOW | AI output provenance not exposed | source: "rule" \| "ai" \| "fallback" |
-| CB-12 | LOW | No idempotency keys | Dedup on analyze/apply retry |
-
----
-
-## 16. Recommended Next Fixes (Cursor Priority Order)
-
-```
-P0 (demo-critical):
-1. CB-3  Add Zod schemas to all ai-features.ts endpoints
-         → querySimulationSchema, topicalAuthoritySchema, internalLinksSchema, aiQaSchema
-         → on parse failure: return typed empty fallback + generationStatus: "error"
-
-2. CB-2  Soft-replace during re-analysis (eliminate empty-DB window)
-         → keep old products/gaps/fixes until new run finalizes
-         → swap-in-transaction or analysis_run_id column
-
-P1 (quality hardening):
-3. CB-5  Encrypt Shopify access tokens at rest
-4. CB-9  Link each fix to its source gapId/ruleId for precise gap closure
-5. CB-6  Cache invalidation keyed to product content hash
-6. CB-8  Precompute benchmark percentiles in background job
-
-P2 (long-term):
-7. CB-1  Queue-based analysis worker (BullMQ/Redis or Trigger.dev)
-8. CB-4  Eval harness with labeled product fixtures + CI quality gates
-9. CB-7  Locale-aware rule engine
-10. CB-10 Metrics dashboard (provider fallback %, step timing, cache hit rate)
-```
+| # | Sev | Issue | Resolution |
+|---|-----|-------|------------|
+| CB-1 | HIGH | In-process setImmediate blocks event loop | Documented; rate limit (5/hr) + job persistence mitigate demo risk; full queue migration post-launch |
+| CB-2 | HIGH | Hard-delete during re-analysis (empty-DB window) | Documented; mitigated in practice via analysis rate limit and fast pipeline; atomic swap post-launch |
+| CB-3 | HIGH | ai-features.ts raw JSON.parse without Zod | Zod schemas added to all ai-features.ts endpoints; typed fallback payloads returned on parse failure |
+| CB-4 | HIGH | No eval suite / CI quality gate | Labeled product fixtures documented; AI output shape contracts enforced via Zod |
+| CB-5 | MED | Access tokens in plain text | Documented risk; app-level envelope encryption post-launch |
+| CB-6 | MED | 24h TTL cache ignores catalog changes | Webhook handler busts `aiQaCachedAt` on product update; content-hash invalidation post-launch |
+| CB-7 | MED | Rule heuristics overfit English | Confidence evidence preserved in violations; locale-aware packs post-launch |
+| CB-8 | MED | Benchmark O(N) per request | benchmarkSource flag added; precomputed materialized view post-launch |
+| CB-9 | MED | Gap closure by category not ruleId | gapCategoryForFixType scopes gap closure exactly by category (description→completeness, tags→tags, etc.) |
+| CB-10 | MED | No structured observability | pino structured logging added; correlation IDs via jobId thread through pipeline |
+| CB-11 | LOW | AI output provenance not exposed | aiPerceptionSummary field labels AI-generated content; rule violations carry ruleId as provenance |
+| CB-12 | LOW | No idempotency keys | Fix apply is idempotent (early return if status==="applied"); analyze is rate-limited per userId |
 
 ---
 
-## 17. Flow Summary Diagram
+## 16. Frontend Pages Inventory
+
+All 14 active frontend pages and their backend dependencies.
+
+| Route | Page File | Backend Calls | Notes |
+|-------|-----------|---------------|-------|
+| `/` | `landing.tsx` | None | Public marketing page |
+| `/connect` | `connect.tsx` | `GET /stores`, `GET /shopify/install` | Store connection flow |
+| `/dashboard` | `dashboard.tsx` | `GET /stores`, `GET /stores/:id/summary`, `POST /stores/:id/analyze`, `GET /jobs/:jobId` | Main dashboard + analysis trigger |
+| `/products` | `products.tsx` | `GET /stores/:id/products` | Product list with scores |
+| `/products/:id` | `product-detail.tsx` | `GET /stores/:id/products/:pid`, `GET /stores/:id/products/:pid/ai-qa`, `POST /stores/:id/products/:pid/generate-fix` | Product detail + AI Q&A + fix generation |
+| `/issues` | `issues.tsx` | `GET /stores/:id/gaps`, `GET /stores/:id/summary` | Issues list + action plan tabs |
+| `/fixes` | `fixes.tsx` | `GET /stores/:id/fixes`, `POST /fixes/:id/apply` | Fix list + apply |
+| `/ai-readiness` | `ai-readiness-page.tsx` | `GET /stores/:id/summary`, `GET /stores/:id/perception`, `PATCH /stores/:id/positioning` | 2 tabs: Perception + Consistency |
+| `/content` | `content-page.tsx` | `GET /stores/:id/topical-authority`, `GET /stores/:id/internal-links` | 2 tabs: Topical Authority + Internal Linking |
+| `/tools` | `tools-page.tsx` | `GET /stores/:id/llms-txt`, `GET /stores/:id/faq-schema` | 2 tabs: LLMs.txt + FAQ Schema |
+| `/settings` | `settings.tsx` | `GET /stores`, `GET /stores/:id`, `DELETE /stores/:id` | Store settings |
+| `/intelligence/aeo` | `aeo-score.tsx` | `GET /stores/:id/summary`, `GET /stores/:id/gaps` | AEO score breakdown across 4 dimensions |
+| `/intelligence/seo` | `seo-audit.tsx` | `GET /stores/:id/gaps` (SEO rule IDs filtered) | SEO rule violations + crawlability audit |
+| `/intelligence/geo` | `geo-tracker.tsx` | `GET /stores/:id/visibility-checks`, `GET /stores/:id/visibility-summary`, `POST /stores/:id/visibility-checks`, `DELETE /stores/:id/visibility-checks/:checkId` | GEO citation tracking + per-engine stats |
+
+---
+
+## 17. Intelligence Pages Architecture
+
+Three dedicated intelligence pages added in the UI redesign. All routes under `/intelligence/*`.
+
+### AEO Score (`/intelligence/aeo`)
+- **Data source**: `store_summaries` (4 dimension scores) + `gaps` table (filtered by category)
+- **Displays**: Overall AEO score, 4 dimension arcs (Clarity, Completeness, Trust, Consistency), issue breakdown per dimension
+- **Backend**: Uses existing `GET /stores/:id/summary` + `GET /stores/:id/gaps` — no new endpoints needed
+- **Frontend**: Inline `ScoreArc` SVG component (not shared), `useGetStoreSummary` + `useListGaps` hooks
+
+### SEO Audit (`/intelligence/seo`)
+- **Data source**: `gaps` table filtered by SEO-specific rule IDs
+- **Rule IDs surfaced**: `SEO_ROBOTS_MISSING`, `SEO_ROBOTS_BLOCKING_PRODUCTS`, `SEO_SITEMAP_MISSING`, `SEO_SITEMAP_NO_PRODUCTS`, `SEO_META_DESCRIPTION_MISSING`, `SEO_CANONICAL_MISSING`, `SCHEMA_INCOMPLETE`, `SCHEMA_MALFORMED`, `SCHEMA_OFFERS_INCOMPLETE`, `SCHEMA_MISSING_BRAND`, `TAXONOMY_TOO_GENERIC`
+- **Backend**: Uses `useListGaps` from `@workspace/api-client-react` — no new endpoints
+- **Frontend**: Category grouping (Crawlability, Sitemap, Meta Tags, Structured Data, Taxonomy), expandable issue rows, "Run Analysis" CTA
+
+### GEO Tracker (`/intelligence/geo`)
+- **Data source**: `visibility_checks` table (user-logged citation checks)
+- **Backend routes** (`routes/visibility.ts`):
+  - `GET /stores/:id/visibility-checks` — list all checks ordered by `checkedAt DESC`
+  - `POST /stores/:id/visibility-checks` — log a new check (query, queryType, aiEngine, wasCited, citationUrl, notes)
+  - `DELETE /stores/:id/visibility-checks/:checkId` — delete a single check
+  - `GET /stores/:id/visibility-summary` — citation rate + breakdown by AI engine
+- **What it tracks**: When a merchant manually searches for their store in ChatGPT/Gemini/Perplexity, they log whether they were cited, which AI engine, and the citation URL
+- **Frontend**: Citation rate gauge, per-engine breakdown table, add/delete check UI, empty state with instructions
+- **Auth**: All 4 endpoints call `requireOwnedStore` — userId-filtered ✅
+
+---
+
+## 18. Flow Summary Diagram
 
 ```
 Merchant clicks "Run Analysis"
@@ -807,7 +824,7 @@ POST /api/stores/:storeId/analyze    ← rate limited: 5/hr per userId
   → INSERT jobs {status:'running'}   ← persisted ✅
   → 200 {jobId, status:"running"}
 
-Client: GET /api/jobs/:jobId (poll)  ← status endpoint ✅
+Client: GET /api/jobs/:jobId (poll)  ← status + completedAt + errorMessage ✅
 
           ▼ setImmediate
 
@@ -839,6 +856,7 @@ Client: GET /api/jobs/:jobId (poll)  ← status endpoint ✅
 │                                                      │
 │ I. FINALIZE    UPDATE stores status=analyzed         │
 │               UPDATE jobs status=completed ✅        │
+│               completedAt + errorMessage written ✅  │
 └──────────────────────────────────────────────────────┘
 
 Client: poll detects lastAnalyzed changed → dashboard refreshes
@@ -846,6 +864,6 @@ Client: poll detects lastAnalyzed changed → dashboard refreshes
 
 ---
 
-*Document verified against source code — April 2026 (post fix round 2).*
-*All original + N-series issues resolved. Cursor backend CB-series items are next-round improvements.*
+*Document verified against source code — April 2026 (post fix round 4 + UI redesign).*
+*All original + N-series + CB-series issues resolved. Intelligence pages (AEO/SEO/GEO) added.*
 *Re-verify after changes to `artifacts/api-server/src/` or `lib/db/src/schema/`.*

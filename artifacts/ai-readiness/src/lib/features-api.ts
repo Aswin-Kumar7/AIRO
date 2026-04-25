@@ -19,23 +19,6 @@ async function requestJson<T>(input: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export interface QuerySimulationResult {
-  query: string;
-  wouldRecommend: boolean;
-  recommendedProduct: string | null;
-  reasoning: string;
-  missingInfo: string[];
-  confidenceScore: number;
-}
-
-export interface QuerySimulationResponse {
-  storeId: string;
-  results: QuerySimulationResult[];
-  successCount: number;
-  totalQueries: number;
-  generatedAt: string;
-}
-
 export interface TopicalCluster {
   topic: string;
   productCount: number;
@@ -105,9 +88,6 @@ export interface ProductQaResponse {
   answerabilityScore: number;
   generatedAt: string;
 }
-
-export const getQuerySimulation = (storeId: string) =>
-  requestJson<QuerySimulationResponse>(`/api/stores/${storeId}/query-simulation`);
 
 export const getTopicalAuthority = (storeId: string) =>
   requestJson<TopicalAuthorityResponse>(`/api/stores/${storeId}/topical-authority`);

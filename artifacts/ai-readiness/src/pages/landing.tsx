@@ -72,12 +72,12 @@ function Navbar({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: 
       className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
         scrolled
-          ? "bg-white/96 backdrop-blur-xl border-b border-slate-100 shadow-[0_1px_16px_rgba(0,0,0,0.07)]"
+          ? "bg-white/96 backdrop-blur-xl border-b border-slate-100 dark:border-white/5 shadow-[0_1px_16px_rgba(0,0,0,0.07)]"
           : "bg-transparent",
       )}
     >
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <span className="text-xl font-bold text-slate-900 tracking-tight select-none">Kasparro</span>
+        <span className="text-xl font-bold text-slate-900 dark:text-white tracking-tight select-none">Kasparro</span>
 
         <div className="hidden md:flex items-center gap-8">
           {[
@@ -87,7 +87,7 @@ function Navbar({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: 
             { label: "FAQ", href: "#faq" },
           ].map(({ label, href }) => (
             <a key={label} href={href}
-              className="text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors duration-200">
+              className="text-sm font-medium text-slate-500 dark:text-zinc-300 hover:text-slate-900 dark:text-white transition-colors duration-200">
               {label}
             </a>
           ))}
@@ -97,7 +97,7 @@ function Navbar({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: 
           <motion.button
             whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
             onClick={onLogin}
-            className="hidden sm:block text-sm font-medium text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg hover:bg-slate-50 transition-colors">
+            className="hidden sm:block text-sm font-medium text-slate-600 dark:text-zinc-200 hover:text-slate-900 dark:text-white px-3 py-2 rounded-lg hover:bg-slate-50 dark:bg-white/5 transition-colors">
             Login
           </motion.button>
           <motion.button
@@ -108,7 +108,7 @@ function Navbar({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: 
             Get Started
           </motion.button>
           <button onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden p-2 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors">
+            className="md:hidden p-2 text-slate-600 dark:text-zinc-200 rounded-lg hover:bg-slate-50 dark:bg-white/5 transition-colors">
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
@@ -119,17 +119,17 @@ function Navbar({ onLogin, onGetStarted }: { onLogin: () => void; onGetStarted: 
           <motion.div
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.25, ease: "easeInOut" }}
-            className="md:hidden bg-white border-t border-slate-100 overflow-hidden">
+            className="md:hidden bg-white dark:bg-[#080808] border-t border-slate-100 dark:border-white/5 overflow-hidden">
             <div className="px-6 py-4 space-y-1">
               {["Features", "How it works", "Pricing", "FAQ"].map(link => (
                 <a key={link} href={`#${link.toLowerCase().replace(/ /g, "-")}`}
-                  className="block text-sm font-medium text-slate-600 hover:text-slate-900 py-2.5 border-b border-slate-50 last:border-0 transition-colors"
+                  className="block text-sm font-medium text-slate-600 dark:text-zinc-200 hover:text-slate-900 dark:text-white py-2.5 border-b border-slate-50 dark:border-white/5 dark:border-white/5 last:border-0 transition-colors"
                   onClick={() => setMobileOpen(false)}>
                   {link}
                 </a>
               ))}
               <button onClick={() => { setMobileOpen(false); onLogin(); }}
-                className="block w-full text-left text-sm font-medium text-slate-600 py-2.5">
+                className="block w-full text-left text-sm font-medium text-slate-600 dark:text-zinc-200 py-2.5">
                 Login
               </button>
             </div>
@@ -157,20 +157,20 @@ function DashboardMockup() {
         className="relative rounded-2xl overflow-hidden shadow-[0_24px_80px_rgba(0,0,0,0.15)] ring-1 ring-slate-900/8"
       >
         {/* Browser chrome */}
-        <div className="bg-[#ececec] border-b border-slate-200/60 px-4 py-3 flex items-center gap-3">
+        <div className="bg-[#ececec] border-b border-slate-200/60 dark:border-white/10 px-4 py-3 flex items-center gap-3">
           <div className="flex gap-1.5">
             {["#ff5f57", "#febc2e", "#28c840"].map(c => (
               <div key={c} className="w-3 h-3 rounded-full" style={{ backgroundColor: c }} />
             ))}
           </div>
-          <div className="flex-1 bg-white rounded-md text-[11px] text-slate-400 px-3 py-1 text-center border border-slate-200/80 max-w-xs mx-auto">
+          <div className="flex-1 bg-white dark:bg-[#080808] rounded-md text-[11px] text-slate-400 dark:text-zinc-400 px-3 py-1 text-center border border-slate-200/80 max-w-xs mx-auto">
             app.kasparro.io/dashboard
           </div>
         </div>
 
         <div className="bg-[#f8f8f8] flex" style={{ height: 380 }}>
           {/* Sidebar */}
-          <div className="hidden md:flex w-44 bg-white border-r border-slate-100/80 flex-col p-3 gap-0.5 flex-shrink-0">
+          <div className="hidden md:flex w-44 bg-white dark:bg-[#080808] border-r border-slate-100/80 flex-col p-3 gap-0.5 flex-shrink-0">
             <div className="text-[9px] font-bold text-slate-300 uppercase tracking-widest mb-2 px-2 pt-1">Navigation</div>
             {[
               { label: "Dashboard", active: true },
@@ -182,7 +182,7 @@ function DashboardMockup() {
             ].map(({ label, active }) => (
               <div key={label} className={cn(
                 "text-[11px] px-2.5 py-1.5 rounded-lg font-medium",
-                active ? "bg-emerald-50 text-emerald-700" : "text-slate-400",
+                active ? "bg-emerald-50 text-emerald-700" : "text-slate-400 dark:text-zinc-400",
               )}>
                 {label}
               </div>
@@ -197,16 +197,16 @@ function DashboardMockup() {
                 { label: "Fixes Ready", value: "8", sub: " pending", color: "text-indigo-600", bg: "bg-indigo-50 ring-indigo-100" },
               ].map(({ label, value, sub, color, bg }) => (
                 <div key={label} className={cn("rounded-xl p-3 ring-1", bg)}>
-                  <p className="text-[10px] text-slate-400 mb-0.5 font-medium">{label}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-zinc-400 mb-0.5 font-medium">{label}</p>
                   <p className={cn("text-xl font-bold tabular-nums leading-none", color)}>
-                    {value}<span className="text-[10px] font-normal text-slate-400">{sub}</span>
+                    {value}<span className="text-[10px] font-normal text-slate-400 dark:text-zinc-400">{sub}</span>
                   </p>
                 </div>
               ))}
             </div>
 
-            <div className="bg-white rounded-xl ring-1 ring-slate-100 p-4 mb-3">
-              <p className="text-[11px] font-semibold text-slate-600 mb-3">Score Breakdown</p>
+            <div className="bg-white dark:bg-[#080808] rounded-xl ring-1 ring-slate-100 p-4 mb-3">
+              <p className="text-[11px] font-semibold text-slate-600 dark:text-zinc-200 mb-3">Score Breakdown</p>
               <div className="space-y-2.5">
                 {[
                   { label: "Clarity", val: 78 },
@@ -215,21 +215,21 @@ function DashboardMockup() {
                   { label: "Tags & SEO", val: 85 },
                 ].map(({ label, val }) => (
                   <div key={label} className="flex items-center gap-3">
-                    <span className="text-[10px] text-slate-400 w-24 flex-shrink-0 font-medium">{label}</span>
-                    <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-400 w-24 flex-shrink-0 font-medium">{label}</span>
+                    <div className="flex-1 h-1.5 bg-slate-100 dark:bg-[#111214] border dark:border-white/5 rounded-full overflow-hidden">
                       <div
                         className={cn("h-full rounded-full", val >= 70 ? "bg-emerald-500" : val >= 50 ? "bg-amber-400" : "bg-red-400")}
                         style={{ width: `${val}%` }}
                       />
                     </div>
-                    <span className="text-[10px] font-bold w-5 text-right tabular-nums text-slate-600">{val}</span>
+                    <span className="text-[10px] font-bold w-5 text-right tabular-nums text-slate-600 dark:text-zinc-200">{val}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="bg-white rounded-xl ring-1 ring-slate-100 p-4">
-              <p className="text-[11px] font-semibold text-slate-600 mb-2.5">Quick Wins</p>
+            <div className="bg-white dark:bg-[#080808] rounded-xl ring-1 ring-slate-100 p-4">
+              <p className="text-[11px] font-semibold text-slate-600 dark:text-zinc-200 mb-2.5">Quick Wins</p>
               <div className="space-y-2">
                 {[
                   { text: "Add size guide to Merino Wool Sweater", tag: "Easy" },
@@ -238,7 +238,7 @@ function DashboardMockup() {
                 ].map(({ text, tag }) => (
                   <div key={text} className="flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
-                    <span className="text-[10px] text-slate-500 flex-1 truncate">{text}</span>
+                    <span className="text-[10px] text-slate-500 dark:text-zinc-300 flex-1 truncate">{text}</span>
                     <span className={cn(
                       "text-[9px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0",
                       tag === "Easy" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700",
@@ -258,14 +258,14 @@ function DashboardMockup() {
           className: "absolute -left-8 top-20 hidden lg:block",
           style: { animation: "kasFloat 4s ease-in-out infinite" },
           content: (
-            <div className="bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] ring-1 ring-slate-100 p-4 w-40">
+            <div className="bg-white dark:bg-[#080808] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] ring-1 ring-slate-100 p-4 w-40">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center">
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
                 </div>
-                <span className="text-[10px] font-semibold text-slate-500">AI Score</span>
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-300">AI Score</span>
               </div>
-              <div className="text-3xl font-bold text-slate-900 leading-none">73<span className="text-sm font-normal text-slate-300">/100</span></div>
+              <div className="text-3xl font-bold text-slate-900 dark:text-white leading-none">73<span className="text-sm font-normal text-slate-300">/100</span></div>
               <div className="text-[10px] text-emerald-600 font-semibold mt-1.5">↑ +12 this week</div>
             </div>
           ),
@@ -275,15 +275,15 @@ function DashboardMockup() {
           className: "absolute -right-8 top-12 hidden lg:block",
           style: { animation: "kasFloat 5s ease-in-out infinite 1.2s" },
           content: (
-            <div className="bg-white rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] ring-1 ring-slate-100 p-4 w-44">
+            <div className="bg-white dark:bg-[#080808] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.12)] ring-1 ring-slate-100 p-4 w-44">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
                 </div>
-                <span className="text-[10px] font-semibold text-slate-500">Gaps Found</span>
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-zinc-300">Gaps Found</span>
               </div>
-              <div className="text-3xl font-bold text-slate-900 leading-none">12</div>
-              <div className="text-[10px] text-slate-400 mt-1.5">8 easy to fix now</div>
+              <div className="text-3xl font-bold text-slate-900 dark:text-white leading-none">12</div>
+              <div className="text-[10px] text-slate-400 dark:text-zinc-400 mt-1.5">8 easy to fix now</div>
             </div>
           ),
         },
@@ -358,7 +358,7 @@ function Hero({ onAnalyze }: { onAnalyze: (url: string) => void }) {
         {/* Subtext */}
         <motion.p
           initial={{ opacity: 0, y: 20, filter: "blur(12px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          className="text-lg text-slate-600 max-w-2xl mx-auto mb-10 leading-[1.65] font-medium"
+          className="text-lg text-slate-600 dark:text-zinc-200 max-w-2xl mx-auto mb-10 leading-[1.65] font-medium"
         >
           Plan, optimize, and analyze exactly how AI agents perceive your catalog. Grow faster with evidence-backed gap reports and automated fixes synced directly to Shopify.
         </motion.p>
@@ -382,7 +382,7 @@ function Hero({ onAnalyze }: { onAnalyze: (url: string) => void }) {
                     ? "0 0 0 2px rgba(17,24,39,0.1), 0 4px 12px rgba(0,0,0,0.05)"
                     : "0 2px 8px rgba(0,0,0,0.03)",
                 }}
-                className="w-full h-12 px-5 rounded-[14px] border border-white/80 bg-white/70 backdrop-blur-md text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-all duration-300 shadow-inner shadow-white/50"
+                className="w-full h-12 px-5 rounded-[14px] border border-white/80 bg-white/70 backdrop-blur-md text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:text-zinc-400 focus:outline-none focus:bg-white dark:bg-[#080808] transition-all duration-300 shadow-inner shadow-white/50"
               />
             </div>
             <motion.button
@@ -401,7 +401,7 @@ function Hero({ onAnalyze }: { onAnalyze: (url: string) => void }) {
               { icon: ClockFading, text: "60 sec analysis" },
               { icon: Check, text: "Quick fixes" },
             ].map(({ icon: Icon, text }) => (
-              <div key={text} className="flex items-center gap-1.5 text-[12px] text-slate-500 font-medium">
+              <div key={text} className="flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-zinc-300 font-medium">
                 <Icon className="w-3 h-3 text-[#151e18]/50" />
                 {text}
               </div>
@@ -432,8 +432,8 @@ function SocialProof() {
         <div className="relative overflow-hidden">
           <div className="flex gap-6 items-center" style={{ animation: "kasMarquee 35s linear infinite" }}>
             {[...BRANDS, ...BRANDS, ...BRANDS].map((brand, i) => (
-              <div key={i} className="flex items-center justify-center px-8 py-4 bg-white border border-slate-200/50 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
-                <span className="text-slate-800 font-bold text-[15px] tracking-tight whitespace-nowrap select-none flex items-center gap-2">
+              <div key={i} className="flex items-center justify-center px-8 py-4 bg-white dark:bg-[#080808] border border-slate-200/50 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
+                <span className="text-slate-800 dark:text-slate-200 font-bold text-[15px] tracking-tight whitespace-nowrap select-none flex items-center gap-2">
                   <div className="w-4 h-4 bg-slate-800 rounded-sm" style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}></div>
                   {brand}
                 </span>
@@ -482,18 +482,18 @@ function FeatureCard({ icon: Icon, title, description }: typeof FEATURES[0]) {
     <motion.div
       whileHover={{ y: -4, scale: 1.01, boxShadow: "0 20px 40px rgba(17,24,39,0.06), 0 4px 12px rgba(17,24,39,0.04)" }}
       transition={{ duration: 0.15, ease: "easeOut" }}
-      className="group bg-white rounded-3xl border border-slate-200/50 p-8 xl:p-10 cursor-default transition-colors duration-150 relative overflow-hidden flex flex-col justify-start h-full"
+      className="group bg-white dark:bg-[#080808] rounded-3xl border border-slate-200/50 p-8 xl:p-10 cursor-default transition-colors duration-150 relative overflow-hidden flex flex-col justify-start h-full"
     >
       <div className="absolute top-0 right-0 w-64 h-64 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-100/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
       <div className="relative z-10">
         <div
           className="w-12 h-12 rounded-[18px] bg-[#fafafa] border border-slate-200/80 flex items-center justify-center shadow-[0_2px_8px_rgba(0,0,0,0.03)] mb-8 transition-transform duration-200 group-hover:scale-105 group-hover:rotate-2"
         >
-          <Icon className="w-5 h-5 text-slate-800" />
+          <Icon className="w-5 h-5 text-slate-800 dark:text-slate-200" />
         </div>
         <div>
-          <h3 className="text-[17px] font-bold text-slate-900 mb-3.5 leading-snug tracking-tight">{title}</h3>
-          <p className="text-[14px] text-slate-500 leading-[1.65] font-medium">{description}</p>
+          <h3 className="text-[17px] font-bold text-slate-900 dark:text-white mb-3.5 leading-snug tracking-tight">{title}</h3>
+          <p className="text-[14px] text-slate-500 dark:text-zinc-300 leading-[1.65] font-medium">{description}</p>
         </div>
       </div>
     </motion.div>
@@ -513,7 +513,7 @@ function Features() {
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="inline-flex items-center gap-2 bg-white border border-slate-200/80 text-slate-600 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6 shadow-sm">
+          <div className="inline-flex items-center gap-2 bg-white dark:bg-[#080808] border border-slate-200/80 text-slate-600 dark:text-zinc-200 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6 shadow-sm">
             <Package className="w-3.5 h-3.5 text-emerald-500" />
             Powerful Features
           </div>
@@ -521,7 +521,7 @@ function Features() {
             Built for the age of <br className="md:hidden" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#10b981] to-[#047857]">AI commerce.</span>
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto text-[17px] leading-[1.7] font-medium">
+          <p className="text-slate-500 dark:text-zinc-300 max-w-xl mx-auto text-[17px] leading-[1.7] font-medium">
             Traditional SEO tools don't understand how AI agents evaluate stores. Kasparro is built for what comes next.
           </p>
         </motion.div>
@@ -554,7 +554,7 @@ function HowItWorks() {
   const inView = useInView(ref as React.RefObject<Element>, { once: true, margin: "-80px" });
 
   return (
-    <section id="how-it-works" className="py-32 bg-white relative overflow-hidden">
+    <section id="how-it-works" className="py-32 bg-white dark:bg-[#080808] relative overflow-hidden">
       <div className="max-w-6xl mx-auto px-6">
         <motion.div
           className="text-center mb-28"
@@ -562,7 +562,7 @@ function HowItWorks() {
           viewport={{ once: true, margin: "-80px" }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200/60 text-slate-600 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6">
+          <div className="inline-flex items-center gap-2 bg-slate-50 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 text-slate-600 dark:text-zinc-200 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6">
             <Layers className="w-3.5 h-3.5 text-emerald-500" />
             Simple workflow
           </div>
@@ -575,7 +575,7 @@ function HowItWorks() {
         <div className="max-w-4xl mx-auto relative pl-8 md:pl-0" ref={ref}>
           {/* Sleek Vertical Line */}
           <motion.div
-            className="absolute top-4 bottom-8 left-[45px] md:left-1/2 md:-ml-px w-[2px] bg-slate-100 rounded-full origin-top"
+            className="absolute top-4 bottom-8 left-[45px] md:left-1/2 md:-ml-px w-[2px] bg-slate-100 dark:bg-[#111214] border dark:border-white/5 rounded-full origin-top"
             initial={{ scaleY: 0 }}
             animate={inView ? { scaleY: 1 } : {}}
             transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
@@ -595,7 +595,7 @@ function HowItWorks() {
                   initial={{ scale: 0 }}
                   animate={inView ? { scale: 1 } : {}}
                   transition={{ duration: 0.6, delay: 0.4 + (i * 0.2), type: "spring", bounce: 0.6 }}
-                  className="absolute left-[-15px] md:left-1/2 md:-translate-x-1/2 top-0 md:top-1/2 md:-translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-full bg-white border border-slate-200 shadow-[0_0_0_8px_white] z-10 transition-transform duration-300 group-hover:scale-125 group-hover:border-slate-300"
+                  className="absolute left-[-15px] md:left-1/2 md:-translate-x-1/2 top-0 md:top-1/2 md:-translate-y-1/2 flex items-center justify-center w-10 h-10 rounded-full bg-white dark:bg-[#080808] border border-slate-200 dark:border-white/10 shadow-[0_0_0_8px_white] z-10 transition-transform duration-300 group-hover:scale-125 group-hover:border-slate-300 dark:hover:border-white/20"
                 >
                   <motion.div
                     initial={{ scale: 0 }} animate={inView ? { scale: 1 } : {}} transition={{ delay: 0.6 + (i * 0.2), type: "spring" }}
@@ -604,11 +604,11 @@ function HowItWorks() {
                 </motion.div>
 
                 <div className={cn("flex-1 pt-0.5 md:pt-0 pl-10 md:pl-0 w-full", i % 2 !== 0 ? "md:text-left" : "md:text-right")}>
-                  <div className={cn("inline-flex items-center justify-center px-4 h-9 rounded-full bg-white border border-slate-200/80 text-slate-600 text-[13px] font-bold mb-6 shadow-sm tracking-wide", i % 2 !== 0 ? "" : "md:ml-auto")}>
+                  <div className={cn("inline-flex items-center justify-center px-4 h-9 rounded-full bg-white dark:bg-[#080808] border border-slate-200/80 text-slate-600 dark:text-zinc-200 text-[13px] font-bold mb-6 shadow-sm tracking-wide", i % 2 !== 0 ? "" : "md:ml-auto")}>
                     Step {num}
                   </div>
                   <h3 className="text-3xl font-bold text-[#111827] mb-4 leading-tight tracking-tight">{title}</h3>
-                  <p className={cn("text-[16px] text-slate-500 leading-relaxed font-medium block max-w-sm", i % 2 !== 0 ? "mr-auto" : "md:ml-auto")}>
+                  <p className={cn("text-[16px] text-slate-500 dark:text-zinc-300 leading-relaxed font-medium block max-w-sm", i % 2 !== 0 ? "mr-auto" : "md:ml-auto")}>
                     {desc}
                   </p>
                 </div>
@@ -639,11 +639,11 @@ function StatItem({ end, suffix, label, sub, active }: typeof STATS_DATA[0] & { 
       initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="text-5xl md:text-6xl font-bold text-slate-900 mb-2 tabular-nums tracking-tight leading-none">
+      <div className="text-5xl md:text-6xl font-bold text-slate-900 dark:text-white mb-2 tabular-nums tracking-tight leading-none">
         {count}{suffix}
       </div>
-      <div className="text-sm font-semibold text-slate-700 mb-0.5">{label}</div>
-      <div className="text-xs text-slate-400">{sub}</div>
+      <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-0.5">{label}</div>
+      <div className="text-xs text-slate-400 dark:text-zinc-400">{sub}</div>
     </motion.div>
   );
 }
@@ -653,9 +653,9 @@ function Stats() {
   const inView = useInView(ref as React.RefObject<Element>, { once: true, margin: "-100px" });
 
   return (
-    <section className="py-24 bg-white border-t border-slate-100/60">
+    <section className="py-24 bg-white dark:bg-[#080808] border-t border-slate-100/60">
       <div className="max-w-5xl mx-auto px-6">
-        <div ref={ref} className="grid grid-cols-2 md:grid-cols-4 gap-10 md:divide-x divide-slate-100">
+        <div ref={ref} className="grid grid-cols-2 md:grid-cols-4 gap-10 md:divide-x divide-slate-100 dark:divide-white/5">
           {STATS_DATA.map(s => <StatItem key={s.label} {...s} active={inView} />)}
         </div>
       </div>
@@ -715,7 +715,7 @@ function Pricing() {
   const inView = useInView(ref as React.RefObject<Element>, { once: true, margin: "-80px" });
 
   return (
-    <section id="pricing" className="py-32 bg-slate-50 relative overflow-hidden">
+    <section id="pricing" className="py-32 bg-slate-50 dark:bg-white/5 relative overflow-hidden">
       <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white to-transparent pointer-events-none" />
       <div className="max-w-6xl mx-auto px-6 relative z-10" ref={ref}>
         <motion.div
@@ -724,7 +724,7 @@ function Pricing() {
           animate={inView ? { opacity: 1, y: 0 } : {}}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
         >
-          <div className="inline-flex items-center gap-2 bg-white border border-slate-200/60 text-slate-600 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6 shadow-sm">
+          <div className="inline-flex items-center gap-2 bg-white dark:bg-[#080808] border border-slate-200/60 dark:border-white/10 text-slate-600 dark:text-zinc-200 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-6 shadow-sm">
             <Zap className="w-3.5 h-3.5 text-emerald-500" />
             Pricing Plans
           </div>
@@ -732,7 +732,7 @@ function Pricing() {
             Transparent pricing. <br className="md:hidden" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-emerald-700">No surprises.</span>
           </h2>
-          <p className="text-slate-500 text-[17px] font-medium leading-relaxed max-w-2xl mx-auto">
+          <p className="text-slate-500 dark:text-zinc-300 text-[17px] font-medium leading-relaxed max-w-2xl mx-auto">
             Choose the perfect plan for your catalog size. All plans include full access to discovery and automated Shopify sync.
           </p>
 
@@ -745,8 +745,8 @@ function Pricing() {
                   className={cn(
                     "px-4 py-1.5 rounded-md text-[13px] font-semibold transition-all duration-200",
                     currency === c
-                      ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/50"
-                      : "text-slate-500 hover:text-slate-800"
+                      ? "bg-white dark:bg-[#080808] text-slate-900 dark:text-white shadow-sm ring-1 ring-slate-200/50 dark:ring-white/10"
+                      : "text-slate-500 dark:text-zinc-300 hover:text-slate-800 dark:text-slate-200"
                   )}
                 >
                   {c}
@@ -764,7 +764,7 @@ function Pricing() {
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ duration: 0.6, delay: i * 0.15, type: "spring", bounce: 0.3 }}
               className={cn(
-                "relative bg-white rounded-3xl p-8 border transition-all duration-300 flex flex-col group",
+                "relative bg-white dark:bg-[#080808] rounded-3xl p-8 border transition-all duration-300 flex flex-col group",
                 tier.isPopular ? "border-emerald-500 shadow-[0_20px_60px_rgba(16,185,129,0.12)] ring-1 ring-emerald-500/20 md:-mt-4 md:mb-4" : "border-slate-200/80 shadow-sm hover:shadow-md"
               )}
             >
@@ -773,15 +773,15 @@ function Pricing() {
                   Most Popular
                 </div>
               )}
-              <h3 className="text-[22px] font-bold text-slate-900 mb-2">{tier.name}</h3>
-              <p className="text-[14px] text-slate-500 font-medium mb-6 min-h-[42px] leading-relaxed">{tier.desc}</p>
+              <h3 className="text-[22px] font-bold text-slate-900 dark:text-white mb-2">{tier.name}</h3>
+              <p className="text-[14px] text-slate-500 dark:text-zinc-300 font-medium mb-6 min-h-[42px] leading-relaxed">{tier.desc}</p>
 
               <div className="mb-6">
                 <div className="flex items-end gap-1.5">
-                  <span className="text-5xl font-bold text-slate-900 leading-none tracking-tighter">
+                  <span className="text-5xl font-bold text-slate-900 dark:text-white leading-none tracking-tighter">
                     {CURRENCY_SYMBOLS[currency]}{tier.prices[currency].toLocaleString()}
                   </span>
-                  <span className="text-[15px] font-medium text-slate-500 mb-1.5">/mo</span>
+                  <span className="text-[15px] font-medium text-slate-500 dark:text-zinc-300 mb-1.5">/mo</span>
                 </div>
               </div>
 
@@ -791,8 +791,8 @@ function Pricing() {
                 className={cn(
                   "relative w-full h-[52px] rounded-xl font-semibold text-[15px] transition-all duration-300 mb-8 overflow-hidden group",
                   tier.isPopular
-                    ? "bg-slate-900 hover:shadow-emerald-500/20 text-white shadow-md shadow-slate-900/10 border border-slate-800"
-                    : "bg-white text-slate-900 border-2 border-slate-200/80"
+                    ? "bg-slate-900 dark:bg-white hover:shadow-emerald-500/20 text-white shadow-md shadow-slate-900/10 border border-slate-800"
+                    : "bg-white dark:bg-[#080808] text-slate-900 dark:text-white border-2 border-slate-200/80"
                 )}
               >
                 <div className="absolute inset-0 flex items-center justify-center transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:-translate-y-full">
@@ -808,13 +808,13 @@ function Pricing() {
               </motion.button>
 
               <div className="space-y-4 flex-1">
-                <p className="text-[11px] font-bold text-slate-900 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">What's included</p>
+                <p className="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-widest mb-4 border-b border-slate-100 dark:border-white/5 pb-2">What's included</p>
                 {tier.features.map(f => (
                   <div key={f} className="flex items-start gap-3">
                     <div className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-50 flex items-center justify-center mt-0.5">
                       <Check className="w-3 h-3 text-emerald-600" />
                     </div>
-                    <span className="text-[14.5px] text-slate-600 font-medium leading-snug">{f}</span>
+                    <span className="text-[14.5px] text-slate-600 dark:text-zinc-200 font-medium leading-snug">{f}</span>
                   </div>
                 ))}
               </div>
@@ -864,19 +864,19 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
       transition={{ duration: 0.45, delay: index * 0.06, ease: [0.22, 1, 0.36, 1] }}
-      className="border-b border-slate-200/60"
+      className="border-b border-slate-200/60 dark:border-white/10"
     >
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between py-6 text-left group"
       >
-        <span className="text-[17px] font-semibold text-slate-900 pr-6 group-hover:text-slate-600 transition-colors duration-200 tracking-tight">{q}</span>
+        <span className="text-[17px] font-semibold text-slate-900 dark:text-white pr-6 group-hover:text-slate-600 dark:text-zinc-200 transition-colors duration-200 tracking-tight">{q}</span>
         <motion.div
           animate={{ rotate: open ? 45 : 0 }}
           transition={{ duration: 0.25, type: "spring", stiffness: 300, damping: 20 }}
-          className="flex-shrink-0 w-8 h-8 rounded-full border border-slate-200/80 bg-white flex items-center justify-center transition-colors duration-200 group-hover:border-slate-300 shadow-[0_2px_8px_rgba(0,0,0,0.02)]"
+          className="flex-shrink-0 w-8 h-8 rounded-full border border-slate-200/80 bg-white dark:bg-[#080808] flex items-center justify-center transition-colors duration-200 group-hover:border-slate-300 dark:hover:border-white/20 shadow-[0_2px_8px_rgba(0,0,0,0.02)]"
         >
-          <svg className="w-3.5 h-3.5 text-slate-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-3.5 h-3.5 text-slate-800 dark:text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
           </svg>
         </motion.div>
@@ -890,7 +890,7 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <p className="text-[15px] text-slate-500 leading-[1.65] pb-8 pt-1 pr-12 font-medium">{a}</p>
+            <p className="text-[15px] text-slate-500 dark:text-zinc-300 leading-[1.65] pb-8 pt-1 pr-12 font-medium">{a}</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -911,12 +911,12 @@ function FAQ() {
           <h2 className="text-4xl md:text-[56px] font-bold text-[#111827] mb-5 leading-tight tracking-tighter">
             Common questions
           </h2>
-          <p className="text-slate-500 text-[17px] font-medium leading-relaxed">
+          <p className="text-slate-500 dark:text-zinc-300 text-[17px] font-medium leading-relaxed">
             Everything you need to know before joining.
           </p>
         </motion.div>
 
-        <div className="space-y-0 border-t border-slate-200/60 pt-4">
+        <div className="space-y-0 border-t border-slate-200/60 dark:border-white/10 pt-4">
           {FAQ_ITEMS.map((item, i) => (
             <FAQItem key={item.q} q={item.q} a={item.a} index={i} />
           ))}
@@ -937,22 +937,22 @@ const FOOTER_LINKS = {
 
 function Footer() {
   return (
-    <footer className="bg-white border-t border-slate-200/80 pt-20 pb-10">
+    <footer className="bg-white dark:bg-[#080808] border-t border-slate-200/80 pt-20 pb-10">
       <div className="max-w-6xl mx-auto px-6">
         <div className="grid md:grid-cols-5 gap-10 mb-14">
           <div className="md:col-span-2">
-            <span className="text-base font-bold text-slate-900 mb-3 block tracking-tight">Kasparro</span>
-            <p className="text-[13px] text-slate-500 leading-relaxed max-w-xs">
+            <span className="text-base font-bold text-slate-900 dark:text-white mb-3 block tracking-tight">Kasparro</span>
+            <p className="text-[13px] text-slate-500 dark:text-zinc-300 leading-relaxed max-w-xs">
               AI readiness analysis and optimization for modern Shopify stores. Know exactly what AI agents think of your products.
             </p>
           </div>
           {Object.entries(FOOTER_LINKS).map(([section, links]) => (
             <div key={section}>
-              <p className="text-xs font-semibold text-slate-900 mb-4 tracking-tight">{section}</p>
+              <p className="text-xs font-semibold text-slate-900 dark:text-white mb-4 tracking-tight">{section}</p>
               <ul className="space-y-3">
                 {links.map(link => (
                   <li key={link}>
-                    <a href="#" className="text-[13px] text-slate-500 hover:text-slate-900 transition-colors duration-200">
+                    <a href="#" className="text-[13px] text-slate-500 dark:text-zinc-300 hover:text-slate-900 dark:text-white transition-colors duration-200">
                       {link}
                     </a>
                   </li>
@@ -962,11 +962,11 @@ function Footer() {
           ))}
         </div>
 
-        <div className="border-t border-slate-200 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p className="text-[13px] text-slate-500">© 2025 Kasparro. All rights reserved.</p>
+        <div className="border-t border-slate-200 dark:border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-[13px] text-slate-500 dark:text-zinc-300">© 2025 Kasparro. All rights reserved.</p>
           <div className="flex items-center gap-6">
             {["Privacy", "Terms", "Cookies"].map(link => (
-              <a key={link} href="#" className="text-[13px] text-slate-500 hover:text-slate-900 transition-colors">
+              <a key={link} href="#" className="text-[13px] text-slate-500 dark:text-zinc-300 hover:text-slate-900 dark:text-white transition-colors">
                 {link}
               </a>
             ))}
@@ -1011,7 +1011,7 @@ function ConnectModal({ open, storeUrl, onClose }: { open: boolean; storeUrl: st
 
           {/* Dialog */}
           <motion.div
-            className="relative z-10 w-full max-w-[420px] overflow-hidden rounded-[24px] bg-white shadow-2xl border border-slate-200/70"
+            className="relative z-10 w-full max-w-[420px] overflow-hidden rounded-[24px] bg-white dark:bg-[#080808] shadow-2xl border border-slate-200/70"
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -1025,7 +1025,7 @@ function ConnectModal({ open, storeUrl, onClose }: { open: boolean; storeUrl: st
             {state === "idle" && (
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 flex items-center justify-center transition-colors z-20 backdrop-blur-sm"
+                className="absolute top-4 right-4 w-8 h-8 rounded-full text-slate-400 dark:text-zinc-400 hover:text-slate-700 dark:text-slate-200 hover:bg-slate-100/80 flex items-center justify-center transition-colors z-20 backdrop-blur-sm"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1033,7 +1033,7 @@ function ConnectModal({ open, storeUrl, onClose }: { open: boolean; storeUrl: st
 
             <div className="relative z-10 px-8 pt-10 pb-8 text-center">
               <motion.div
-                className="w-16 h-16 rounded-[18px] bg-white shadow-sm border border-slate-200/80 flex items-center justify-center mx-auto mb-6 relative overflow-hidden group"
+                className="w-16 h-16 rounded-[18px] bg-white dark:bg-[#080808] shadow-sm border border-slate-200/80 flex items-center justify-center mx-auto mb-6 relative overflow-hidden group"
                 animate={state === "loading" ? { rotate: [0, 360] } : {}}
                 transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
               >
@@ -1048,16 +1048,16 @@ function ConnectModal({ open, storeUrl, onClose }: { open: boolean; storeUrl: st
                   <BarChart3 className="w-7 h-7 text-emerald-600 relative z-10" />
                 )}
               </motion.div>
-              <h2 className="text-[22px] font-bold text-slate-900 mb-2 leading-tight tracking-tight">
+              <h2 className="text-[22px] font-bold text-slate-900 dark:text-white mb-2 leading-tight tracking-tight">
                 {state === "loading" ? "Redirecting to Google Oauth" : "Analyze your store"}
               </h2>
               {storeUrl && state === "idle" ? (
-                <div className="inline-flex items-center gap-2 bg-slate-50 text-slate-600 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-slate-200 mt-2 mb-4 shadow-sm">
+                <div className="inline-flex items-center gap-2 bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-zinc-200 text-[13.5px] font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 mt-2 mb-4 shadow-sm">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" />
                   {storeUrl}
                 </div>
               ) : (
-                <p className="text-slate-500 text-[14px] leading-[1.6] max-w-[280px] mx-auto mb-1">
+                <p className="text-slate-500 dark:text-zinc-300 text-[14px] leading-[1.6] max-w-[280px] mx-auto mb-1">
                   {state === "loading" ? "Redirecting securely…" : "Log in to view exactly how AI shopping assistants perceive your catalog."}
                 </p>
               )}
@@ -1071,8 +1071,8 @@ function ConnectModal({ open, storeUrl, onClose }: { open: boolean; storeUrl: st
                   className={cn(
                     "w-full h-11 rounded-[10px] flex items-center justify-center gap-2.5 text-[14px] font-semibold transition-all duration-200 border",
                     state === "loading"
-                      ? "bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed"
-                      : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-[0_2px_4px_rgba(0,0,0,0.02)] hover:border-slate-300",
+                      ? "bg-slate-50 dark:bg-white/5 text-slate-400 dark:text-zinc-400 border-slate-200 dark:border-white/10 cursor-not-allowed"
+                      : "bg-white dark:bg-[#080808] hover:bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/10 shadow-[0_2px_4px_rgba(0,0,0,0.02)] hover:border-slate-300 dark:hover:border-white/20",
                   )}
                 >
                   {state === "loading" ? null : (
@@ -1088,10 +1088,10 @@ function ConnectModal({ open, storeUrl, onClose }: { open: boolean; storeUrl: st
               </div>
             </div>
 
-            <div className="border-t border-slate-100 bg-slate-50/50 px-8 py-5 flex flex-col items-center justify-center relative z-10">
-                <div className="flex items-center gap-1.5 text-slate-400 mb-2.5 hover:text-slate-600 transition-colors cursor-default">
-                   <p className="text-[11.5px] text-slate-400 text-center leading-relaxed">
-                  By continuing, you agree to Kasparro's <a href="#" className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">Terms of Service</a> & <a href="#" className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">Privacy Policy</a>.
+            <div className="border-t border-slate-100 dark:border-white/5 bg-slate-50/50 px-8 py-5 flex flex-col items-center justify-center relative z-10">
+                <div className="flex items-center gap-1.5 text-slate-400 dark:text-zinc-400 mb-2.5 hover:text-slate-600 dark:text-zinc-200 transition-colors cursor-default">
+                   <p className="text-[11.5px] text-slate-400 dark:text-zinc-400 text-center leading-relaxed">
+                  By continuing, you agree to Kasparro's <a href="#" className="text-slate-500 dark:text-zinc-300 hover:text-slate-700 dark:text-slate-200 underline underline-offset-2 transition-colors">Terms of Service</a> & <a href="#" className="text-slate-500 dark:text-zinc-300 hover:text-slate-700 dark:text-slate-200 underline underline-offset-2 transition-colors">Privacy Policy</a>.
                 </p>
                 </div>
             </div>
@@ -1151,7 +1151,7 @@ export default function Landing() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#080808]">
         <motion.div
           className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full"
           animate={{ rotate: 360 }}
@@ -1176,7 +1176,7 @@ export default function Landing() {
         }
       `}</style>
 
-      <div className="min-h-screen bg-white overflow-x-hidden">
+      <div className="min-h-screen bg-white dark:bg-[#080808] overflow-x-hidden">
         <Navbar
           onLogin={() => { setPendingUrl(""); setModalOpen(true); }}
           onGetStarted={() => document.getElementById("get-started")?.scrollIntoView({ behavior: "smooth", block: "center" })}

@@ -32,21 +32,6 @@ export type StorePerceptionResponse = {
   updatedAt: string | null;
 };
 
-export type TagOptimizerResponse = {
-  storeId: string;
-  productsNeedingAttention: number;
-  items: Array<{
-    productId: string;
-    title: string;
-    currentTags: string[];
-    suggestedTags: string[];
-    tagScore: number;
-    genericTags: string[];
-    needsAttention: boolean;
-    recommendationSummary: string;
-  }>;
-};
-
 async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   let headers = { ...(init?.headers || {}) };
   const method = (init?.method || "GET").toUpperCase();
@@ -72,10 +57,6 @@ async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T
 
 export function getStorePerception(storeId: string): Promise<StorePerceptionResponse> {
   return requestJson<StorePerceptionResponse>(`/api/stores/${storeId}/perception`);
-}
-
-export function getStoreTagOptimizer(storeId: string): Promise<TagOptimizerResponse> {
-  return requestJson<TagOptimizerResponse>(`/api/stores/${storeId}/tag-optimizer`);
 }
 
 export function updateStorePositioning(

@@ -5,6 +5,7 @@ import {
   exchangeGoogleCode,
   upsertUserFromGoogle,
   getUserById,
+  deleteUser,
 } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -93,6 +94,31 @@ router.post("/auth/logout", (req, res): void => {
     });
     res.json({ ok: true });
   });
+});
+
+router.delete("/auth/me", async (req, res): Promise<void> => {
+  const userId = req.session.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+
+  try {
+    await deleteUser(userId);
+    req.session.destroy((err) => {
+      if (err) console.error("Session destroy failed during account deletion", err);
+      res.clearCookie("sid", {
+        path: "/",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      });
+      res.json({ ok: true });
+    });
+  } catch (err) {
+    console.error("Account deletion failed", err);
+    res.status(500).json({ error: "Failed to delete account" });
+  }
 });
 
 export default router;

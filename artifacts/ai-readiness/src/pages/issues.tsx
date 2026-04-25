@@ -39,16 +39,16 @@ const SEV_DOT: Record<string, string> = {
   low: "bg-violet-400",
 };
 
-const SEV_LEFT: Record<string, string> = {
-  high: "border-l-red-500",
-  medium: "border-l-amber-400",
-  low: "border-l-violet-400",
+const SEV_PILL: Record<string, string> = {
+  high: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-200/50 dark:ring-red-500/20",
+  medium: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-1 ring-inset ring-amber-200/50 dark:ring-amber-500/20",
+  low: "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 ring-1 ring-inset ring-violet-200/50 dark:ring-violet-500/20",
 };
 
 const EFFORT_PILL: Record<string, string> = {
-  low: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  medium: "bg-amber-50 text-amber-700 border-amber-200",
-  high: "bg-red-50 text-red-700 border-red-200",
+  low: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 ring-1 ring-inset ring-emerald-200/50 dark:ring-emerald-500/20",
+  medium: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-1 ring-inset ring-amber-200/50 dark:ring-amber-500/20",
+  high: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-200/50 dark:ring-red-500/20",
 };
 
 const EFFORT_LABEL: Record<string, string> = {
@@ -66,56 +66,57 @@ function GapRow({ gap }: { gap: Gap }) {
   return (
     <div
       className={cn(
-        "border-l-4 bg-white border border-slate-200 rounded-lg overflow-hidden mb-2",
-        SEV_LEFT[gap.severity] ?? "border-l-slate-300",
+        "bg-white dark:bg-[#080808] rounded-[12px] border border-slate-200/60 dark:border-white/10 shadow-sm overflow-hidden mb-3 transition-all hover:border-slate-300 dark:hover:border-white/20 hover:shadow-md",
         gap.isFixed && "opacity-50",
       )}
     >
       {/* Header row */}
       <button
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50/60 text-left transition-colors"
+        className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors"
         onClick={() => setOpen((p) => !p)}
       >
         <span
-          className={`w-2 h-2 rounded-full flex-shrink-0 ${SEV_DOT[gap.severity] ?? "bg-slate-300"}`}
-        />
+          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ring-1 ${SEV_PILL[gap.severity] ?? "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-zinc-300 ring-slate-200/50 dark:ring-white/10"}`}
+        >
+          {gap.severity}
+        </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-slate-800 truncate">
+          <p className="text-[14px] font-semibold text-slate-800 dark:text-slate-200 tracking-tight truncate">
             {gap.title}
           </p>
           {gap.productTitle && (
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+            <p className="text-[12px] text-slate-400 dark:text-zinc-400 mt-0.5 truncate">
               {gap.productTitle}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0">
           {gap.isFixed && (
-            <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 dark:bg-emerald-500/10 px-2.5 py-0.5 rounded-full ring-1 ring-emerald-200/50 dark:ring-emerald-500/20">
               Fixed
             </span>
           )}
           {gap.effortLevel && (
             <span
               className={cn(
-                "text-[10px] font-medium px-2 py-0.5 rounded-full border hidden sm:inline-flex",
+                "text-[10px] font-bold px-2.5 py-0.5 rounded-full hidden sm:inline-flex",
                 EFFORT_PILL[gap.effortLevel] ?? "",
               )}
             >
               {EFFORT_LABEL[gap.effortLevel] ?? gap.effortLevel}
             </span>
           )}
-          <div className="flex items-center gap-1">
-            <div className="w-8 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-1.5 bg-slate-100 dark:bg-[#111214] border dark:border-white/5 rounded-full overflow-hidden hidden sm:block">
               <div
                 className={`h-full rounded-full ${SEV_DOT[gap.severity] ?? "bg-slate-300"}`}
                 style={{ width: `${impact}%` }}
               />
             </div>
             {open ? (
-              <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+              <ChevronUp className="w-4 h-4 text-slate-400 dark:text-zinc-400" />
             ) : (
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              <ChevronDown className="w-4 h-4 text-slate-400 dark:text-zinc-400" />
             )}
           </div>
         </div>
@@ -123,24 +124,24 @@ function GapRow({ gap }: { gap: Gap }) {
 
       {/* Expanded */}
       {open && (
-        <div className="px-4 pb-4 pt-1 ml-5 space-y-2.5 border-t border-slate-100">
+        <div className="px-5 pb-5 pt-2 ml-[96px] space-y-3 border-t border-slate-50 dark:border-white/5">
           {gap.evidence && (
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] text-amber-800">{gap.evidence}</p>
+            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20 rounded-[10px] px-3.5 py-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-[12px] text-amber-800 dark:text-amber-200 font-medium leading-relaxed">{gap.evidence}</p>
             </div>
           )}
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="text-[13px] text-slate-600 dark:text-zinc-200 leading-relaxed max-w-3xl">
             {gap.description}
           </p>
-          <div className="flex items-start gap-2 bg-slate-50 rounded-lg px-3 py-2">
-            <Zap className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-slate-700">{gap.suggestion}</p>
+          <div className="flex items-start gap-2 bg-slate-50 dark:bg-white/5 rounded-[10px] px-3.5 py-2.5 max-w-3xl border border-slate-100 dark:border-white/5">
+            <Zap className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="text-[13px] text-slate-700 dark:text-slate-200 font-medium">{gap.suggestion}</p>
           </div>
           {gap.productId && (
             <Link href={`/products/${gap.productId}`}>
-              <span className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
-                <Package className="w-3 h-3" />
+              <span className="text-[12px] font-semibold text-slate-900 dark:text-white hover:text-emerald-700 flex items-center gap-1 mt-2 transition-colors">
+                <Package className="w-3.5 h-3.5" />
                 View product →
               </span>
             </Link>
@@ -169,8 +170,8 @@ function GapSection({
     <div className="mb-6">
       <div className="flex items-center gap-2 mb-3">
         <Icon className={`w-4 h-4 ${iconColor}`} />
-        <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
-        <span className="text-xs text-slate-400">({gaps.length})</span>
+        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h2>
+        <span className="text-xs text-slate-400 dark:text-zinc-400">({gaps.length})</span>
       </div>
       {gaps.map((g) => (
         <GapRow key={g.id} gap={g} />
@@ -186,25 +187,25 @@ const PHASE_CONFIG = [
     sev: "high" as const,
     label: "Phase 1 — Immediate action",
     color: "text-red-600",
-    bg: "bg-red-50 border-red-200",
-    badge: "bg-red-100 text-red-700",
-    num: "bg-red-100 text-red-700",
+    bg: "bg-white dark:bg-[#080808] border border-red-100 dark:border-white/10 shadow-sm",
+    badge: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-red-200/50 dark:ring-red-500/20",
+    num: "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400",
   },
   {
     sev: "medium" as const,
     label: "Phase 2 — Short-term fixes",
     color: "text-amber-600",
-    bg: "bg-amber-50 border-amber-200",
-    badge: "bg-amber-100 text-amber-700",
-    num: "bg-amber-100 text-amber-700",
+    bg: "bg-white dark:bg-[#080808] border border-amber-100 dark:border-white/10 shadow-sm",
+    badge: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-1 ring-amber-200/50 dark:ring-amber-500/20",
+    num: "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400",
   },
   {
     sev: "low" as const,
     label: "Phase 3 — Long-term",
     color: "text-violet-600",
-    bg: "bg-violet-50 border-violet-200",
-    badge: "bg-violet-100 text-violet-700",
-    num: "bg-violet-100 text-violet-700",
+    bg: "bg-white dark:bg-[#080808] border border-violet-100 dark:border-white/10 shadow-sm",
+    badge: "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 ring-1 ring-violet-200/50 dark:ring-violet-500/20",
+    num: "bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-400",
   },
 ];
 
@@ -219,48 +220,48 @@ function ActionRow({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className={`rounded-lg border overflow-hidden mb-2 ${cfg.bg}`}>
+    <div className={`rounded-[12px] overflow-hidden mb-3 transition-all hover:shadow-md ${cfg.bg}`}>
       <button
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:brightness-95 transition-all"
+        className="w-full flex items-center gap-4 px-5 py-4 text-left transition-colors"
         onClick={() => setOpen((p) => !p)}
       >
         <span
-          className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center flex-shrink-0 ${cfg.num}`}
+          className={`w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center flex-shrink-0 ${cfg.num}`}
         >
           {rank}
         </span>
-        <p className="flex-1 text-sm font-medium text-slate-800 truncate">
+        <p className="flex-1 text-[14px] font-semibold text-slate-800 dark:text-slate-200 tracking-tight truncate">
           {item.gap}
         </p>
         <span
-          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide hidden sm:inline-flex flex-shrink-0 ${cfg.badge}`}
+          className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-widest hidden sm:inline-flex flex-shrink-0 ${cfg.badge}`}
         >
           {item.severity}
         </span>
         {open ? (
-          <ChevronUp className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+          <ChevronUp className="w-4 h-4 text-slate-400 dark:text-zinc-400 flex-shrink-0" />
         ) : (
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+          <ChevronDown className="w-4 h-4 text-slate-400 dark:text-zinc-400 flex-shrink-0" />
         )}
       </button>
       {open && (
-        <div className="px-4 pb-4 pt-1 ml-8 space-y-2 border-t border-white/60">
+        <div className="px-5 pb-5 pt-3 ml-10 space-y-3 border-t border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-transparent">
           <div className="flex items-start gap-2">
-            <TrendingUp className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-slate-600">{item.conversionImpact}</p>
+            <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+            <p className="text-[13px] text-slate-700 dark:text-slate-200 font-medium">{item.conversionImpact}</p>
           </div>
-          <div className="bg-white/70 rounded-lg px-3 py-2.5">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">
+          <div className="bg-white dark:bg-black rounded-[10px] px-4 py-3 border border-slate-200/60 dark:border-white/10 shadow-sm">
+            <p className="text-[10px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest mb-1.5">
               Suggested fix
             </p>
-            <p className="text-xs text-slate-700 leading-relaxed">
+            <p className="text-[13px] text-slate-600 dark:text-zinc-300 leading-relaxed font-medium">
               {item.suggestedFix}
             </p>
           </div>
           {item.productId && item.productTitle && (
             <Link href={`/products/${item.productId}`}>
-              <span className="text-xs text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
-                <Package className="w-3 h-3" />
+              <span className="text-[12px] font-semibold text-slate-900 dark:text-white hover:text-emerald-700 flex items-center gap-1 transition-colors">
+                <Package className="w-3.5 h-3.5" />
                 {item.productTitle}
               </span>
             </Link>
@@ -345,66 +346,58 @@ export default function Issues() {
       <div className="p-6 max-w-4xl mx-auto">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Issues</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Issues</h1>
+            <p className="text-[13px] text-slate-500 dark:text-zinc-300 mt-1">
               Evidence-backed gaps and prioritized improvements
             </p>
           </div>
           <Button
             variant="outline"
             size="sm"
-            className="h-7 px-2 text-xs gap-1 text-slate-500"
+            className="h-9 px-3 text-[13px] rounded-[10px] shadow-sm gap-1.5 text-slate-600 dark:text-zinc-200"
             onClick={refresh}
             disabled={gapsLoading}
           >
             <RefreshCw
-              className={cn("w-3 h-3", gapsLoading && "animate-spin")}
+              className={cn("w-4 h-4", gapsLoading && "animate-spin")}
             />
             Refresh
           </Button>
         </div>
 
         {/* Stats bar */}
-        <div className="grid grid-cols-4 gap-px bg-slate-200 rounded-xl overflow-hidden border border-slate-200 mb-6">
+        <div className="grid grid-cols-4 gap-4 mb-8">
           {[
-            {
-              label: "Open",
-              value: openGaps.length,
-              color: "text-slate-900",
-            },
+            { label: "Open", value: openGaps.length, color: "text-slate-900 dark:text-white" },
             { label: "Critical", value: critCount, color: "text-red-600" },
             { label: "Medium", value: medCount, color: "text-amber-600" },
-            {
-              label: "Fixed",
-              value: fixedGaps.length,
-              color: "text-emerald-600",
-            },
+            { label: "Fixed", value: fixedGaps.length, color: "text-emerald-600" },
           ].map((s) => (
-            <div key={s.label} className="bg-white px-4 py-3.5 text-center">
-              <p className={`text-2xl font-bold tabular-nums ${s.color}`}>
+            <div key={s.label} className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm p-5 flex flex-col items-center justify-center">
+              <p className={`text-3xl font-bold tabular-nums tracking-tight leading-none ${s.color}`}>
                 {s.value}
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
+              <p className="text-[13px] font-medium text-slate-500 dark:text-zinc-300 mt-2">{s.label}</p>
             </div>
           ))}
         </div>
 
         <Tabs defaultValue="gaps">
-          <div className="flex items-center justify-between mb-4">
-            <TabsList className="bg-slate-100 p-0.5 h-9">
+          <div className="flex items-center justify-between mb-6">
+            <TabsList className="bg-slate-200/50 dark:bg-white/5 p-1 h-10 rounded-[10px]">
               <TabsTrigger
                 value="gaps"
-                className="text-xs h-8 gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-emerald-700"
+                className="text-[13px] font-semibold h-8 px-4 gap-1.5 rounded-[8px] data-[state=active]:bg-white dark:bg-transparent data-[state=active]:dark:bg-white/10 data-[state=active]:shadow-sm data-[state=active]:text-slate-900 dark:text-white text-slate-500 dark:text-zinc-300"
               >
-                <AlertTriangle className="w-3.5 h-3.5" /> All Issues
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" /> All Issues
               </TabsTrigger>
               <TabsTrigger
                 value="action-plan"
-                className="text-xs h-8 gap-1.5 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-emerald-700"
+                className="text-[13px] font-semibold h-8 px-4 gap-1.5 rounded-[8px] data-[state=active]:bg-white dark:bg-transparent data-[state=active]:dark:bg-white/10 data-[state=active]:shadow-sm data-[state=active]:text-slate-900 dark:text-white text-slate-500 dark:text-zinc-300"
               >
-                <ListChecks className="w-3.5 h-3.5" /> Action Plan
+                <ListChecks className="w-3.5 h-3.5 text-blue-500" /> Action Plan
               </TabsTrigger>
             </TabsList>
 
@@ -412,7 +405,7 @@ export default function Issues() {
             {fixedGaps.length > 0 && (
               <button
                 onClick={() => setShowFixed((p) => !p)}
-                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+                className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-zinc-300 hover:text-slate-700 dark:text-slate-200 transition-colors"
               >
                 {showFixed ? (
                   <EyeOff className="w-3.5 h-3.5" />
@@ -435,10 +428,10 @@ export default function Issues() {
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mb-3">
                   <Zap className="w-5 h-5 text-emerald-500" />
                 </div>
-                <p className="text-sm font-semibold text-slate-700 mb-1">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">
                   No open issues
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-400 dark:text-zinc-400">
                   Run an analysis to detect gaps in your catalog.
                 </p>
               </div>
@@ -483,7 +476,7 @@ export default function Issues() {
             ) : sorted.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <ListChecks className="w-10 h-10 text-slate-200 mb-3" />
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-slate-400 dark:text-zinc-400">
                   Run a full analysis to generate an action plan
                 </p>
               </div>

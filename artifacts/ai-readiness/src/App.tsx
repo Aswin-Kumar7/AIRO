@@ -5,9 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StoreProvider } from "@/context/store-context";
 import { AuthProvider, useAuth } from "@/context/auth-context";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
@@ -37,8 +37,12 @@ function ProtectedRoute({ component: Component, ...props }: { component: Compone
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-black gap-4">
+        <div className="relative">
+           <div className="w-12 h-12 rounded-2xl border-4 border-slate-100 dark:border-white/5 border-t-emerald-500 animate-spin" />
+           <Zap className="absolute inset-0 m-auto w-5 h-5 text-emerald-500 animate-pulse" />
+        </div>
+        <p className="text-[13px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest animate-pulse">Initializing Intelligence...</p>
       </div>
     );
   }
@@ -52,20 +56,65 @@ function ProtectedRoute({ component: Component, ...props }: { component: Compone
 }
 
 function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+  const [showDetails, setShowDetails] = useState(false);
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-slate-50 text-center">
-      <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-4">
-        <AlertCircle className="w-6 h-6 text-red-600" />
-      </div>
-      <h2 className="text-lg font-bold text-slate-900 mb-2">Something went wrong</h2>
-      <p className="text-sm text-slate-500 max-w-md mb-6">{error.message || "An unexpected error occurred."}</p>
-      <div className="flex gap-3">
-        <Button onClick={() => window.location.reload()} variant="outline">
-          Reload Page
-        </Button>
-        <Button onClick={resetErrorBoundary} className="bg-indigo-600 hover:bg-indigo-700">
-          Try again
-        </Button>
+    <div className="min-h-screen flex items-center justify-center bg-[#fafafa] p-6 font-sans">
+      <div className="max-w-[480px] w-full bg-white rounded-[16px] border border-slate-200 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+        <div className="p-10 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-6 border border-red-100/50">
+            <AlertCircle className="w-8 h-8 text-red-500" />
+          </div>
+          
+          <h2 className="text-[20px] font-bold text-slate-900 tracking-tight mb-2">Unexpected Error</h2>
+          <p className="text-[14px] text-slate-500 leading-relaxed mb-8">
+            You encountered a technical issue. You can try refreshing or contact support if the issue persists.
+          </p>
+
+          <div className="flex flex-col gap-3">
+            <Button 
+              onClick={resetErrorBoundary} 
+              className="h-11 rounded-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[14px] shadow-sm transition-all"
+            >
+              Try to Resume
+            </Button>
+            <div className="flex gap-3">
+              <Button 
+                onClick={() => window.location.reload()} 
+                variant="outline" 
+                className="flex-1 h-11 rounded-[10px] border-slate-200 text-slate-600 font-bold text-[13px] hover:bg-slate-50"
+              >
+                Reload App
+              </Button>
+              <Button 
+                onClick={() => window.location.href = "/"} 
+                variant="outline" 
+                className="flex-1 h-11 rounded-[10px] border-slate-200 text-slate-600 font-bold text-[13px] hover:bg-slate-50"
+              >
+                Return Home
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
+          <button 
+            onClick={() => setShowDetails(!showDetails)}
+            className="flex items-center gap-2 text-[11px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors mx-auto"
+          >
+            {showDetails ? "Hide" : "Show"} Technical Details
+          </button>
+          
+          {showDetails && (
+            <div className="mt-4 p-4 bg-slate-900 rounded-[8px] text-left overflow-auto max-h-[200px]">
+              <pre className="text-[11px] font-mono text-emerald-400/90 leading-normal">
+                {error.name}: {error.message}
+                {"\n\n"}
+                {error.stack}
+              </pre>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -121,20 +170,24 @@ function Router() {
   );
 }
 
+import { ThemeProvider } from "@/context/theme-context";
+
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <StoreProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-          </StoreProvider>
-        </AuthProvider>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ThemeProvider defaultTheme="light" storageKey="kasparro-theme">
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AuthProvider>
+            <StoreProvider>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <Router />
+              </WouterRouter>
+            </StoreProvider>
+          </AuthProvider>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 }
 

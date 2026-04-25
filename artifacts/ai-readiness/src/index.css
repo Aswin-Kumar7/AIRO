@@ -137,40 +137,40 @@
 }
 
 .dark {
-  --background: 224 71% 10%;
-  --foreground: 210 40% 98%;
+  --background: 0 0% 0%; /* Pitch Black */
+  --foreground: 220 14% 96%;
   
-  --border: 215 28% 17%;
-  --input: 215 28% 17%;
+  --border: 220 7% 14%; /* Subtle border */
+  --input: 220 7% 14%;
   --ring: 162 72% 45%;
 
-  --card: 222 47% 11%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 215 28% 17%;
+  --card: 220 8% 7%; /* #111214 Discord Card */
+  --card-foreground: 220 14% 96%;
+  --card-border: 220 7% 14%;
 
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 215 28% 17%;
+  --sidebar: 0 0% 3%; /* #080808 */
+  --sidebar-foreground: 220 14% 96%;
+  --sidebar-border: 220 7% 14%;
   --sidebar-primary: 162 72% 45%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 215 28% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-accent: 220 7% 14%;
+  --sidebar-accent-foreground: 220 14% 96%;
   --sidebar-ring: 162 72% 45%;
 
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 215 28% 17%;
+  --popover: 220 8% 7%;
+  --popover-foreground: 220 14% 96%;
+  --popover-border: 220 7% 14%;
 
-  --primary: 162 72% 45%; /* Lighter emerald for dark mode */
+  --primary: 162 72% 45%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 215 28% 17%;
+  --secondary: 0 0% 12%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 215 28% 17%;
+  --muted: 0 0% 12%;
   --muted-foreground: 215 20% 65%;
 
-  --accent: 215 28% 17%;
+  --accent: 0 0% 12%;
   --accent-foreground: 210 40% 98%;
 
   --destructive: 0 62% 30%;
@@ -183,5 +183,26 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  /* Global Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 dark:bg-white/10 rounded-full border-[2px] border-transparent bg-clip-padding transition-colors;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-300 dark:bg-white/20;
+  }
+
+  /* Specific class for finer control if needed */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
   }
 }

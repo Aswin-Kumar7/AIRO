@@ -49,9 +49,9 @@ const SEV_DOT: Record<string, string> = {
 };
 
 const EFFORT_PILL: Record<string, string> = {
-  low: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  medium: "bg-amber-50 text-amber-700 border-amber-200",
-  high: "bg-red-50 text-red-700 border-red-200",
+  low: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 ring-1 ring-inset ring-emerald-200/50 dark:ring-emerald-500/20",
+  medium: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-1 ring-inset ring-amber-200/50 dark:ring-amber-500/20",
+  high: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-1 ring-inset ring-red-200/50 dark:ring-red-500/20",
 };
 
 const EFFORT_LABEL: Record<string, string> = {
@@ -73,14 +73,14 @@ function ScoreLine({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-slate-500 w-24 flex-shrink-0">{label}</span>
-      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+      <span className="text-xs text-slate-500 dark:text-zinc-300 w-24 flex-shrink-0">{label}</span>
+      <div className="flex-1 h-1.5 bg-slate-100 dark:bg-[#111214] border dark:border-white/5 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-700 ${color}`}
           style={{ width: `${score}%` }}
         />
       </div>
-      <span className="text-xs font-semibold text-slate-700 w-6 text-right tabular-nums">
+      <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 w-6 text-right tabular-nums">
         {score}
       </span>
     </div>
@@ -104,17 +104,17 @@ function IssueRow({
 
   return (
     <div
-      className={`border-b border-slate-100 last:border-0 ${issue.isFixed ? "opacity-50" : ""}`}
+      className={`border-b border-slate-100 dark:border-white/5 last:border-0 ${issue.isFixed ? "opacity-50" : ""}`}
     >
       {/* Row header */}
       <button
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50/60 text-left transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50/60 dark:hover:bg-white/5 text-left transition-colors"
         onClick={() => setOpen((p) => !p)}
       >
         <span
           className={`w-2 h-2 rounded-full flex-shrink-0 mt-0.5 ${SEV_DOT[issue.severity] ?? "bg-slate-300"}`}
         />
-        <p className="flex-1 text-sm font-medium text-slate-800 truncate">
+        <p className="flex-1 text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
           {issue.title}
         </p>
         {issue.isFixed && (
@@ -122,22 +122,22 @@ function IssueRow({
         )}
         {issue.effortLevel && (
           <span
-            className={`text-[10px] font-medium px-2 py-0.5 rounded-full border hidden sm:inline-flex flex-shrink-0 ${EFFORT_PILL[issue.effortLevel] ?? ""}`}
+            className={`text-[10px] font-bold px-2 py-0.5 rounded-full hidden sm:inline-flex flex-shrink-0 ${EFFORT_PILL[issue.effortLevel] ?? ""}`}
           >
             {EFFORT_LABEL[issue.effortLevel] ?? issue.effortLevel}
           </span>
         )}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <div className="w-10 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+          <div className="w-10 h-1.5 bg-slate-100 dark:bg-[#111214] border dark:border-white/5 rounded-full overflow-hidden hidden sm:block">
             <div
               className={`h-full rounded-full ${SEV_BAR[issue.severity] ?? "bg-slate-300"}`}
               style={{ width: `${impact}%` }}
             />
           </div>
           {open ? (
-            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+            <ChevronUp className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-400" />
           ) : (
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-400" />
           )}
         </div>
       </button>
@@ -146,17 +146,17 @@ function IssueRow({
       {open && (
         <div className="px-4 pb-4 ml-5 space-y-2.5">
           {issue.evidence && (
-            <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20 rounded-lg px-3 py-2 shadow-sm">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-[11px] text-amber-800">{issue.evidence}</p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-200 font-medium">{issue.evidence}</p>
             </div>
           )}
-          <p className="text-xs text-slate-500 leading-relaxed">
+          <p className="text-xs text-slate-500 dark:text-zinc-300 leading-relaxed">
             {issue.description}
           </p>
-          <div className="flex items-start gap-2 bg-slate-50 rounded-lg px-3 py-2">
+          <div className="flex items-start gap-2 bg-slate-50 dark:bg-white/5 rounded-lg px-3 py-2">
             <Zap className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-slate-700">{issue.suggestion}</p>
+            <p className="text-xs text-slate-700 dark:text-slate-200">{issue.suggestion}</p>
           </div>
           {canAutoFix && !issue.isFixed && (
             <button
@@ -193,7 +193,7 @@ function AiQaPanel({
   if (!enabled) {
     return (
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500 dark:text-zinc-300">
           Test whether AI can answer buyer questions about this product.
         </p>
         <Button
@@ -212,7 +212,7 @@ function AiQaPanel({
     return (
       <div className="flex items-center gap-2 py-2">
         <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
-        <span className="text-xs text-slate-400">Testing AI answers…</span>
+        <span className="text-xs text-slate-400 dark:text-zinc-400">Testing AI answers…</span>
       </div>
     );
   }
@@ -229,7 +229,7 @@ function AiQaPanel({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-slate-500 dark:text-zinc-300">
           {data.answerableCount}/{data.totalQuestions} questions answerable
         </span>
         <span className={`text-sm font-bold tabular-nums ${color}`}>
@@ -241,8 +241,8 @@ function AiQaPanel({
           key={i}
           className={`rounded-lg border px-3 py-2.5 ${
             qa.canAnswer
-              ? "border-emerald-200 bg-emerald-50/40"
-              : "border-red-200 bg-red-50/40"
+              ? "border-emerald-200/60 dark:border-emerald-500/20 bg-emerald-50/40 dark:bg-emerald-500/10"
+              : "border-red-200/60 dark:border-red-500/20 bg-red-50/40 dark:bg-red-500/10"
           }`}
         >
           <div className="flex items-start gap-2">
@@ -252,10 +252,10 @@ function AiQaPanel({
               <XCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-medium text-slate-800 mb-1">
+              <p className="text-[11px] font-medium text-slate-800 dark:text-slate-200 mb-1">
                 {qa.question}
               </p>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
+              <p className="text-[11px] text-slate-500 dark:text-zinc-300 leading-relaxed">
                 {qa.answer}
               </p>
               {qa.missingInfo && (
@@ -308,7 +308,7 @@ export default function ProductDetail({
       <div className="p-6 max-w-5xl mx-auto">
         {/* Back */}
         <Link href="/products">
-          <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-700 mb-5 transition-colors">
+          <button className="flex items-center gap-1 text-xs text-slate-400 dark:text-zinc-400 hover:text-slate-700 dark:text-slate-200 mb-5 transition-colors">
             <ChevronLeft className="w-3.5 h-3.5" />
             Products
           </button>
@@ -321,20 +321,20 @@ export default function ProductDetail({
         ) : product ? (
           <div className="space-y-5">
             {/* ── Product header ── */}
-            <div className="flex items-start gap-4 bg-white rounded-xl border border-slate-200 p-5">
+            <div className="flex items-start gap-4 bg-white dark:bg-[#080808] rounded-xl border border-slate-200 dark:border-white/10 p-5">
               {product.imageUrl ? (
                 <img
                   src={product.imageUrl}
                   alt={product.title}
-                  className="w-14 h-14 rounded-lg object-cover border border-slate-200 flex-shrink-0"
+                  className="w-14 h-14 rounded-lg object-cover border border-slate-200 dark:border-white/10 flex-shrink-0"
                 />
               ) : (
-                <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                  <Package className="w-6 h-6 text-slate-400" />
+                <div className="w-14 h-14 rounded-lg bg-slate-100 dark:bg-white/10 flex items-center justify-center flex-shrink-0">
+                  <Package className="w-6 h-6 text-slate-400 dark:text-zinc-400" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <h1 className="text-lg font-bold text-slate-900 leading-snug">
+                <h1 className="text-lg font-bold text-slate-900 dark:text-white leading-snug">
                   {product.title}
                 </h1>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -344,23 +344,23 @@ export default function ProductDetail({
                     </Badge>
                   )}
                   {product.vendor && (
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-400 dark:text-zinc-400">
                       {product.vendor}
                     </span>
                   )}
                   {product.price && (
-                    <span className="text-xs font-medium text-slate-600">
+                    <span className="text-xs font-medium text-slate-600 dark:text-zinc-200">
                       ${product.price}
                     </span>
                   )}
                   {!isAnalyzed && (
-                    <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                    <span className="text-[10px] text-slate-400 dark:text-zinc-400 bg-slate-100 dark:bg-white/10 px-2 py-0.5 rounded-full">
                       Not analyzed
                     </span>
                   )}
                 </div>
                 {product.aiPerceptionSummary && (
-                  <p className="text-xs text-slate-500 italic mt-2 leading-relaxed">
+                  <p className="text-xs text-slate-500 dark:text-zinc-300 italic mt-2 leading-relaxed">
                     "{product.aiPerceptionSummary}"
                   </p>
                 )}
@@ -379,7 +379,7 @@ export default function ProductDetail({
                     >
                       {Math.round(product.score?.overall ?? 0)}
                     </p>
-                    <p className="text-[10px] text-slate-400">/ 100</p>
+                    <p className="text-[10px] text-slate-400 dark:text-zinc-400">/ 100</p>
                   </div>
                 )}
                 <Button
@@ -401,11 +401,11 @@ export default function ProductDetail({
                 {isAnalyzed ? (
                   <>
                     {/* Issues list */}
-                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                    <div className="bg-white dark:bg-[#080808] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-white/5">
                         <div className="flex items-center gap-2">
                           <AlertTriangle className="w-4 h-4 text-amber-500" />
-                          <span className="text-sm font-semibold text-slate-800">
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                             Issues
                           </span>
                           {openIssues.length > 0 && (
@@ -427,7 +427,7 @@ export default function ProductDetail({
                       {issues.length === 0 ? (
                         <div className="py-12 text-center">
                           <CheckCircle2 className="w-8 h-8 text-emerald-300 mx-auto mb-2" />
-                          <p className="text-sm text-slate-400">No issues found</p>
+                          <p className="text-sm text-slate-400 dark:text-zinc-400">No issues found</p>
                         </div>
                       ) : (
                         issues.map((issue) => (
@@ -441,10 +441,10 @@ export default function ProductDetail({
                     </div>
 
                     {/* AI Q&A */}
-                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100">
-                        <MessageSquare className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm font-semibold text-slate-800">
+                    <div className="bg-white dark:bg-[#080808] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-white/5">
+                        <MessageSquare className="w-4 h-4 text-slate-400 dark:text-zinc-400" />
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                           Can AI answer this?
                         </span>
                       </div>
@@ -457,12 +457,12 @@ export default function ProductDetail({
                     </div>
                   </>
                 ) : (
-                  <div className="bg-white rounded-xl border border-dashed border-slate-200 py-16 text-center">
+                  <div className="bg-white dark:bg-[#080808] rounded-xl border border-dashed border-slate-200 dark:border-white/10 py-16 text-center">
                     <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-slate-600 mb-1">
+                    <p className="text-sm font-medium text-slate-600 dark:text-zinc-200 mb-1">
                       Not analyzed yet
                     </p>
-                    <p className="text-xs text-slate-400 mb-4 max-w-xs mx-auto">
+                    <p className="text-xs text-slate-400 dark:text-zinc-400 mb-4 max-w-xs mx-auto">
                       Run an analysis from the Dashboard to get scores and issues
                       for this product.
                     </p>
@@ -479,8 +479,8 @@ export default function ProductDetail({
               <div className="space-y-4">
                 {/* Scores */}
                 {isAnalyzed && (
-                  <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <div className="bg-white dark:bg-[#080808] rounded-xl border border-slate-200 dark:border-white/10 p-4 space-y-3">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wide">
                       Score breakdown
                     </p>
                     <ScoreLine
@@ -507,13 +507,13 @@ export default function ProductDetail({
                 )}
 
                 {/* Tags */}
-                <div className="bg-white rounded-xl border border-slate-200 p-4">
+                <div className="bg-white dark:bg-[#080808] rounded-xl border border-slate-200 dark:border-white/10 p-4">
                   <div className="flex items-center gap-1.5 mb-3">
-                    <Tag className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <Tag className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-400" />
+                    <span className="text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wide">
                       Tags
                     </span>
-                    <span className="ml-auto text-xs text-slate-400">
+                    <span className="ml-auto text-xs text-slate-400 dark:text-zinc-400">
                       {product.tags.length}
                     </span>
                   </div>
@@ -522,19 +522,19 @@ export default function ProductDetail({
                       {product.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full"
+                          className="text-[10px] bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-zinc-200 px-2 py-0.5 rounded-full"
                         >
                           {tag}
                         </span>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-400 dark:text-zinc-400">
                       No tags — add 5–10 descriptive tags.
                     </p>
                   )}
                   {product.suggestedTags.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-slate-100">
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-white/5">
                       <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-1.5 flex items-center gap-1">
                         <Sparkles className="w-3 h-3" /> AI suggestions
                       </p>
@@ -542,7 +542,7 @@ export default function ProductDetail({
                         {product.suggestedTags.map((tag) => (
                           <span
                             key={tag}
-                            className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full"
+                            className="text-[10px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 ring-1 ring-inset ring-emerald-200/50 dark:ring-emerald-500/20 px-2 py-0.5 rounded-full"
                           >
                             {tag}
                           </span>
@@ -561,7 +561,7 @@ export default function ProductDetail({
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-center py-20 text-slate-400 text-sm">
+          <div className="flex items-center justify-center py-20 text-slate-400 dark:text-zinc-400 text-sm">
             Product not found
           </div>
         )}

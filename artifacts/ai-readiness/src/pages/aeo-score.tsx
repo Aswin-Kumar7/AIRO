@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Loader2, Brain, CheckCircle2, XCircle, AlertCircle, Zap, FileText,
-  BarChart3, Tag, Shield, MessageSquare, ArrowRight, TrendingUp,
+  BarChart3, Tag, Shield, MessageSquare, ArrowRight, TrendingUp, Search,
 } from "lucide-react";
 import {
   useGetStoreSummary, getGetStoreSummaryQueryKey,
@@ -23,31 +23,36 @@ function ScoreArc({
   color,
   size = 88,
   strokeWidth = 6,
+  fontSize = 24,
 }: {
   score: number;
   color: string;
   size?: number;
   strokeWidth?: number;
+  fontSize?: number;
 }) {
   const r = (size - strokeWidth * 2) / 2;
   const c = size / 2;
   const circ = 2 * Math.PI * r;
   const dash = (Math.min(100, Math.max(0, score)) / 100) * circ;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0">
-      <circle cx={c} cy={c} r={r} fill="none" stroke="#E5E7EB" strokeWidth={strokeWidth} />
-      <circle
-        cx={c} cy={c} r={r} fill="none"
-        stroke={color} strokeWidth={strokeWidth}
-        strokeDasharray={`${dash} ${circ}`}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${c} ${c})`}
-        style={{ transition: "stroke-dasharray 0.9s ease-out" }}
-      />
-      <text x={c} y={c + 5} textAnchor="middle" fontSize="16" fontWeight="700" fill="#0F172A">
-        {score}
-      </text>
-    </svg>
+    <div className="relative inline-flex items-center justify-center">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0 transform -rotate-90">
+        <circle cx={c} cy={c} r={r} fill="none" stroke="#f1f5f9" strokeWidth={strokeWidth} />
+        <circle
+          cx={c} cy={c} r={r} fill="none"
+          stroke={color} strokeWidth={strokeWidth}
+          strokeDasharray={`${dash} ${circ}`}
+          strokeLinecap="round"
+          style={{ transition: "stroke-dasharray 0.9s ease-out" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="font-extrabold text-slate-900 dark:text-white tracking-tighter" style={{ fontSize: `${fontSize}px` }}>
+          {Math.round(score)}
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -105,9 +110,9 @@ const DIMENSIONS = [
 ];
 
 function scoreTier(s: number): { label: string; color: string; bg: string } {
-  if (s >= 80) return { label: "Strong", color: "text-emerald-700", bg: "bg-emerald-50" };
-  if (s >= 60) return { label: "Moderate", color: "text-amber-700", bg: "bg-amber-50" };
-  return { label: "Needs work", color: "text-red-700", bg: "bg-red-50" };
+  if (s >= 80) return { label: "Strong", color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10" };
+  if (s >= 60) return { label: "Moderate", color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-500/10" };
+  return { label: "Needs work", color: "text-red-700 dark:text-red-400", bg: "bg-red-50 dark:bg-red-500/10" };
 }
 
 // ─── AEO Score radar breakdown ────────────────────────────────────────────────
@@ -122,21 +127,30 @@ function DimensionCard({
   const tier = scoreTier(score);
   const Icon = dimension.icon;
   return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex gap-4">
-      <ScoreArc score={score} color={dimension.color} size={80} strokeWidth={5} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <Icon className="w-4 h-4 flex-shrink-0" style={{ color: dimension.color }} />
-          <span className="font-semibold text-slate-900 text-sm">{dimension.label}</span>
-          <span className={`ml-auto text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${tier.bg} ${tier.color}`}>
-            {tier.label}
-          </span>
+    <div className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm p-6 flex flex-col transition-all hover:shadow-md hover:border-slate-300/80">
+      <div className="flex items-start justify-between mb-5">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${dimension.color}15` }}>
+            <Icon className="w-4 h-4" style={{ color: dimension.color }} />
+          </div>
+          <span className="font-bold text-slate-900 dark:text-white text-[14px] tracking-tight">{dimension.label}</span>
         </div>
-        <p className="text-xs text-slate-500 leading-relaxed mb-2">{dimension.description}</p>
-        <div className="flex items-start gap-1.5 bg-slate-50 rounded-lg px-2.5 py-1.5">
-          <Zap className="w-3 h-3 text-emerald-500 flex-shrink-0 mt-0.5" />
-          <p className="text-[11px] text-slate-600">{dimension.tip}</p>
+        <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full ring-1 ${tier.bg} ${tier.color} ring-slate-200/50 dark:ring-white/10`}>
+          {tier.label}
+        </span>
+      </div>
+      
+      <div className="flex items-end gap-3 mb-3">
+        <div className="text-4xl font-extrabold text-slate-900 dark:text-white tracking-tighter tabular-nums leading-none">
+          {Math.round(score)}<span className="text-xl text-slate-300 font-semibold">/100</span>
         </div>
+      </div>
+      
+      <p className="text-[13px] text-slate-500 dark:text-zinc-300 leading-relaxed mb-5 flex-1">{dimension.description}</p>
+      
+      <div className="flex items-start gap-2.5 bg-slate-50/80 dark:bg-[#111214] border border-slate-100 dark:border-white/5 rounded-[10px] px-4 py-3 mt-auto">
+        <Zap className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+        <p className="text-[12px] font-medium text-slate-700 dark:text-slate-200 leading-relaxed">{dimension.tip}</p>
       </div>
     </div>
   );
@@ -153,68 +167,84 @@ function OverallHero({ score, criticalIssues, pendingFixes, lastAnalyzed }: {
   const tier = scoreTier(score);
   const [, navigate] = useLocation();
   return (
-    <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 text-white mb-6 relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-emerald-500/10" />
-      <div className="absolute -right-2 top-12 w-24 h-24 rounded-full bg-teal-400/10" />
+    <div className="bg-white dark:bg-[#080808] border border-slate-200/60 dark:border-white/10 rounded-[24px] shadow-sm mb-8 overflow-hidden">
+      {/* Top Section: Hero Content */}
+      <div className="p-8 md:p-10 bg-gradient-to-b from-slate-50/50 to-white dark:from-white/[0.03] dark:to-transparent relative">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+          <div className="max-w-xl">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 rounded-[14px] bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 flex items-center justify-center shadow-sm">
+                <Brain className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-[24px] font-extrabold text-slate-900 dark:text-white tracking-tight leading-none mb-1">AEO Readiness</h2>
+                <p className="text-[14px] text-slate-500 dark:text-zinc-400 font-medium">Answer Engine Optimization Analysis</p>
+              </div>
+            </div>
+            
+            <p className="text-slate-600 dark:text-zinc-300 text-[15px] leading-relaxed mb-0">
+              Your store's readiness score measures how effectively AI assistants (like ChatGPT, Perplexity, and Google AI) can understand, trust, and recommend your products to high-intent shoppers.
+            </p>
+          </div>
 
-      <div className="relative flex flex-col md:flex-row md:items-center gap-6">
-        {/* Score ring */}
-        <div className="flex-shrink-0">
-          <svg width="120" height="120" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
-            <circle
-              cx="60" cy="60" r="50"
-              fill="none" stroke="#10b981" strokeWidth="8"
-              strokeDasharray={`${(score / 100) * 314.2} 314.2`}
-              strokeLinecap="round"
-              transform="rotate(-90 60 60)"
-              style={{ transition: "stroke-dasharray 1s ease-out" }}
-            />
-            <text x="60" y="55" textAnchor="middle" fontSize="28" fontWeight="800" fill="white">{score}</text>
-            <text x="60" y="73" textAnchor="middle" fontSize="11" fill="rgba(255,255,255,0.6)">/100</text>
-          </svg>
+          <div className="flex-shrink-0">
+            <Button
+              onClick={() => navigate("/issues")}
+              className="w-full sm:w-auto bg-slate-900 dark:bg-white/10 hover:bg-slate-800 dark:hover:bg-white/20 text-white rounded-[12px] h-11 px-6 text-[14px] font-semibold transition-all shadow-sm gap-2"
+            >
+              View detailed report <ArrowRight className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
+      </div>
 
-        {/* Text */}
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <Brain className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-xl font-bold">AEO Score</h2>
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${tier.bg} ${tier.color}`}>
-              {tier.label}
+      {/* Bottom Section: Grid Metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 border-t border-slate-100 dark:border-white/5 bg-slate-50/20 dark:bg-black/20">
+        
+        {/* 1. Score Widget */}
+        <div className="p-6 md:p-8 flex flex-col justify-center items-center text-center border-r border-slate-100 dark:border-white/5">
+          <ScoreArc score={score} color="#10b981" size={80} strokeWidth={7} fontSize={26} />
+          <div className="mt-4">
+            <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${tier.bg} ${tier.color} ring-1 ring-inset ring-slate-200/50 dark:ring-white/10`}>
+              {tier.label} Score
             </span>
           </div>
-          <p className="text-slate-300 text-sm max-w-md">
-            Your Answer Engine Optimization score measures how well AI assistants like ChatGPT, Perplexity, and Google AI can understand, trust, and recommend your store.
-          </p>
-          <div className="flex flex-wrap gap-3 mt-4">
-            <div className="text-center bg-white/10 rounded-lg px-4 py-2">
-              <div className="text-lg font-bold text-white">{criticalIssues}</div>
-              <div className="text-[11px] text-slate-400">Critical issues</div>
-            </div>
-            <div className="text-center bg-white/10 rounded-lg px-4 py-2">
-              <div className="text-lg font-bold text-white">{pendingFixes}</div>
-              <div className="text-[11px] text-slate-400">Pending fixes</div>
-            </div>
-            {lastAnalyzed && (
-              <div className="text-center bg-white/10 rounded-lg px-4 py-2">
-                <div className="text-[11px] text-slate-400 mb-0.5">Last analyzed</div>
-                <div className="text-xs font-medium text-slate-200">
-                  {new Date(lastAnalyzed).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* CTA */}
-        <button
-          onClick={() => navigate("/issues")}
-          className="flex items-center gap-1.5 text-xs font-medium text-emerald-400 hover:text-emerald-300 self-start md:self-center"
-        >
-          View issues <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {/* 2. Critical Issues */}
+        <div className="p-6 md:p-8 flex flex-col justify-center border-r border-slate-100 dark:border-white/5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" />
+            <div className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Critical</div>
+          </div>
+          <div className="text-4xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tighter">{criticalIssues}</div>
+          <div className="text-[13px] text-slate-400 dark:text-zinc-500 mt-1 font-medium">Immediate action needed</div>
+        </div>
+
+        {/* 3. Pending Fixes */}
+        <div className="p-6 md:p-8 flex flex-col justify-center border-t border-slate-100 dark:border-white/5 md:border-t-0 md:border-r">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]" />
+            <div className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Pending</div>
+          </div>
+          <div className="text-4xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tighter">{pendingFixes}</div>
+          <div className="text-[13px] text-slate-400 dark:text-zinc-500 mt-1 font-medium">Optimizations found</div>
+        </div>
+
+        {/* 4. Last Analyzed */}
+        <div className="p-6 md:p-8 flex flex-col justify-center border-t border-slate-100 dark:border-white/5 md:border-t-0">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-zinc-600" />
+            <div className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Analyzed</div>
+          </div>
+          <div className="text-[20px] font-extrabold text-slate-900 dark:text-white tracking-tight">
+            {lastAnalyzed ? new Date(lastAnalyzed).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "--"}
+          </div>
+          <div className="text-[13px] text-slate-400 dark:text-zinc-500 mt-1 font-medium">
+            {lastAnalyzed ? new Date(lastAnalyzed).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : ""}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -222,35 +252,72 @@ function OverallHero({ score, criticalIssues, pendingFixes, lastAnalyzed }: {
 
 // ─── Top issues banner ────────────────────────────────────────────────────────
 
-function TopIssues({ gaps }: { gaps: Array<{ ruleId: string; title: string; severity: string; impactScore: number }> }) {
+function TopIssues({ gaps }: { gaps: Array<{ ruleId: string; title: string; description?: string; productTitle?: string; severity: string; impactScore: number }> }) {
   const top = gaps
     .filter((g) => !("isFixed" in g && (g as unknown as { isFixed: boolean }).isFixed))
     .sort((a, b) => b.impactScore - a.impactScore)
     .slice(0, 3);
+  const [, navigate] = useLocation();
 
   if (top.length === 0) return null;
 
   return (
-    <div className="mb-6">
-      <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-        <TrendingUp className="w-4 h-4 text-emerald-500" /> Top AEO Opportunities
-      </h3>
-      <div className="grid gap-2">
+    <div className="mb-8 bg-white dark:bg-[#080808] border border-slate-200/60 dark:border-white/10 shadow-sm rounded-[24px] overflow-hidden">
+      <div className="px-6 py-5 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <TrendingUp className="w-5 h-5 text-emerald-500" />
+          <h3 className="text-[16px] font-extrabold text-slate-900 dark:text-white tracking-tight">Top AEO Opportunities</h3>
+        </div>
+        <button 
+          onClick={() => navigate("/issues")}
+          className="text-[12px] font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-white transition-colors flex items-center gap-1"
+        >
+          View all <ArrowRight className="w-4 h-4 text-slate-400 dark:text-zinc-500" />
+        </button>
+      </div>
+      <div className="divide-y divide-slate-100 dark:divide-white/5">
         {top.map((g, i) => (
-          <div key={g.ruleId ?? i} className="flex items-center gap-3 bg-white border border-slate-200 rounded-lg px-4 py-2.5 shadow-sm">
-            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+          <div key={g.ruleId ?? i} className="group flex flex-col sm:flex-row sm:items-center gap-6 px-6 py-6 hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors">
+            {/* Rank / Icon */}
+            <div className="w-10 h-10 rounded-full bg-slate-100/80 dark:bg-white/10 border border-slate-200/60 dark:border-white/10 text-slate-900 dark:text-white text-[15px] font-black flex items-center justify-center flex-shrink-0 shadow-sm">
               {i + 1}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-800 truncate">{g.title}</p>
             </div>
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
-              g.severity === "high" ? "bg-red-100 text-red-700" :
-              g.severity === "medium" ? "bg-amber-100 text-amber-700" :
-              "bg-violet-100 text-violet-700"
-            }`}>
-              Impact {g.impactScore}
-            </span>
+            
+            {/* Main content */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <div className="text-[15px] font-bold text-slate-900 dark:text-white tracking-tight flex-1 flex items-center flex-wrap gap-x-2 gap-y-1">
+                  <span>{g.title}</span>
+                  {g.productTitle && (
+                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100/60 px-2 py-0.5 rounded-md truncate max-w-[200px]">
+                      <Search className="w-3 h-3 text-emerald-500" />
+                      <span className="truncate">{g.productTitle}</span>
+                    </span>
+                  )}
+                </div>
+                <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full flex-shrink-0 ring-1 ${
+                  g.severity === "high" ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-red-200/50 dark:ring-red-500/20" :
+                  g.severity === "medium" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-amber-200/50 dark:ring-amber-500/20" :
+                  "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 ring-violet-200/50 dark:ring-violet-500/20"
+                }`}>
+                  {g.severity} Priority
+                </span>
+              </div>
+              <p className="text-[13px] text-slate-500 dark:text-zinc-300 leading-relaxed truncate max-w-2xl">
+                {g.description ?? "Fixing this issue will significantly improve how AI engines understand and rank your products."}
+              </p>
+            </div>
+            
+            {/* Impact score */}
+            <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-0 border-slate-100 dark:border-white/5">
+              <span className="text-[11px] font-bold text-slate-400 dark:text-zinc-400 uppercase tracking-widest">Impact Score</span>
+              <div className="flex items-center gap-3">
+                <div className="w-20 h-2 bg-slate-200/60 rounded-full overflow-hidden hidden sm:block">
+                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${g.impactScore}%` }} />
+                </div>
+                <span className="text-[18px] font-extrabold text-slate-900 dark:text-white tabular-nums">{g.impactScore}</span>
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -285,7 +352,7 @@ export default function AeoScorePage() {
       <AppLayout>
         <div className="flex flex-col items-center justify-center h-[60vh] text-center gap-4">
           <Brain className="w-10 h-10 text-slate-300" />
-          <p className="text-slate-500 text-sm">Connect a store to see your AEO Score</p>
+          <p className="text-slate-500 dark:text-zinc-300 text-sm">Connect a store to see your AEO Score</p>
           <Button size="sm" onClick={() => navigate("/connect")}>Connect store</Button>
         </div>
       </AppLayout>
@@ -308,8 +375,8 @@ export default function AeoScorePage() {
         <div className="p-6 max-w-3xl mx-auto">
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Brain className="w-12 h-12 text-slate-200 mb-4" />
-            <p className="text-lg font-semibold text-slate-700 mb-2">No AEO data yet</p>
-            <p className="text-sm text-slate-400 mb-6 max-w-sm">
+            <p className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-2">No AEO data yet</p>
+            <p className="text-sm text-slate-400 dark:text-zinc-400 mb-6 max-w-sm">
               Run an analysis from the Dashboard to generate your AEO Score breakdown.
             </p>
             <Button onClick={() => navigate("/dashboard")} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
@@ -327,6 +394,8 @@ export default function AeoScorePage() {
     severity: string;
     impactScore: number;
     isFixed: boolean;
+    description?: string;
+    productTitle?: string;
   }>;
 
   return (
@@ -334,11 +403,11 @@ export default function AeoScorePage() {
       <div className="p-6 max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-5">
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Brain className="w-5 h-5 text-emerald-500" />
             AEO Score
           </h1>
-          <p className="text-sm text-slate-500 mt-0.5">
+          <p className="text-sm text-slate-500 dark:text-zinc-300 mt-0.5">
             How well AI assistants can understand and recommend your store
           </p>
         </div>
@@ -355,8 +424,8 @@ export default function AeoScorePage() {
         <TopIssues gaps={gaps} />
 
         {/* Dimension breakdown */}
-        <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-slate-400" /> Score Breakdown
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-slate-400 dark:text-zinc-400" /> Score Breakdown
         </h3>
         <div className="grid gap-4 md:grid-cols-2">
           {DIMENSIONS.map((dim) => (
@@ -379,7 +448,7 @@ export default function AeoScorePage() {
             <button
               key={href}
               onClick={() => navigate(href)}
-              className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-700 bg-white border border-slate-200 hover:border-emerald-200 rounded-lg px-3 py-2.5 transition-colors"
+              className="flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-200 hover:text-emerald-700 bg-white dark:bg-[#080808] border border-slate-200 dark:border-white/10 hover:border-emerald-200 rounded-lg px-3 py-2.5 transition-colors"
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
               <span className="truncate">{label}</span>

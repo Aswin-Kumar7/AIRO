@@ -30,23 +30,3 @@ export function ScoreRing({ score, size = 80, strokeWidth = 6, showLabel = true,
   );
 }
 
-interface ScoreBarProps {
-  score: number;
-  label: string;
-  className?: string;
-}
-
-export function ScoreBar({ score, label, className }: ScoreBarProps) {
-  const color = score >= 75 ? "bg-green-500" : score >= 50 ? "bg-amber-500" : "bg-red-500";
-  return (
-    <div className={className}>
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <span className="text-xs font-semibold">{Math.round(score)}</span>
-      </div>
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${score}%` }} />
-      </div>
-    </div>
-  );
-}

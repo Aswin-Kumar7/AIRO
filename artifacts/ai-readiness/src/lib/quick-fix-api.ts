@@ -2,6 +2,10 @@ export function deleteStore(storeId: string): Promise<{ success: boolean }> {
   return requestJson(`/api/stores/${storeId}`, { method: "DELETE" });
 }
 
+export function deleteAccount(): Promise<{ ok: boolean }> {
+  return requestJson(`/api/auth/me`, { method: "DELETE" });
+}
+
 async function requestJson<T>(input: string, init?: RequestInit): Promise<T> {
   let headers = { ...(init?.headers || {}) };
   const method = (init?.method || "GET").toUpperCase();

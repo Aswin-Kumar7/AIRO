@@ -97,3 +97,7 @@ export async function getUserById(id: string) {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   return user ?? null;
 }
+
+export async function deleteUser(id: string) {
+  await db.delete(usersTable).where(eq(usersTable.id, id));
+}
