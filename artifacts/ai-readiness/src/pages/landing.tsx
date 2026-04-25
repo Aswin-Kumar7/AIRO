@@ -1000,7 +1000,7 @@ function ConnectModal({ open, storeUrl, onClose }: { open: boolean; storeUrl: st
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="force-light fixed inset-0 z-[200] flex items-center justify-center p-4">
           {/* Backdrop */}
           <motion.div
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-[4px]"
@@ -1176,7 +1176,7 @@ export default function Landing() {
         }
       `}</style>
 
-      <div className="min-h-screen bg-white dark:bg-[#080808] overflow-x-hidden">
+      <div className="force-light min-h-screen bg-white overflow-x-hidden">
         <Navbar
           onLogin={() => { setPendingUrl(""); setModalOpen(true); }}
           onGetStarted={() => document.getElementById("get-started")?.scrollIntoView({ behavior: "smooth", block: "center" })}
