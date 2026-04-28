@@ -81,19 +81,26 @@ interface SeoGap {
   isFixed: boolean;
 }
 
-function GapRow({ gap }: { gap: SeoGap }) {
+// Deduplicated view: one entry per ruleId, aggregating all affected products
+interface DeduplicatedGap extends SeoGap {
+  affectedProducts: string[];
+  affectedCount: number;
+}
+
+function GapRow({ gap }: { gap: DeduplicatedGap }) {
   const [open, setOpen] = useState(false);
+  const [showProducts, setShowProducts] = useState(false);
   const Icon = RULE_ICONS[gap.ruleId] ?? AlertCircle;
   const severityConfig = {
-    high: { label: "High", badge: "bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400", dot: "bg-red-500" },
-    medium: { label: "Medium", badge: "bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400", dot: "bg-amber-500" },
-    low: { label: "Low", badge: "bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400", dot: "bg-violet-500" },
+    high: { label: "High", badge: "bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-red-200/50 dark:ring-red-500/20" },
+    medium: { label: "Medium", badge: "bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-amber-200/50 dark:ring-amber-500/20" },
+    low: { label: "Low", badge: "bg-violet-100 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 ring-violet-200/50 dark:ring-violet-500/20" },
   }[gap.severity];
 
   return (
     <div className={`flex flex-col border-b border-slate-100 dark:border-white/5 last:border-0 transition-colors hover:bg-slate-50/50 dark:hover:bg-white/5 ${gap.isFixed ? "opacity-50" : ""}`}>
-      <button 
-        className="w-full flex items-center gap-4 px-5 py-4 text-left" 
+      <button
+        className="w-full flex items-center gap-4 px-5 py-4 text-left"
         onClick={() => setOpen(!open)}
       >
         <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -101,19 +108,16 @@ function GapRow({ gap }: { gap: SeoGap }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <div className="text-[14px] font-semibold text-slate-800 dark:text-slate-200 tracking-tight flex-1 flex items-center flex-wrap gap-x-2 gap-y-1">
-              <span>{gap.title}</span>
-              {gap.productTitle && (
-                <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-600 dark:text-zinc-200 bg-slate-100 dark:bg-white/10 border border-slate-200/60 dark:border-white/10 px-2 py-0.5 rounded-md truncate max-w-[250px]">
-                  <Search className="w-3 h-3 text-slate-400 dark:text-zinc-400" />
-                  <span className="truncate">{gap.productTitle}</span>
-                </span>
-              )}
-            </div>
+            <span className="text-[14px] font-semibold text-slate-800 dark:text-slate-200 tracking-tight flex-1">{gap.title}</span>
             {gap.isFixed && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-emerald-200/50">Fixed</span>
             )}
-            <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full flex-shrink-0 ring-1 ${severityConfig.badge.replace("100", "50").replace("border", "ring-").replace("bg", "bg").replace("text", "text").replace(/-\d00/g, (m) => m + " ring" + m.replace("text", "ring").replace("700", "200/50"))}`}>
+            {gap.affectedCount > 1 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-zinc-400 ring-1 ring-slate-200/50 dark:ring-white/10">
+                {gap.affectedCount} products
+              </span>
+            )}
+            <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full flex-shrink-0 ring-1 ${severityConfig.badge}`}>
               {severityConfig.label}
             </span>
           </div>
@@ -125,9 +129,9 @@ function GapRow({ gap }: { gap: SeoGap }) {
       </button>
 
       {open && (
-        <div className="px-5 pb-5 ml-[60px] pr-5">
+        <div className="px-5 pb-5 ml-[60px] pr-5 space-y-2.5">
           {gap.evidence && (
-            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20 rounded-[10px] px-3.5 py-2.5 mb-2.5">
+            <div className="flex items-start gap-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20 rounded-[10px] px-3.5 py-2.5">
               <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <p className="text-[12px] text-amber-800 dark:text-amber-200 font-medium leading-relaxed">{gap.evidence}</p>
             </div>
@@ -136,6 +140,26 @@ function GapRow({ gap }: { gap: SeoGap }) {
             <Zap className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
             <p className="text-[13px] text-slate-700 dark:text-slate-200 font-medium">{gap.suggestion}</p>
           </div>
+          {gap.affectedProducts.length > 0 && (
+            <div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setShowProducts((v) => !v); }}
+                className="text-[11px] text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center gap-1 font-medium"
+              >
+                {showProducts ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                Affected products ({gap.affectedProducts.length})
+              </button>
+              {showProducts && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {gap.affectedProducts.map((pt, i) => (
+                    <span key={i} className="text-[11px] bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-zinc-300 px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-white/10 truncate max-w-[220px]">
+                      {pt}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -237,11 +261,33 @@ export default function SeoAuditPage() {
   const rawGaps = (allGaps ?? []) as unknown as SeoGap[];
   const seoGaps = rawGaps.filter((g) => SEO_RULE_IDS.has(g.ruleId));
   const openGaps = seoGaps.filter((g) => !g.isFixed);
-  const fixedCount = seoGaps.filter((g) => g.isFixed).length;
-  const critCount = openGaps.filter((g) => g.severity === "high").length;
 
-  // Group by category
-  const byCategory = openGaps.reduce<Record<string, SeoGap[]>>((acc, gap) => {
+  // Deduplicate open gaps by ruleId — one row per rule, aggregate affected products
+  const deduplicatedOpen = (() => {
+    const byRule = new Map<string, DeduplicatedGap>();
+    for (const gap of openGaps) {
+      if (byRule.has(gap.ruleId)) {
+        const existing = byRule.get(gap.ruleId)!;
+        if (gap.productTitle && !existing.affectedProducts.includes(gap.productTitle)) {
+          existing.affectedProducts.push(gap.productTitle);
+          existing.affectedCount++;
+        }
+      } else {
+        byRule.set(gap.ruleId, {
+          ...gap,
+          affectedProducts: gap.productTitle ? [gap.productTitle] : [],
+          affectedCount: gap.productTitle ? 1 : 0,
+        });
+      }
+    }
+    return Array.from(byRule.values());
+  })();
+
+  const fixedCount = seoGaps.filter((g) => g.isFixed).length;
+  const critCount = deduplicatedOpen.filter((g) => g.severity === "high").length;
+
+  // Group deduplicated gaps by category
+  const byCategory = deduplicatedOpen.reduce<Record<string, DeduplicatedGap[]>>((acc, gap) => {
     const cat = getRuleCategory(gap.ruleId);
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(gap);
@@ -275,7 +321,7 @@ export default function SeoAuditPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
-          <HealthPill label="Open issues" count={openGaps.length} color="text-slate-900 dark:text-white" />
+          <HealthPill label="Open issue types" count={deduplicatedOpen.length} color="text-slate-900 dark:text-white" />
           <HealthPill label="Critical" count={critCount} color="text-red-600" />
           <HealthPill label="Fixed" count={fixedCount} color="text-emerald-600" />
         </div>
@@ -305,7 +351,7 @@ export default function SeoAuditPage() {
         )}
 
         {/* All fixed state */}
-        {seoGaps.length > 0 && openGaps.length === 0 && (
+        {seoGaps.length > 0 && deduplicatedOpen.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <CheckCircle2 className="w-10 h-10 text-emerald-400 mb-3" />
             <p className="text-sm font-semibold text-emerald-700">All SEO issues fixed!</p>
@@ -324,7 +370,7 @@ export default function SeoAuditPage() {
               <div className="flex items-center gap-2 mb-2">
                 <CatIcon className="w-4 h-4 text-violet-500" />
                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{meta.label}</h3>
-                <Badge variant="secondary" className="ml-auto text-[10px]">{gaps.length} issue{gaps.length !== 1 ? "s" : ""}</Badge>
+                <Badge variant="secondary" className="ml-auto text-[10px]">{gaps.length} rule type{gaps.length !== 1 ? "s" : ""}</Badge>
               </div>
               <p className="text-xs text-slate-500 dark:text-zinc-300 mb-2">{meta.description}</p>
               <div className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm overflow-hidden">
@@ -337,7 +383,7 @@ export default function SeoAuditPage() {
         })}
 
         {/* Footer */}
-        {openGaps.length > 0 && (
+        {deduplicatedOpen.length > 0 && (
           <div className="mt-4 flex items-center justify-between bg-violet-50 dark:bg-violet-500/10 border border-violet-100 dark:border-violet-500/20 rounded-xl px-4 py-3">
             <p className="text-xs text-violet-800 dark:text-violet-300">
               Fix these issues to improve AI citations and organic discovery.

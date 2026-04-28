@@ -25,6 +25,12 @@ export interface TopicalCluster {
   products: string[];
   coverageScore: number;
   gaps: string[];
+  /** Estimated buyer queries this cluster can answer */
+  queryCount: number;
+  /** 2-3 example queries routed to this cluster */
+  topQueries: string[];
+  /** Sub-topics with zero product coverage */
+  missingSubtopics: string[];
 }
 
 export interface TopicalAuthorityResponse {

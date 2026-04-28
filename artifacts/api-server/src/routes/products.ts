@@ -7,17 +7,9 @@ import { perceptionReportsTable } from "@workspace/db";
 import { fetchAndUpsertProducts } from "../lib/fetch-products";
 import { generateId } from "../lib/id";
 import { logger } from "../lib/logger";
+import { getOwnedStore } from "../lib/owned-store";
 
 const router: IRouter = Router();
-
-async function requireOwnedStore(storeId: string, userId: string | undefined) {
-  if (!userId) return null;
-  const [store] = await db
-    .select()
-    .from(storesTable)
-    .where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
-  return store ?? null;
-}
 
 router.post("/stores/:storeId/fetch-products", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
@@ -50,7 +42,7 @@ router.get("/stores/:storeId/products", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -66,6 +58,7 @@ router.get("/stores/:storeId/products", async (req, res): Promise<void> => {
     tags: p.tags,
     imageUrl: p.imageUrl,
     price: p.price,
+    detectedCategory: p.detectedCategory ?? null,
     score: {
       clarity: p.clarityScore,
       completeness: p.completenessScore,
@@ -87,7 +80,7 @@ router.get("/stores/:storeId/products/:productId", async (req, res): Promise<voi
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -162,8 +155,9 @@ router.get("/stores/:storeId/products/:productId", async (req, res): Promise<voi
       createdAt: f.createdAt.toISOString(),
       appliedAt: f.appliedAt?.toISOString() ?? null,
     })),
+    detectedCategory: product.detectedCategory ?? null,
     aiPerceptionSummary: product.aiPerceptionSummary,
-    scoringSource: product.scoringSource ?? "rule", // CB-11: provenance
+    scoringSource: product.scoringSource ?? "rule",
     suggestedTags: product.suggestedTags,
     analyzedAt: product.analyzedAt?.toISOString() ?? null,
   });
@@ -178,7 +172,7 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -224,6 +218,7 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
         originalContent: existing.originalContent,
         improvedContent: existing.editedContent ?? existing.improvedContent,
         explanation: existing.explanation,
+        roiRationale: existing.roiRationale ?? null,
         estimatedScoreImprovement: existing.estimatedScoreImprovement,
         shopifySynced: existing.shopifySynced,
         shopifyError: existing.shopifyError ?? null,
@@ -247,6 +242,8 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
     productTitle: product.title,
     productType: product.productType,
     vendor: product.vendor,
+    detectedCategory: product.detectedCategory ?? undefined,
+    currentScore: product.overallScore,
     price: product.price,
     imageUrl: product.imageUrl,
   });
@@ -262,6 +259,7 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
     originalContent,
     improvedContent: result.improvedContent,
     explanation: result.explanation,
+    roiRationale: result.roiRationale,
     estimatedScoreImprovement: result.estimatedScoreImprovement,
   }).returning();
 
@@ -276,6 +274,7 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
       originalContent: inserted.originalContent,
       improvedContent: inserted.improvedContent,
       explanation: inserted.explanation,
+      roiRationale: inserted.roiRationale ?? null,
       estimatedScoreImprovement: inserted.estimatedScoreImprovement,
       shopifySynced: inserted.shopifySynced,
       shopifyError: inserted.shopifyError ?? null,
@@ -293,7 +292,7 @@ router.get("/stores/:storeId/products/:productId/answer-first", async (req, res)
   const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const [product] = await db.select().from(productsTable)

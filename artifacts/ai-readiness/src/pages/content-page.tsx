@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Loader2, BookOpen, AlertCircle, TrendingUp,
   Package, Target, Link2, ArrowRight, Zap,
+  MessageSquare, XCircle, Search,
 } from "lucide-react";
 import {
   getTopicalAuthority, getInternalLinks,
@@ -51,6 +52,11 @@ function CoverageRow({ cluster }: { cluster: TopicalCluster }) {
       <span className={`text-xs font-semibold tabular-nums w-8 text-right ${textColor}`}>
         {cluster.coverageScore}
       </span>
+      {cluster.queryCount > 0 && (
+        <span className="text-[10px] text-slate-400 dark:text-zinc-500 w-16 text-right flex-shrink-0 hidden sm:block">
+          {cluster.queryCount} queries
+        </span>
+      )}
       <span className="text-[10px] text-slate-400 dark:text-zinc-400 w-16 text-right flex-shrink-0">
         {cluster.productCount} product{cluster.productCount !== 1 ? "s" : ""}
       </span>
@@ -59,39 +65,89 @@ function CoverageRow({ cluster }: { cluster: TopicalCluster }) {
 }
 
 function ClusterDetail({ cluster }: { cluster: TopicalCluster }) {
-  if (cluster.gaps.length === 0 && cluster.products.length === 0) return null;
+  if (cluster.gaps.length === 0 && cluster.products.length === 0 && cluster.topQueries.length === 0 && cluster.missingSubtopics.length === 0) return null;
   return (
-    <div className="border-b border-slate-100 dark:border-white/5 last:border-0 px-5 py-3">
-      <div className="flex items-start justify-between mb-2">
+    <div className="border-b border-slate-100 dark:border-white/5 last:border-0 px-5 py-4">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
           <ScoreDot score={cluster.coverageScore} />
           <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{cluster.topic}</p>
         </div>
-        <span className="text-[10px] text-slate-400 dark:text-zinc-400">{cluster.productCount} products</span>
+        <div className="flex items-center gap-3">
+          {cluster.queryCount > 0 && (
+            <span className="text-[10px] text-slate-400 dark:text-zinc-400 flex items-center gap-1">
+              <Search className="w-3 h-3" />{cluster.queryCount} queries covered
+            </span>
+          )}
+          <span className="text-[10px] text-slate-400 dark:text-zinc-400">{cluster.productCount} products</span>
+        </div>
       </div>
-      <div className="flex flex-wrap gap-1 mb-2 ml-4">
-        {cluster.products.slice(0, 5).map((p, i) => (
-          <span
-            key={i}
-            className="text-[10px] text-slate-500 dark:text-zinc-300 bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded"
-          >
-            {p}
-          </span>
-        ))}
-        {cluster.products.length > 5 && (
-          <span className="text-[10px] text-slate-400 dark:text-zinc-400">
-            +{cluster.products.length - 5} more
-          </span>
-        )}
-      </div>
-      {cluster.gaps.length > 0 && (
-        <div className="ml-4 space-y-1">
-          {cluster.gaps.map((gap, i) => (
-            <div key={i} className="flex items-start gap-1.5">
-              <AlertCircle className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
-              <span className="text-[11px] text-slate-500 dark:text-zinc-300">{gap}</span>
-            </div>
+
+      {/* Products in cluster */}
+      {cluster.products.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3 ml-4">
+          {cluster.products.slice(0, 5).map((p, i) => (
+            <span key={i} className="text-[10px] text-slate-500 dark:text-zinc-300 bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded">
+              {p}
+            </span>
           ))}
+          {cluster.products.length > 5 && (
+            <span className="text-[10px] text-slate-400 dark:text-zinc-400">
+              +{cluster.products.length - 5} more
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Example queries AI routes to this cluster */}
+      {cluster.topQueries.length > 0 && (
+        <div className="ml-4 mb-3">
+          <p className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">
+            Example AI queries
+          </p>
+          <div className="space-y-1">
+            {cluster.topQueries.map((q, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <MessageSquare className="w-3 h-3 text-blue-400 flex-shrink-0 mt-0.5" />
+                <span className="text-[11px] text-slate-500 dark:text-zinc-300 italic">"{q}"</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Missing sub-topics (catalog gaps — no products) */}
+      {cluster.missingSubtopics.length > 0 && (
+        <div className="ml-4 mb-3">
+          <p className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">
+            Missing sub-topics
+          </p>
+          <div className="space-y-1">
+            {cluster.missingSubtopics.map((st, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <XCircle className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+                <span className="text-[11px] text-slate-500 dark:text-zinc-300">{st}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Content quality gaps */}
+      {cluster.gaps.length > 0 && (
+        <div className="ml-4">
+          <p className="text-[10px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider mb-1.5">
+            Content gaps
+          </p>
+          <div className="space-y-1">
+            {cluster.gaps.map((gap, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <AlertCircle className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
+                <span className="text-[11px] text-slate-500 dark:text-zinc-300">{gap}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -159,6 +215,14 @@ function TopicalTab({ storeId }: { storeId: string }) {
         <p className="text-xs text-slate-500 dark:text-zinc-300">
           {sorted.length} clusters · avg coverage{" "}
           <span className="font-semibold text-slate-700 dark:text-slate-200">{data.averageCoverageScore}</span>
+          {(() => {
+            const totalQueries = sorted.reduce((s, c) => s + (c.queryCount ?? 0), 0);
+            return totalQueries > 0 ? (
+              <span className="text-slate-400 dark:text-zinc-500">
+                {" "}· {totalQueries} queries covered
+              </span>
+            ) : null;
+          })()}
           {weak.length > 0 && (
             <span className="text-amber-600">
               {" "}· {weak.length} weak

@@ -40,6 +40,7 @@ export interface Store {
   /** @nullable */
   productCount?: number | null;
   createdAt: string;
+  isDemo?: boolean;
 }
 
 export interface ConnectStoreBody {

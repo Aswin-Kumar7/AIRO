@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useStore } from "@/context/store-context";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -42,12 +42,35 @@ function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) 
 
 function LlmsTab({ storeId }: { storeId: string }) {
   const [hasRun, setHasRun] = useState(false);
+  const [deploying, setDeploying] = useState(false);
+  const [deployResult, setDeployResult] = useState<{ pageUrl: string; created: boolean } | null>(null);
+  const [deployError, setDeployError] = useState<string | null>(null);
+
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["llms-txt", storeId],
     queryFn: () => getLlmsTxt(storeId),
     enabled: !!storeId && hasRun,
     staleTime: 5 * 60 * 1000,
   });
+
+  async function deployToShopify() {
+    setDeploying(true);
+    setDeployError(null);
+    setDeployResult(null);
+    try {
+      const res = await fetch(`/api/stores/${storeId}/llms-txt/deploy`, { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(d.error ?? `HTTP ${res.status}`);
+      }
+      const d = await res.json() as { pageUrl: string; created: boolean };
+      setDeployResult(d);
+    } catch (err) {
+      setDeployError(err instanceof Error ? err.message : "Deploy failed.");
+    } finally {
+      setDeploying(false);
+    }
+  }
 
   function download() {
     if (!data?.content) return;
@@ -114,24 +137,35 @@ function LlmsTab({ storeId }: { storeId: string }) {
             </pre>
           </div>
 
-          {/* Deploy steps */}
+          {/* Deploy section */}
           <div className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm p-6 mt-5">
-            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-3">Deploy to Shopify</p>
-            <ol className="space-y-2.5">
-              {[
-                <>Go to <strong className="text-slate-800 dark:text-slate-200">Online Store → Pages → Add page</strong></>,
-                <>Set the page title to <code className="bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded text-[11px] font-mono">llms</code></>,
-                <>Paste the generated content into the page body</>,
-                <>File will be accessible at <code className="bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 px-1.5 py-0.5 rounded text-[11px] font-mono">yourstore.com/pages/llms</code></>,
-              ].map((step, i) => (
-                <li key={i} className="flex gap-3 text-xs text-slate-500 dark:text-zinc-300">
-                  <span className="w-4 h-4 rounded-full bg-slate-100 dark:bg-white/10 text-slate-500 dark:text-zinc-300 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
-                    {i + 1}
-                  </span>
-                  <span className="leading-relaxed">{step}</span>
-                </li>
-              ))}
-            </ol>
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mb-1">Deploy to Shopify</p>
+            <p className="text-[11px] text-slate-400 dark:text-zinc-500 mb-4">
+              Automatically create or update the <code className="bg-slate-100 dark:bg-white/10 px-1 rounded font-mono">/pages/llms</code> page on your store so AI crawlers can find it.
+            </p>
+            {deployResult ? (
+              <div className="flex items-center gap-2 text-[12px] text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-[8px] p-3">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                <span>
+                  {deployResult.created ? "Page created" : "Page updated"} —{" "}
+                  <a href={deployResult.pageUrl} target="_blank" rel="noreferrer" className="underline font-semibold">
+                    {deployResult.pageUrl}
+                  </a>
+                </span>
+              </div>
+            ) : deployError ? (
+              <div className="text-[12px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-[8px] p-3">
+                {deployError}
+              </div>
+            ) : (
+              <Button
+                onClick={deployToShopify}
+                disabled={deploying}
+                className="h-9 px-4 bg-slate-900 hover:bg-slate-700 dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 text-white font-bold text-[12px] rounded-[8px] gap-2 transition-all"
+              >
+                {deploying ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Deploying…</> : <>Deploy to Shopify</>}
+              </Button>
+            )}
           </div>
         </>
       ) : (

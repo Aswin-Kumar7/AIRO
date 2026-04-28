@@ -9,7 +9,7 @@ import {
   type Variants,
 } from "framer-motion";
 import {
-  ArrowRight, BarChart3, Zap, Cable, Shield, Brain, TrendingUp,
+  ArrowRight, BarChart3, Zap, Cable, Shield, Brain, TrendingUp, Linkedin,
   ChevronRight, Target, GitBranch, Package, Layers, Menu, X,
   Activity, AlertTriangle, ClockFading, Sparkles, Bot, ChevronDown, Check, Gift,
 } from "lucide-react";
@@ -930,8 +930,7 @@ function FAQ() {
 
 const FOOTER_LINKS = {
   Product: ["Dashboard", "Features", "Pricing", "Changelog"],
-  Company: ["About", "Blog", "Careers"],
-  Resources: ["Documentation", "API Reference", "Status"],
+  Resources: ["Documentation", "Status"],
   Legal: ["Privacy Policy", "Terms of Service", "Cookie Policy"],
 };
 
@@ -964,11 +963,32 @@ function Footer() {
 
         <div className="border-t border-slate-200 dark:border-white/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="text-[13px] text-slate-500 dark:text-zinc-300">© 2025 Kasparro. All rights reserved.</p>
-          <div className="flex items-center gap-6">
-            {["Privacy", "Terms", "Cookies"].map(link => (
-              <a key={link} href="#" className="text-[13px] text-slate-500 dark:text-zinc-300 hover:text-slate-900 dark:text-white transition-colors">
-                {link}
-              </a>
+          <div className="flex items-center gap-2 text-[13px] text-slate-500 dark:text-zinc-300">
+            <span>Developed by</span>
+            {[
+              {
+                name: "Aswin Kumar",
+                linkedin: "https://www.linkedin.com/in/aswinkumar7/"
+              },
+              {
+                name: "Naveen D",
+                linkedin: "https://www.linkedin.com/in/naveen-d-4356592a5/"
+              }
+            ].map((dev, index, arr) => (
+              <span key={dev.name} className="flex items-center gap-1">
+                <span>{dev.name}</span>
+
+                <a
+                  href={dev.linkedin}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-slate-900 dark:hover:text-white transition"
+                >
+                  <Linkedin size={14} />
+                </a>
+
+                {index < arr.length - 1 && <span className="mx-1">&</span>}
+              </span>
             ))}
           </div>
         </div>

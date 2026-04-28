@@ -15,6 +15,7 @@ export const fixesTable = pgTable("fixes", {
   improvedContent: text("improved_content").notNull(),
   editedContent: text("edited_content"),
   explanation: text("explanation").notNull(),
+  roiRationale: text("roi_rationale"),
   estimatedScoreImprovement: real("estimated_score_improvement").notNull().default(0),
   shopifySynced: boolean("shopify_synced").notNull().default(false),
   shopifyError: text("shopify_error"),

@@ -10,15 +10,19 @@ import shopifyRouter from "./shopify";
 import featuresRouter from "./features";
 import webhooksRouter from "./webhooks";
 import visibilityRouter from "./visibility";
+import scheduleRouter from "./schedule";
+import competitorsRouter from "./competitors";
 
 import { db, storesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
+import { DEMO_STORE_ID } from "../lib/demo";
 
 const router: IRouter = Router();
 
 // Globally enforce H-3: per-user store isolation at the query level
 router.param("storeId", async (req, res, next, storeId) => {
   if (!storeId || storeId === "new" || storeId === "bulk-apply") return next();
+  if (storeId === DEMO_STORE_ID) return next();
   
   try {
     const [store] = await db.select().from(storesTable)
@@ -46,5 +50,7 @@ router.use(shopifyRouter);
 router.use(featuresRouter);
 router.use(webhooksRouter);
 router.use(visibilityRouter);
+router.use(scheduleRouter);
+router.use(competitorsRouter);
 
 export default router;

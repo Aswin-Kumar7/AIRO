@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { chatCompletion } from "./ai-client";
 import { logger } from "./logger";
 
@@ -11,6 +12,8 @@ export type PerceptionProductInput = {
   hasStructuredData: boolean;
   vendor: string | null;
   price: string | null;
+  /** Optional: overall AI readiness score for this product (0–100) */
+  overallScore?: number | null;
 };
 
 export type PerceptionInput = {
@@ -25,6 +28,8 @@ export type PerceptionInput = {
     terms: boolean;
   };
   faqPage: { title: string; body: string } | null;
+  /** Top detected gaps from the most recent analysis run */
+  topGaps?: Array<{ title: string; severity: "high" | "medium" | "low"; category: string }>;
 };
 
 export type StorePerceptionResult = {
@@ -35,6 +40,17 @@ export type StorePerceptionResult = {
   faqQuestionCount: number;
   faqGaps: string[];
 };
+
+// ─── Zod schema ───────────────────────────────────────────────────────────────
+
+const perceptionResponseSchema = z.object({
+  agentNarrative: z.string().min(20),
+  unansweredQuestions: z.array(z.string()).catch([]),
+  ambiguities: z.array(z.string()).catch([]),
+  perceivedStrengths: z.array(z.string()).catch([]),
+});
+
+// ─── FAQ helpers ──────────────────────────────────────────────────────────────
 
 const FAQ_TOPICS = [
   { label: "shipping timelines", patterns: [/shipping/i, /delivery/i, /dispatch/i] },
@@ -84,7 +100,7 @@ function buildFallbackNarrative(
     input.policies.refund ? "Return policy is present, which increases AI confidence." : null,
     input.policies.shipping ? "Shipping policy exists, so fulfillment expectations are clearer." : null,
     productsWithReviews > 0 ? `${productsWithReviews} products contain review signals.` : null,
-    productsWithStructuredData > 0 ? `${productsWithStructuredData} products expose some structured-data clues.` : null,
+    productsWithStructuredData > 0 ? `${productsWithStructuredData} products expose structured-data clues.` : null,
   ].filter((item): item is string => Boolean(item));
 
   const unansweredQuestions = [
@@ -120,58 +136,115 @@ function buildFallbackNarrative(
   };
 }
 
+// ─── Main export ──────────────────────────────────────────────────────────────
+
 export async function simulateStorePerception(input: PerceptionInput): Promise<StorePerceptionResult> {
   const faqSummary = summarizeFaq(input.faqPage);
-  const productSample = input.products.slice(0, 8).map((product) => ({
-    title: product.title,
-    description: stripHtml(product.description).slice(0, 320),
-    tags: product.tags,
-    collections: product.collections,
-    reviewCount: product.reviewCount,
-    reviewRating: product.reviewRating,
-    hasStructuredData: product.hasStructuredData,
-    vendor: product.vendor,
-    price: product.price,
-  }));
 
-  const prompt = `You are simulating how an AI shopping assistant perceives a Shopify store.
+  // Build a richer product snapshot: include actual description excerpts and per-product signals
+  const productSample = input.products.slice(0, 10).map((p) => {
+    const plain = stripHtml(p.description);
+    return {
+      title: p.title,
+      descriptionExcerpt: plain.slice(0, 250) || "(no description)",
+      descWordCount: plain.split(/\s+/).filter(Boolean).length,
+      tags: p.tags.slice(0, 8),
+      price: p.price ? `$${p.price}` : null,
+      vendor: p.vendor ?? null,
+      reviewCount: p.reviewCount,
+      reviewRating: p.reviewRating > 0 ? p.reviewRating : null,
+      hasStructuredData: p.hasStructuredData,
+      overallScore: p.overallScore != null ? Math.round(p.overallScore) : null,
+    };
+  });
+
+  // Calculate catalog-level stats for the prompt
+  const totalProducts = input.products.length;
+  const avgScore = input.products.filter(p => p.overallScore != null).length > 0
+    ? Math.round(input.products.reduce((s, p) => s + (p.overallScore ?? 0), 0) / totalProducts)
+    : null;
+  const thinContentCount = input.products.filter(p => stripHtml(p.description).split(/\s+/).filter(Boolean).length < 50).length;
+  const noReviewCount = input.products.filter(p => p.reviewCount === 0).length;
+  const withStructuredDataCount = input.products.filter(p => p.hasStructuredData).length;
+  const priceRange = (() => {
+    const prices = input.products.map(p => parseFloat(p.price ?? "0")).filter(p => p > 0);
+    if (!prices.length) return null;
+    return `$${Math.min(...prices).toFixed(0)}–$${Math.max(...prices).toFixed(0)}`;
+  })();
+
+  // Top critical gaps (to ground the narrative in real analysis findings)
+  const criticalGapTitles = (input.topGaps ?? [])
+    .filter(g => g.severity === "high")
+    .slice(0, 6)
+    .map(g => `[${g.category}] ${g.title}`);
+  const mediumGapTitles = (input.topGaps ?? [])
+    .filter(g => g.severity === "medium")
+    .slice(0, 4)
+    .map(g => g.title);
+
+  const prompt = `You are simulating how a sophisticated AI shopping assistant (like ChatGPT Shopping or Google Gemini) perceives a Shopify store after crawling it. Your output will be shown to the merchant to help them improve.
 
 Store:
 - Name: ${input.storeName}
 - Domain: ${input.domain}
-- Merchant desired positioning: ${input.desiredPositioning ?? "(not provided)"}
+- Merchant desired positioning: ${input.desiredPositioning ?? "(not specified)"}
+- Price range: ${priceRange ?? "unknown"}
+- Total products: ${totalProducts}${avgScore != null ? ` | Avg AI readiness score: ${avgScore}/100` : ""}
 
-Signals:
-- Policies: ${JSON.stringify(input.policies)}
-- FAQ page: ${input.faqPage ? `${input.faqPage.title} (${faqSummary.questionCount} likely questions found)` : "not found"}
-- FAQ gaps: ${faqSummary.missingTopics.join(", ") || "none"}
+Catalog signals:
+- Thin descriptions (<50 words): ${thinContentCount}/${totalProducts} products
+- No reviews: ${noReviewCount}/${totalProducts} products
+- Has structured data: ${withStructuredDataCount}/${totalProducts} products
+- Return policy: ${input.policies.refund ? "Yes" : "Missing"}
+- Shipping policy: ${input.policies.shipping ? "Yes" : "Missing"}
+- FAQ page: ${input.faqPage ? `"${input.faqPage.title}" (${faqSummary.questionCount} questions)` : "Not found"}
+- FAQ content gaps: ${faqSummary.missingTopics.join(", ") || "none"}
+${criticalGapTitles.length ? `\nCritical analysis issues:\n${criticalGapTitles.map(g => `  - ${g}`).join("\n")}` : ""}
+${mediumGapTitles.length ? `\nOther detected issues:\n${mediumGapTitles.map(g => `  - ${g}`).join("\n")}` : ""}
 
-Products sample:
+Product sample (first ${productSample.length} of ${totalProducts}):
 ${JSON.stringify(productSample, null, 2)}
 
-Return valid JSON with these exact keys:
+Return valid JSON with these EXACT keys:
 {
-  "agentNarrative": "<2-4 sentence narrative of how an AI assistant would currently describe the store>",
-  "unansweredQuestions": ["question 1"],
-  "ambiguities": ["ambiguity 1"],
-  "perceivedStrengths": ["strength 1"]
+  "agentNarrative": "<3-5 specific sentences describing how an AI assistant would currently describe this store — mention actual product names, specific content weaknesses, and any positioning gap between how the merchant wants to be perceived vs how the catalog reads today>",
+  "unansweredQuestions": ["<specific question an AI assistant could NOT answer from available data, max 5>"],
+  "ambiguities": ["<specific ambiguity in product data that would cause an AI to hedge or avoid recommending, max 4>"],
+  "perceivedStrengths": ["<concrete strength visible to AI agents from actual data, max 3>"]
 }
 
-Be concrete. Focus on what an AI shopping assistant can and cannot confidently say today.
-Return only JSON.`;
+Rules:
+- agentNarrative MUST reference specific products by name from the sample
+- All fields must reflect the actual data above — do not invent facts not present
+- Be critical where warranted — vague praise is not useful
+Return ONLY valid JSON.`;
 
   try {
-    const raw = await chatCompletion([{ role: "user", content: prompt }], 1800);
+    const raw = await chatCompletion([{ role: "user", content: prompt }], 2000);
 
-    const parsed = JSON.parse(raw) as Omit<
-      StorePerceptionResult,
-      "faqQuestionCount" | "faqGaps"
-    >;
+    // Try direct parse, then strip code fences
+    let parsed: unknown = null;
+    try { parsed = JSON.parse(raw); } catch {
+      const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenced) { try { parsed = JSON.parse(fenced[1]!.trim()); } catch { /* ignore */ } }
+    }
+
+    if (parsed === null) {
+      logger.warn({ domain: input.domain }, "Perception simulator: JSON parse failed — using fallback");
+      return buildFallbackNarrative(input, faqSummary);
+    }
+
+    const result = perceptionResponseSchema.safeParse(parsed);
+    if (!result.success) {
+      logger.warn({ issues: result.error.issues, domain: input.domain }, "Perception simulator: Zod validation failed — using fallback");
+      return buildFallbackNarrative(input, faqSummary);
+    }
+
     return {
-      agentNarrative: parsed.agentNarrative ?? buildFallbackNarrative(input, faqSummary).agentNarrative,
-      unansweredQuestions: Array.isArray(parsed.unansweredQuestions) ? parsed.unansweredQuestions : [],
-      ambiguities: Array.isArray(parsed.ambiguities) ? parsed.ambiguities : [],
-      perceivedStrengths: Array.isArray(parsed.perceivedStrengths) ? parsed.perceivedStrengths : [],
+      agentNarrative: result.data.agentNarrative,
+      unansweredQuestions: result.data.unansweredQuestions.slice(0, 5),
+      ambiguities: result.data.ambiguities.slice(0, 4),
+      perceivedStrengths: result.data.perceivedStrengths.slice(0, 3),
       faqQuestionCount: faqSummary.questionCount,
       faqGaps: faqSummary.missingTopics,
     };

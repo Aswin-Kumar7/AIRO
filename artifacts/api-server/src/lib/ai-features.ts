@@ -27,6 +27,12 @@ export interface TopicalCluster {
   products: string[];
   coverageScore: number; // 0-100: how well this topic is covered
   gaps: string[];
+  /** Estimated number of common buyer search queries this cluster can answer */
+  queryCount: number;
+  /** 2-3 example queries an AI agent would route to products in this cluster */
+  topQueries: string[];
+  /** Sub-topics within this theme that have zero product coverage */
+  missingSubtopics: string[];
 }
 
 export interface InternalLinkSuggestion {
@@ -69,6 +75,9 @@ const topicalClusterSchema = z.object({
   products: z.array(z.string()).catch([]),
   coverageScore: z.number().min(0).max(100).catch(50),
   gaps: z.array(z.string()).catch([]),
+  queryCount: z.number().int().nonnegative().catch(0),
+  topQueries: z.array(z.string()).catch([]),
+  missingSubtopics: z.array(z.string()).catch([]),
 });
 const topicalAuthoritySchema = z.array(topicalClusterSchema);
 
@@ -190,13 +199,20 @@ export async function analyzeTopicalAuthority(
     hasSpecs: /(\d+\s*(cm|mm|kg|g|lb|oz|inch|liter|ml|watt))|material|compatible|dimension/i.test(p.description ?? ""),
   }));
 
-  const prompt = `You are a content strategy expert analyzing an e-commerce store's topical authority for AI search engines.
+  const prompt = `You are a content strategy expert analyzing an e-commerce store's topical authority for AI search engines (ChatGPT Shopping, Google Gemini, Perplexity).
 
 Product catalog (${products.length} products):
 ${JSON.stringify(productData, null, 2)}
 
-Cluster these products into topical themes, then evaluate how well each theme is covered.
-A well-covered theme has: detailed descriptions (80+ words), clear specs, use cases, and complementary products.
+Cluster these products into topical themes. For each cluster evaluate:
+1. How well this theme is covered today (coverageScore)
+2. How many common buyer search queries this cluster could answer (queryCount)
+3. Example queries AI agents would route to this cluster (topQueries)
+4. Sub-topics within the theme that have ZERO product coverage (missingSubtopics)
+5. Specific content gaps hurting AI discoverability (gaps)
+
+A high-coverage cluster (score 70+) has: descriptions 80+ words, specs, use cases, comparison signals.
+A low-coverage cluster (<40) has: thin descriptions, no specs, no use cases.
 
 Return a JSON array of clusters:
 [
@@ -204,12 +220,19 @@ Return a JSON array of clusters:
     "topic": "<theme name, e.g. 'Yoga & Meditation', 'Men's Athletic Footwear'>",
     "productCount": <number of products in this cluster>,
     "products": ["<product title 1>", "<product title 2>"],
-    "coverageScore": <0-100, how well AI agents can navigate this topic>,
-    "gaps": ["<specific content gap that hurts AI discoverability, e.g. 'No size guides', 'Missing material specs'>"]
+    "coverageScore": <0-100, how well AI agents can navigate and recommend products in this topic>,
+    "gaps": ["<specific content gap, e.g. 'No size guides on footwear products', 'Missing material specs across all 4 items'>"],
+    "queryCount": <estimated number of common search queries this cluster answers, e.g. 8>,
+    "topQueries": ["<real buyer query 1>", "<real buyer query 2>", "<real buyer query 3>"],
+    "missingSubtopics": ["<sub-topic with zero products, e.g. 'Running shoes for flat feet'>", "<another missing sub-topic>"]
   }
 ]
 
-Focus on gaps that specifically hurt AI agent recommendations (missing comparison data, no use cases, thin descriptions).
+Rules:
+- topQueries must be specific realistic buyer queries (e.g. "yoga mat for bad knees under $50" not "yoga mat")
+- missingSubtopics are gaps in the CATALOG — important sub-categories where AI cannot recommend because there are no products
+- gaps are content quality issues within existing products
+- queryCount reflects how many of the typical 10-15 queries for this category this cluster can actually answer
 Return ONLY valid JSON array, no markdown.`;
 
   try {

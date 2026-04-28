@@ -11,19 +11,12 @@ import {
   type PolicyBodies,
 } from "../lib/ai-features";
 import { computeCatalogHash } from "../lib/catalog-hash";
-
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+import { deployLlmsTxtPage } from "../lib/shopify-client";
+import { resolveAccessToken } from "../lib/crypto";
+import { getOwnedStore } from "../lib/owned-store";
 
 const router: IRouter = Router();
-
-async function requireOwnedStore(storeId: string, userId: string | undefined) {
-  if (!userId) return null;
-  const [store] = await db
-    .select()
-    .from(storesTable)
-    .where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
-  return store ?? null;
-}
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 // ─── LLMs.txt Generator ───────────────────────────────────────────────────────
 
@@ -62,7 +55,7 @@ router.get("/stores/:storeId/query-simulation", async (req, res): Promise<void> 
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(403).json({ error: "Forbidden: Store does not belong to user" }); return; }
 
   const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
@@ -113,7 +106,7 @@ router.get("/stores/:storeId/topical-authority", async (req, res): Promise<void>
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(403).json({ error: "Forbidden: Store does not belong to user" }); return; }
 
   const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
@@ -122,16 +115,16 @@ router.get("/stores/:storeId/topical-authority", async (req, res): Promise<void>
     return;
   }
 
-  const [summary2] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
+  const [storeSummary] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
   const topicalHash = computeCatalogHash(products);
-  if (summary2?.topicalAuthorityCachedAt && summary2.topicalAuthorityResults) {
-    const age = Date.now() - summary2.topicalAuthorityCachedAt.getTime();
+  if (storeSummary?.topicalAuthorityCachedAt && storeSummary.topicalAuthorityResults) {
+    const age = Date.now() - storeSummary.topicalAuthorityCachedAt.getTime();
     // CB-6: invalidate on catalog change OR TTL expiry
-    const hashMatch = summary2.topicalCatalogHash === topicalHash;
+    const hashMatch = storeSummary.topicalCatalogHash === topicalHash;
     if (age < CACHE_TTL_MS && hashMatch) {
-      const cached = summary2.topicalAuthorityResults as Array<{ coverageScore: number }>;
+      const cached = storeSummary.topicalAuthorityResults as Array<{ coverageScore: number }>;
       const avgCoverage = cached.length ? Math.round(cached.reduce((s, c) => s + c.coverageScore, 0) / cached.length) : 0;
-      res.json({ storeId, clusters: cached, totalProducts: products.length, averageCoverageScore: avgCoverage, generatedAt: summary2.topicalAuthorityCachedAt.toISOString(), cached: true });
+      res.json({ storeId, clusters: cached, totalProducts: products.length, averageCoverageScore: avgCoverage, generatedAt: storeSummary.topicalAuthorityCachedAt.toISOString(), cached: true });
       return;
     }
   }
@@ -164,7 +157,7 @@ router.get("/stores/:storeId/internal-links", async (req, res): Promise<void> =>
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(403).json({ error: "Forbidden: Store does not belong to user" }); return; }
 
   const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
@@ -173,14 +166,14 @@ router.get("/stores/:storeId/internal-links", async (req, res): Promise<void> =>
     return;
   }
 
-  const [summary3] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
+  const [linksStoreSummary] = await db.select().from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId));
   const linksHash = computeCatalogHash(products);
-  if (summary3?.internalLinksCachedAt && summary3.internalLinksResults) {
-    const age = Date.now() - summary3.internalLinksCachedAt.getTime();
+  if (linksStoreSummary?.internalLinksCachedAt && linksStoreSummary.internalLinksResults) {
+    const age = Date.now() - linksStoreSummary.internalLinksCachedAt.getTime();
     // CB-6: invalidate on catalog change OR TTL expiry
-    const hashMatch = summary3.linksCatalogHash === linksHash;
+    const hashMatch = linksStoreSummary.linksCatalogHash === linksHash;
     if (age < CACHE_TTL_MS && hashMatch) {
-      res.json({ storeId, suggestions: summary3.internalLinksResults, totalProducts: products.length, generatedAt: summary3.internalLinksCachedAt.toISOString(), cached: true });
+      res.json({ storeId, suggestions: linksStoreSummary.internalLinksResults, totalProducts: products.length, generatedAt: linksStoreSummary.internalLinksCachedAt.toISOString(), cached: true });
       return;
     }
   }
@@ -209,7 +202,7 @@ router.get("/stores/:storeId/faq-schema", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(403).json({ error: "Forbidden: Store does not belong to user" }); return; }
 
   const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
@@ -236,7 +229,7 @@ router.get("/stores/:storeId/products/:productId/ai-qa", async (req, res): Promi
   const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(403).json({ error: "Forbidden: Store does not belong to user" }); return; }
 
   const [product] = await db
@@ -290,6 +283,45 @@ router.get("/stores/:storeId/products/:productId/ai-qa", async (req, res): Promi
     answerabilityScore: Math.round((answerable / results.length) * 100),
     generatedAt: new Date().toISOString(),
     cached: false,
+  });
+});
+
+// ─── llms.txt Deploy to Shopify ───────────────────────────────────────────────
+
+// POST /stores/:storeId/llms-txt/deploy
+// Generates the llms.txt content then creates/updates /pages/llms on the store.
+router.post("/stores/:storeId/llms-txt/deploy", async (req, res): Promise<void> => {
+  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const userId = req.session?.userId;
+  if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
+  const store = await getOwnedStore(storeId, userId);
+  if (!store) { res.status(403).json({ error: "Forbidden: Store does not belong to user" }); return; }
+
+  const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
+  const [report] = await db.select().from(perceptionReportsTable).where(eq(perceptionReportsTable.storeId, storeId));
+
+  const policyInfo = {
+    hasFaq: report?.faqPageFound ?? false,
+    faqTitle: report?.faqPageTitle ?? null,
+    unansweredTopics: (report?.faqGaps as string[] | undefined) ?? [],
+  };
+
+  const content = await generateLlmsTxt(
+    { name: store.name ?? store.domain, domain: store.domain, desiredPositioning: store.desiredPositioning },
+    products.map((p) => ({ title: p.title, productType: p.productType, tags: p.tags, price: p.price })),
+    policyInfo,
+  );
+
+  const accessToken = resolveAccessToken(store.accessToken);
+  const deployResult = await deployLlmsTxtPage(store.domain, accessToken, content);
+
+  res.json({
+    storeId,
+    domain: store.domain,
+    pageUrl: deployResult.pageUrl,
+    created: deployResult.created,
+    content,
+    deployedAt: new Date().toISOString(),
   });
 });
 

@@ -28,14 +28,26 @@ export interface RuleViolation {
   effortLevel: "low" | "medium" | "high";
 }
 
+export type ProductCategory =
+  | "electronics"
+  | "fashion"
+  | "beauty"
+  | "sports"
+  | "food"
+  | "kids"
+  | "home"
+  | "general";
+
 export interface RuleEngineResult {
   ruleScores: {
     clarity: number;
     completeness: number;
     trust: number;
     tags: number;
+    weightedOverall: number;
   };
   violations: RuleViolation[];
+  detectedCategory: ProductCategory;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -666,6 +678,293 @@ function analyzeBrandAuthority(product: ProductInput, violations: RuleViolation[
   }
 }
 
+// ─── Category detection ───────────────────────────────────────────────────────
+
+const CATEGORY_SIGNALS: Record<ProductCategory, string[]> = {
+  electronics: [
+    "laptop", "phone", "camera", "headphone", "speaker", "tablet", "monitor",
+    "keyboard", "mouse", "charger", "cable", "battery", "drone", "smartwatch",
+    "earbuds", "gaming", "router", "printer", "projector", "tv", "television",
+    "electronic", "tech", "digital", "wireless", "bluetooth",
+  ],
+  fashion: [
+    "shirt", "dress", "pants", "shoes", "sneakers", "boots", "jacket", "coat",
+    "jeans", "skirt", "hoodie", "sweater", "sock", "underwear", "bra", "hat",
+    "cap", "scarf", "gloves", "handbag", "wallet", "belt", "watch", "ring",
+    "necklace", "earring", "bracelet", "clothing", "apparel", "fashion", "wear",
+  ],
+  beauty: [
+    "serum", "moisturizer", "cleanser", "toner", "sunscreen", "foundation",
+    "lipstick", "mascara", "eyeliner", "blush", "concealer", "perfume", "cologne",
+    "shampoo", "conditioner", "body wash", "lotion", "cream", "supplement",
+    "vitamin", "collagen", "skincare", "makeup", "beauty", "hair care",
+  ],
+  sports: [
+    "yoga mat", "dumbbell", "kettlebell", "resistance band", "running", "cycling",
+    "hiking", "camping", "tent", "sleeping bag", "backpack", "bike", "kayak",
+    "fitness", "gym", "workout", "sports", "outdoor", "athletic", "training",
+    "snowboard", "surf", "swim", "golf", "tennis", "football", "basketball",
+  ],
+  food: [
+    "coffee", "tea", "protein powder", "snack", "chocolate", "candy", "cookie",
+    "sauce", "oil", "vinegar", "spice", "organic", "vegan", "gluten-free",
+    "supplement", "probiotics", "food", "drink", "beverage", "nutrition",
+  ],
+  kids: [
+    "toy", "lego", "puzzle", "doll", "action figure", "board game", "baby",
+    "toddler", "children", "kids", "infant", "stroller", "diaper", "pacifier",
+    "educational", "playmat", "stuffed animal",
+  ],
+  home: [
+    "sofa", "chair", "table", "desk", "bed", "mattress", "pillow", "blanket",
+    "lamp", "curtain", "rug", "shelf", "cabinet", "kitchen", "cookware", "pan",
+    "pot", "blender", "coffee maker", "vacuum", "mop", "candle", "plant",
+    "garden", "tool", "home", "furniture", "decor",
+  ],
+  general: [],
+};
+
+export function detectProductCategory(product: ProductInput): ProductCategory {
+  const corpus = [
+    product.title,
+    product.productType ?? "",
+    product.tags.join(" "),
+    stripHtml(product.description).slice(0, 200),
+  ].join(" ").toLowerCase();
+
+  const scores: Partial<Record<ProductCategory, number>> = {};
+  for (const [cat, signals] of Object.entries(CATEGORY_SIGNALS) as [ProductCategory, string[]][]) {
+    if (cat === "general") continue;
+    const hits = signals.filter((s) => corpus.includes(s)).length;
+    if (hits > 0) scores[cat] = hits;
+  }
+
+  if (Object.keys(scores).length === 0) return "general";
+  return (Object.entries(scores).sort(([, a], [, b]) => b - a)[0]![0]) as ProductCategory;
+}
+
+// ─── Category-specific rules ──────────────────────────────────────────────────
+
+const INGREDIENT_TERMS = [
+  "ingredient", "active ingredient", "contains", "formula", "compound",
+  "extract", "acid", "vitamin", "mineral", "protein", "enzyme",
+];
+const ALLERGEN_TERMS = ["allergen", "allergy", "gluten", "nut", "dairy", "soy", "wheat", "vegan", "vegetarian"];
+const SAFETY_CERT_TERMS = ["ce certified", "fda", "cpsc", "astm", "ul listed", "rohs", "reach", "bpa free", "non-toxic", "cruelty-free"];
+const SIZING_TERMS = ["size guide", "sizing", "fits", "waist", "chest", "hip", "inseam", "eu size", "uk size", "us size", "small", "medium", "large", "xl", "xxl"];
+const CARE_TERMS = ["machine wash", "hand wash", "dry clean", "tumble dry", "iron", "bleach", "care instruction"];
+const NUTRITION_TERMS = ["calories", "serving size", "nutrition", "carbohydrate", "fat", "sodium", "sugar", "protein", "dietary fiber"];
+const AGE_TERMS = ["ages", "age range", "suitable for age", "years old", "months old", "for kids", "for children", "for toddlers"];
+const TECH_SPEC_TERMS = ["ghz", "mhz", "gb", "tb", "mb", "ram", "cpu", "gpu", "mah", "watt", "volt", "amp", "hz", "fps", "mp megapixel", "resolution", "processor", "compatible with", "connectivity", "os ", "operating system"];
+
+function analyzeCategorySpecificRules(
+  product: ProductInput,
+  category: ProductCategory,
+  violations: RuleViolation[],
+): void {
+  const plain = stripHtml(product.description).toLowerCase();
+  if (!plain || wordCount(plain) < 20) return; // already flagged by desc rules
+
+  switch (category) {
+    case "electronics": {
+      const techSpecCount = TECH_SPEC_TERMS.filter((t) => plain.includes(t)).length;
+      if (techSpecCount < 2) {
+        violations.push({
+          ruleId: "CAT_ELECTRONICS_NO_SPECS",
+          category: "completeness",
+          severity: "high",
+          title: "Electronics product missing technical specifications",
+          description: "AI assistants answering 'What are the specs of X?' need processor, memory, connectivity, and compatibility data. Without specs, this product loses all AI comparison queries.",
+          suggestion: "Add a specifications section: processor/chip, memory/storage, connectivity (WiFi/Bluetooth version), compatibility, power requirements, and certifications.",
+          evidence: `Only ${techSpecCount}/2 required spec types detected (processor, memory, connectivity, wattage, resolution).`,
+          impactScore: 80,
+          effortLevel: "medium",
+        });
+      }
+      if (!hasKeyword(plain, ["compatible with", "works with", "compatibility", "requires"])) {
+        violations.push({
+          ruleId: "CAT_ELECTRONICS_NO_COMPAT",
+          category: "completeness",
+          severity: "medium",
+          title: "No compatibility information",
+          description: "Compatibility is the #1 buyer question for electronics. AI agents cannot answer 'Will this work with my X?' without it.",
+          suggestion: "Add a compatibility statement: 'Compatible with iOS 14+, Android 10+, Windows 10/11, macOS 12+'.",
+          evidence: "No compatibility or 'works with' language found in description.",
+          impactScore: 60,
+          effortLevel: "low",
+        });
+      }
+      break;
+    }
+
+    case "fashion": {
+      if (!hasKeyword(plain, SIZING_TERMS)) {
+        violations.push({
+          ruleId: "CAT_FASHION_NO_SIZING",
+          category: "completeness",
+          severity: "high",
+          title: "Fashion product missing sizing information",
+          description: "Size is the #1 reason shoppers abandon fashion products. AI agents cannot recommend apparel for 'fit' queries without sizing data.",
+          suggestion: "Add a size guide or measurement chart: chest, waist, hip in both cm and inches across sizes S–XXL.",
+          evidence: "No sizing terms (small/medium/large, measurements, size guide) found.",
+          impactScore: 85,
+          effortLevel: "medium",
+        });
+      }
+      if (!hasKeyword(plain, MATERIAL_TERMS)) {
+        violations.push({
+          ruleId: "CAT_FASHION_NO_MATERIAL",
+          category: "completeness",
+          severity: "high",
+          title: "Fashion product missing fabric/material information",
+          description: "Material is critical for AI answering 'What is this made of?' or 'Is this breathable/waterproof?' queries.",
+          suggestion: "Add fabric composition: '100% organic cotton' or '60% polyester, 40% nylon — quick-dry, moisture-wicking'.",
+          evidence: "No fabric or material composition terms found.",
+          impactScore: 75,
+          effortLevel: "low",
+        });
+      }
+      if (!hasKeyword(plain, CARE_TERMS)) {
+        violations.push({
+          ruleId: "CAT_FASHION_NO_CARE",
+          category: "completeness",
+          severity: "low",
+          title: "Missing care instructions",
+          description: "Care instructions are a common buyer question AI agents cannot answer without them.",
+          suggestion: "Add a short care section: 'Machine wash cold, tumble dry low, do not bleach'.",
+          evidence: "No wash, care, or cleaning instructions detected.",
+          impactScore: 25,
+          effortLevel: "low",
+        });
+      }
+      break;
+    }
+
+    case "beauty": {
+      if (!hasKeyword(plain, INGREDIENT_TERMS)) {
+        violations.push({
+          ruleId: "CAT_BEAUTY_NO_INGREDIENTS",
+          category: "completeness",
+          severity: "high",
+          title: "Beauty product missing ingredient information",
+          description: "Shoppers and AI agents increasingly filter beauty products by ingredients (retinol, hyaluronic acid, SPF). Without them, this product is invisible in ingredient-specific queries.",
+          suggestion: "List key active ingredients with percentages: 'Contains 2% niacinamide, 1% hyaluronic acid, SPF 30'.",
+          evidence: "No ingredient, formula, or active compound terms found.",
+          impactScore: 88,
+          effortLevel: "medium",
+        });
+      }
+      if (!hasKeyword(plain, ["skin type", "for oily", "for dry", "for sensitive", "all skin", "suitable for", "for combination"])) {
+        violations.push({
+          ruleId: "CAT_BEAUTY_NO_SKIN_TYPE",
+          category: "completeness",
+          severity: "medium",
+          title: "No skin/hair type suitability specified",
+          description: "AI agents answering 'best moisturizer for dry skin' cannot include this product without skin type targeting.",
+          suggestion: "Add suitability: 'Suitable for dry, normal, and combination skin. Avoid if sensitive to retinoids.'",
+          evidence: "No skin type, hair type, or suitability language detected.",
+          impactScore: 55,
+          effortLevel: "low",
+        });
+      }
+      break;
+    }
+
+    case "food": {
+      if (!hasKeyword(plain, NUTRITION_TERMS)) {
+        violations.push({
+          ruleId: "CAT_FOOD_NO_NUTRITION",
+          category: "completeness",
+          severity: "high",
+          title: "Food product missing nutritional information",
+          description: "AI agents answering health or diet queries (calories, macros, allergens) cannot surface this product without nutritional data.",
+          suggestion: "Add serving size, calories, protein, carbs, fat, and key allergen statements.",
+          evidence: "No nutritional information or serving size found.",
+          impactScore: 78,
+          effortLevel: "medium",
+        });
+      }
+      if (!hasKeyword(plain, ALLERGEN_TERMS)) {
+        violations.push({
+          ruleId: "CAT_FOOD_NO_ALLERGENS",
+          category: "trust",
+          severity: "medium",
+          title: "No allergen information",
+          description: "Allergen queries are high-intent and safety-critical. AI agents cannot safely recommend food products without allergen declarations.",
+          suggestion: "Add allergen statement: 'Contains: Milk, Soy. May contain traces of nuts and wheat.'",
+          evidence: "No allergen, gluten, dairy, or nut content declarations found.",
+          impactScore: 60,
+          effortLevel: "low",
+        });
+      }
+      break;
+    }
+
+    case "kids": {
+      if (!hasKeyword(plain, AGE_TERMS)) {
+        violations.push({
+          ruleId: "CAT_KIDS_NO_AGE",
+          category: "completeness",
+          severity: "high",
+          title: "Kids product missing age range",
+          description: "Age suitability is the #1 filter parents use. AI assistants cannot answer 'toys for 3-year-olds' without age range data.",
+          suggestion: "Add age suitability: 'Recommended for ages 3–8 years. Adult supervision required for children under 3.'",
+          evidence: "No age range, 'suitable for ages', or 'years old' language found.",
+          impactScore: 85,
+          effortLevel: "low",
+        });
+      }
+      if (!hasKeyword(plain, SAFETY_CERT_TERMS)) {
+        violations.push({
+          ruleId: "CAT_KIDS_NO_SAFETY",
+          category: "trust",
+          severity: "medium",
+          title: "No safety certifications mentioned",
+          description: "Parents buying for children prioritize safety certifications. AI agents boost trust signals when certifications are present.",
+          suggestion: "Add relevant certifications: 'ASTM F963 certified, CPSC compliant, BPA-free, non-toxic materials'.",
+          evidence: "No safety certification terms (ASTM, CPSC, BPA-free, non-toxic) found.",
+          impactScore: 55,
+          effortLevel: "medium",
+        });
+      }
+      break;
+    }
+
+    case "sports": {
+      if (!hasKeyword(plain, DIMENSION_TERMS)) {
+        violations.push({
+          ruleId: "CAT_SPORTS_NO_DIMENSIONS",
+          category: "completeness",
+          severity: "high",
+          title: "Sports product missing dimensions or weight",
+          description: "For sports and outdoor gear, dimensions and weight are critical buying criteria. AI cannot answer 'How heavy is it?' or 'Will it fit in my bag?' without them.",
+          suggestion: "Add weight, packed dimensions, and deployed dimensions if applicable.",
+          evidence: "No weight, dimension, or measurement terms found for a sports/outdoor product.",
+          impactScore: 70,
+          effortLevel: "medium",
+        });
+      }
+      break;
+    }
+
+    default:
+      break;
+  }
+}
+
+// ─── Category score weight profiles ──────────────────────────────────────────
+
+const CATEGORY_WEIGHTS: Record<ProductCategory, { clarity: number; completeness: number; trust: number; tags: number }> = {
+  electronics: { clarity: 0.20, completeness: 0.45, trust: 0.25, tags: 0.10 },
+  fashion:     { clarity: 0.25, completeness: 0.40, trust: 0.20, tags: 0.15 },
+  beauty:      { clarity: 0.20, completeness: 0.45, trust: 0.25, tags: 0.10 },
+  food:        { clarity: 0.15, completeness: 0.45, trust: 0.30, tags: 0.10 },
+  kids:        { clarity: 0.20, completeness: 0.35, trust: 0.35, tags: 0.10 },
+  sports:      { clarity: 0.25, completeness: 0.40, trust: 0.20, tags: 0.15 },
+  home:        { clarity: 0.25, completeness: 0.40, trust: 0.20, tags: 0.15 },
+  general:     { clarity: 0.25, completeness: 0.35, trust: 0.25, tags: 0.15 },
+};
+
 // ─── Score from violations ────────────────────────────────────────────────────
 
 function computeScore(violations: RuleViolation[], category: string): number {
@@ -680,24 +979,42 @@ function computeScore(violations: RuleViolation[], category: string): number {
 export function runRuleEngine(product: ProductInput): RuleEngineResult {
   const violations: RuleViolation[] = [];
 
+  const detectedCategory = detectProductCategory(product);
+
   const clarityFromTitle = analyzeTitle(product.title, violations);
   const completenessFromDesc = analyzeDescription(product.description, violations);
   const tagsScore = analyzeTags(product.tags, product.productType, violations);
   const trustScore = analyzeTrust(product, violations);
   analyzeBrandAuthority(product, violations);
   checkStructuredData(product.description, violations);
-  checkTaxonomySpecificity(product.productType, violations);  // Upgrade 2
+  checkTaxonomySpecificity(product.productType, violations);
   analyzeVoiceReadiness(product.title, product.description, violations);
   analyzeComparisonReadiness(product.description, product.tags, violations);
+  analyzeCategorySpecificRules(product, detectedCategory, violations);
 
-  // Title rules affect clarity, description rules affect completeness
-  // Blend with the penalty-derived scores for each dimension
+  const w = CATEGORY_WEIGHTS[detectedCategory];
+
+  // Base scores from rules
+  const baseClarity = Math.round((clarityFromTitle + computeScore(violations, "clarity")) / 2);
+  const baseCompleteness = Math.round((completenessFromDesc + computeScore(violations, "completeness")) / 2);
+  const baseTrust = Math.round((trustScore + computeScore(violations, "trust")) / 2);
+  const baseTags = tagsScore;
+
+  // Category-weighted overall (used externally by ai-analyzer to blend with AI clarity)
+  const weightedOverall = Math.round(
+    baseClarity * w.clarity +
+    baseCompleteness * w.completeness +
+    baseTrust * w.trust +
+    baseTags * w.tags,
+  );
+
   const ruleScores = {
-    clarity: Math.round((clarityFromTitle + computeScore(violations, "clarity")) / 2),
-    completeness: Math.round((completenessFromDesc + computeScore(violations, "completeness")) / 2),
-    trust: Math.round((trustScore + computeScore(violations, "trust")) / 2),
-    tags: tagsScore,
+    clarity: baseClarity,
+    completeness: baseCompleteness,
+    trust: baseTrust,
+    tags: baseTags,
+    weightedOverall,
   };
 
-  return { ruleScores, violations };
+  return { ruleScores, violations, detectedCategory };
 }

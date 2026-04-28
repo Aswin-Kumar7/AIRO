@@ -4,17 +4,9 @@ import { db, fixesTable, productsTable, gapsTable, storeSummariesTable, storesTa
 import { updateShopifyProduct, verifyShopifyUpdate } from "../lib/shopify-client";
 import { resolveAccessToken } from "../lib/crypto";
 import { generateId } from "../lib/id";
+import { getOwnedStore } from "../lib/owned-store";
 
 const router: IRouter = Router();
-
-async function requireOwnedStore(storeId: string, userId: string | undefined) {
-  if (!userId) return null;
-  const [store] = await db
-    .select()
-    .from(storesTable)
-    .where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
-  return store ?? null;
-}
 
 function gapCategoryForFixType(fixType: string): string | null {
   if (fixType === "description" || fixType === "structure") return "completeness";
@@ -109,7 +101,7 @@ router.get("/stores/:storeId/fixes", async (req, res): Promise<void> => {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -135,6 +127,7 @@ router.get("/stores/:storeId/fixes", async (req, res): Promise<void> => {
     originalContent: fix.originalContent,
     improvedContent: fix.editedContent ?? fix.improvedContent,
     explanation: fix.explanation,
+    roiRationale: fix.roiRationale ?? null,
     estimatedScoreImprovement: fix.estimatedScoreImprovement,
     shopifySynced: fix.shopifySynced,
     shopifyError: fix.shopifyError ?? null,
@@ -190,7 +183,13 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
   if (fix.productId) {
     const [product] = await db.select().from(productsTable).where(eq(productsTable.id, fix.productId));
     if (product) {
-      const newScore = Math.min(100, product.overallScore + fix.estimatedScoreImprovement);
+      const syncableType = ["description", "tags", "title"].includes(fix.type);
+      // Only apply estimated score improvement if the change actually landed on Shopify,
+      // or if the fix type doesn't require a Shopify write (structure/schema are manual).
+      const scoreUpdatable = !syncableType || shopifySynced;
+      const newScore = scoreUpdatable
+        ? Math.min(100, product.overallScore + fix.estimatedScoreImprovement)
+        : product.overallScore;
       await db.update(productsTable).set({ overallScore: newScore, hasAppliedFixes: true })
         .where(eq(productsTable.id, fix.productId));
 
@@ -223,12 +222,16 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
     metadata: { fixId, fixType: fix.type, shopifySynced },
   });
 
-  // Refresh summary counts
+  // Refresh summary counts + invalidate stale benchmark (scores changed)
   const allFixes = await db.select().from(fixesTable).where(eq(fixesTable.storeId, storeId));
   const pendingFixesCount = allFixes.filter((f) => f.status === "pending").length;
   const appliedFixesCount = allFixes.filter((f) => f.status === "applied").length;
-  await db.update(storeSummariesTable).set({ pendingFixes: pendingFixesCount, appliedFixes: appliedFixesCount, updatedAt: new Date() })
-    .where(eq(storeSummariesTable.storeId, storeId));
+  await db.update(storeSummariesTable).set({
+    pendingFixes: pendingFixesCount,
+    appliedFixes: appliedFixesCount,
+    benchmarkComputedAt: null,
+    updatedAt: new Date(),
+  }).where(eq(storeSummariesTable.storeId, storeId));
 
   res.json({ fixId, success: true, shopifySynced, shopifyError });
 });
@@ -247,7 +250,7 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const store = await requireOwnedStore(storeId, userId);
+  const store = await getOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -300,8 +303,12 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
   const allFixes = await db.select().from(fixesTable).where(eq(fixesTable.storeId, storeId));
   const pendingFixesCount = allFixes.filter((f) => f.status === "pending").length;
   const appliedFixCount = allFixes.filter((f) => f.status === "applied").length;
-  await db.update(storeSummariesTable).set({ pendingFixes: pendingFixesCount, appliedFixes: appliedFixCount, updatedAt: new Date() })
-    .where(eq(storeSummariesTable.storeId, storeId));
+  await db.update(storeSummariesTable).set({
+    pendingFixes: pendingFixesCount,
+    appliedFixes: appliedFixCount,
+    benchmarkComputedAt: null,
+    updatedAt: new Date(),
+  }).where(eq(storeSummariesTable.storeId, storeId));
 
   const applied = results.filter((r) => r.success).length;
   const failed = results.filter((r) => !r.success).length;

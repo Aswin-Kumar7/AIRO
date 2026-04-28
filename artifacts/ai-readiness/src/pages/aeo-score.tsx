@@ -1,348 +1,97 @@
 import { useStore } from "@/context/store-context";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Loader2, Brain, CheckCircle2, XCircle, AlertCircle, Zap, FileText,
-  BarChart3, Tag, Shield, MessageSquare, ArrowRight, TrendingUp, Search,
+  Loader2, Brain, FileText,
+  ArrowRight, TrendingUp, Search, Zap, AlertCircle,
+  ShieldCheck, ShoppingCart, Map,
 } from "lucide-react";
 import {
   useGetStoreSummary, getGetStoreSummaryQueryKey,
   useListGaps, getListGapsQueryKey,
 } from "@workspace/api-client-react";
 
-// ─── Score ring ───────────────────────────────────────────────────────────────
+// ─── Mini score arc ───────────────────────────────────────────────────────────
 
-const CIRC = 2 * Math.PI * 34;
-
-function ScoreArc({
-  score,
-  color,
-  size = 88,
-  strokeWidth = 6,
-  fontSize = 24,
-}: {
-  score: number;
-  color: string;
-  size?: number;
-  strokeWidth?: number;
-  fontSize?: number;
-}) {
-  const r = (size - strokeWidth * 2) / 2;
+function ScoreArc({ score, color, size = 56, sw = 5 }: { score: number; color: string; size?: number; sw?: number }) {
+  const r = (size - sw * 2) / 2;
   const c = size / 2;
   const circ = 2 * Math.PI * r;
   const dash = (Math.min(100, Math.max(0, score)) / 100) * circ;
   return (
-    <div className="relative inline-flex items-center justify-center">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="flex-shrink-0 transform -rotate-90">
-        <circle cx={c} cy={c} r={r} fill="none" stroke="#f1f5f9" strokeWidth={strokeWidth} />
-        <circle
-          cx={c} cy={c} r={r} fill="none"
-          stroke={color} strokeWidth={strokeWidth}
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-          style={{ transition: "stroke-dasharray 0.9s ease-out" }}
-        />
+    <div className="relative inline-flex items-center justify-center shrink-0">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+        <circle cx={c} cy={c} r={r} fill="none" stroke="#f1f5f9" strokeWidth={sw} className="dark:stroke-zinc-800" />
+        <circle cx={c} cy={c} r={r} fill="none" stroke={color} strokeWidth={sw}
+          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+          style={{ transition: "stroke-dasharray 0.8s ease-out" }} />
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="font-extrabold text-slate-900 dark:text-white tracking-tighter" style={{ fontSize: `${fontSize}px` }}>
-          {Math.round(score)}
-        </span>
-      </div>
+      <span className="absolute text-[15px] font-extrabold text-slate-900 dark:text-white tabular-nums">
+        {Math.round(score)}
+      </span>
     </div>
   );
 }
 
-// ─── Dimension config ─────────────────────────────────────────────────────────
 
-const DIMENSIONS = [
+function tier(s: number) {
+  if (s >= 80) return { label: "Strong",     cls: "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10" };
+  if (s >= 60) return { label: "Moderate",   cls: "text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10" };
+  return         { label: "Needs work",  cls: "text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-500/10" };
+}
+
+// ─── Journey stage config ─────────────────────────────────────────────────────
+
+interface JourneyStage {
+  id: string;
+  label: string;
+  subtitle: string;
+  icon: React.FC<{ className?: string; style?: React.CSSProperties }>;
+  color: string;
+  dims: Array<{ label: string; weight: number; key: string }>;
+  tip: string;
+}
+
+const JOURNEY_STAGES: JourneyStage[] = [
   {
-    key: "clarityScore" as const,
-    label: "Clarity",
-    icon: Brain,
-    color: "#14b8a6",
-    description: "How clearly product descriptions answer AI agent queries",
-    tip: "Use natural language. Avoid jargon and model numbers in titles.",
+    id: "discovery", label: "Discovery", subtitle: "Can AI find your products?",
+    icon: Search, color: "#3b82f6",
+    dims: [{ label: "Tags", weight: 0.55, key: "tagScore" }, { label: "Consistency", weight: 0.45, key: "consistencyScore" }],
+    tip: "Add structured product type, vendor, and descriptive tags.",
   },
   {
-    key: "completenessScore" as const,
-    label: "Completeness",
-    icon: FileText,
-    color: "#8b5cf6",
-    description: "How much key product data (material, dimensions, use case) is present",
-    tip: "Add material composition, dimensions, and a clear target audience.",
+    id: "evaluation", label: "Evaluation", subtitle: "Can AI answer buyer questions?",
+    icon: Brain, color: "#8b5cf6",
+    dims: [{ label: "Clarity", weight: 0.5, key: "clarityScore" }, { label: "Completeness", weight: 0.5, key: "completenessScore" }],
+    tip: "Write descriptions that answer: what is it, who is it for, what problem does it solve?",
   },
   {
-    key: "trustScore" as const,
-    label: "Trust",
-    icon: Shield,
-    color: "#f43f5e",
-    description: "Trust signals that help AI recommend your store confidently",
-    tip: "Add reviews, brand schema, and structured product data.",
+    id: "trust", label: "Trust", subtitle: "Does AI vouch for your product?",
+    icon: ShieldCheck, color: "#f59e0b",
+    dims: [{ label: "Trust", weight: 0.7, key: "trustScore" }, { label: "Policy", weight: 0.3, key: "policyScore" }],
+    tip: "Add reviews, certifications, and clear return/shipping policies.",
   },
   {
-    key: "tagScore" as const,
-    label: "Tags",
-    icon: Tag,
-    color: "#f59e0b",
-    description: "Quality and specificity of product tags for AI classification",
-    tip: "Use specific tags like 'organic cotton' instead of generic ones like 'sale'.",
-  },
-  {
-    key: "consistencyScore" as const,
-    label: "Consistency",
-    icon: BarChart3,
-    color: "#10b981",
-    description: "Tone, structure, and formatting uniformity across the catalog",
-    tip: "Standardize description length and tone across all products.",
-  },
-  {
-    key: "policyScore" as const,
-    label: "Policies",
-    icon: MessageSquare,
-    color: "#6366f1",
-    description: "Clarity and completeness of shipping, returns, and FAQ policies",
-    tip: "Ensure each policy page is at least 50 words with clear terms.",
+    id: "decision", label: "Decision", subtitle: "Does AI close the sale?",
+    icon: ShoppingCart, color: "#10b981",
+    dims: [{ label: "Overall", weight: 0.6, key: "overallScore" }, { label: "Policy", weight: 0.4, key: "policyScore" }],
+    tip: "Ensure pricing, shipping, and return policies are explicit.",
   },
 ];
 
-function scoreTier(s: number): { label: string; color: string; bg: string } {
-  if (s >= 80) return { label: "Strong", color: "text-emerald-700 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10" };
-  if (s >= 60) return { label: "Moderate", color: "text-amber-700 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-500/10" };
-  return { label: "Needs work", color: "text-red-700 dark:text-red-400", bg: "bg-red-50 dark:bg-red-500/10" };
-}
-
-// ─── AEO Score radar breakdown ────────────────────────────────────────────────
-
-function DimensionCard({
-  dimension,
-  score,
-}: {
-  dimension: (typeof DIMENSIONS)[number];
-  score: number;
-}) {
-  const tier = scoreTier(score);
-  const Icon = dimension.icon;
-  return (
-    <div className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm p-6 flex flex-col transition-all hover:shadow-md hover:border-slate-300/80">
-      <div className="flex items-start justify-between mb-5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: `${dimension.color}15` }}>
-            <Icon className="w-4 h-4" style={{ color: dimension.color }} />
-          </div>
-          <span className="font-bold text-slate-900 dark:text-white text-[14px] tracking-tight">{dimension.label}</span>
-        </div>
-        <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full ring-1 ${tier.bg} ${tier.color} ring-slate-200/50 dark:ring-white/10`}>
-          {tier.label}
-        </span>
-      </div>
-      
-      <div className="flex items-end gap-3 mb-3">
-        <div className="text-4xl font-extrabold text-slate-900 dark:text-white tracking-tighter tabular-nums leading-none">
-          {Math.round(score)}<span className="text-xl text-slate-300 font-semibold">/100</span>
-        </div>
-      </div>
-      
-      <p className="text-[13px] text-slate-500 dark:text-zinc-300 leading-relaxed mb-5 flex-1">{dimension.description}</p>
-      
-      <div className="flex items-start gap-2.5 bg-slate-50/80 dark:bg-[#111214] border border-slate-100 dark:border-white/5 rounded-[10px] px-4 py-3 mt-auto">
-        <Zap className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-        <p className="text-[12px] font-medium text-slate-700 dark:text-slate-200 leading-relaxed">{dimension.tip}</p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Overall hero ──────────────────────────────────────────────────────────────
-
-function OverallHero({ score, criticalIssues, pendingFixes, lastAnalyzed }: {
-  score: number;
-  criticalIssues: number;
-  pendingFixes: number;
-  lastAnalyzed: string | null | undefined;
-}) {
-  const tier = scoreTier(score);
-  const [, navigate] = useLocation();
-  return (
-    <div className="bg-white dark:bg-[#080808] border border-slate-200/60 dark:border-white/10 rounded-[24px] shadow-sm mb-8 overflow-hidden">
-      {/* Top Section: Hero Content */}
-      <div className="p-8 md:p-10 bg-gradient-to-b from-slate-50/50 to-white dark:from-white/[0.03] dark:to-transparent relative">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-          <div className="max-w-xl">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 rounded-[14px] bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 flex items-center justify-center shadow-sm">
-                <Brain className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div>
-                <h2 className="text-[24px] font-extrabold text-slate-900 dark:text-white tracking-tight leading-none mb-1">AEO Readiness</h2>
-                <p className="text-[14px] text-slate-500 dark:text-zinc-400 font-medium">Answer Engine Optimization Analysis</p>
-              </div>
-            </div>
-            
-            <p className="text-slate-600 dark:text-zinc-300 text-[15px] leading-relaxed mb-0">
-              Your store's readiness score measures how effectively AI assistants (like ChatGPT, Perplexity, and Google AI) can understand, trust, and recommend your products to high-intent shoppers.
-            </p>
-          </div>
-
-          <div className="flex-shrink-0">
-            <Button
-              onClick={() => navigate("/issues")}
-              className="w-full sm:w-auto bg-slate-900 dark:bg-white/10 hover:bg-slate-800 dark:hover:bg-white/20 text-white rounded-[12px] h-11 px-6 text-[14px] font-semibold transition-all shadow-sm gap-2"
-            >
-              View detailed report <ArrowRight className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Section: Grid Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 border-t border-slate-100 dark:border-white/5 bg-slate-50/20 dark:bg-black/20">
-        
-        {/* 1. Score Widget */}
-        <div className="p-6 md:p-8 flex flex-col justify-center items-center text-center border-r border-slate-100 dark:border-white/5">
-          <ScoreArc score={score} color="#10b981" size={80} strokeWidth={7} fontSize={26} />
-          <div className="mt-4">
-            <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${tier.bg} ${tier.color} ring-1 ring-inset ring-slate-200/50 dark:ring-white/10`}>
-              {tier.label} Score
-            </span>
-          </div>
-        </div>
-
-        {/* 2. Critical Issues */}
-        <div className="p-6 md:p-8 flex flex-col justify-center border-r border-slate-100 dark:border-white/5">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" />
-            <div className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Critical</div>
-          </div>
-          <div className="text-4xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tighter">{criticalIssues}</div>
-          <div className="text-[13px] text-slate-400 dark:text-zinc-500 mt-1 font-medium">Immediate action needed</div>
-        </div>
-
-        {/* 3. Pending Fixes */}
-        <div className="p-6 md:p-8 flex flex-col justify-center border-t border-slate-100 dark:border-white/5 md:border-t-0 md:border-r">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]" />
-            <div className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Pending</div>
-          </div>
-          <div className="text-4xl font-extrabold text-slate-900 dark:text-white tabular-nums tracking-tighter">{pendingFixes}</div>
-          <div className="text-[13px] text-slate-400 dark:text-zinc-500 mt-1 font-medium">Optimizations found</div>
-        </div>
-
-        {/* 4. Last Analyzed */}
-        <div className="p-6 md:p-8 flex flex-col justify-center border-t border-slate-100 dark:border-white/5 md:border-t-0">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-zinc-600" />
-            <div className="text-[11px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Analyzed</div>
-          </div>
-          <div className="text-[20px] font-extrabold text-slate-900 dark:text-white tracking-tight">
-            {lastAnalyzed ? new Date(lastAnalyzed).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "--"}
-          </div>
-          <div className="text-[13px] text-slate-400 dark:text-zinc-500 mt-1 font-medium">
-            {lastAnalyzed ? new Date(lastAnalyzed).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : ""}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Top issues banner ────────────────────────────────────────────────────────
-
-function TopIssues({ gaps }: { gaps: Array<{ ruleId: string; title: string; description?: string; productTitle?: string; severity: string; impactScore: number }> }) {
-  const top = gaps
-    .filter((g) => !("isFixed" in g && (g as unknown as { isFixed: boolean }).isFixed))
-    .sort((a, b) => b.impactScore - a.impactScore)
-    .slice(0, 3);
-  const [, navigate] = useLocation();
-
-  if (top.length === 0) return null;
-
-  return (
-    <div className="mb-8 bg-white dark:bg-[#080808] border border-slate-200/60 dark:border-white/10 shadow-sm rounded-[24px] overflow-hidden">
-      <div className="px-6 py-5 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/5 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <TrendingUp className="w-5 h-5 text-emerald-500" />
-          <h3 className="text-[16px] font-extrabold text-slate-900 dark:text-white tracking-tight">Top AEO Opportunities</h3>
-        </div>
-        <button 
-          onClick={() => navigate("/issues")}
-          className="text-[12px] font-bold text-slate-500 dark:text-zinc-400 hover:text-slate-800 dark:hover:text-white transition-colors flex items-center gap-1"
-        >
-          View all <ArrowRight className="w-4 h-4 text-slate-400 dark:text-zinc-500" />
-        </button>
-      </div>
-      <div className="divide-y divide-slate-100 dark:divide-white/5">
-        {top.map((g, i) => (
-          <div key={g.ruleId ?? i} className="group flex flex-col sm:flex-row sm:items-center gap-6 px-6 py-6 hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors">
-            {/* Rank / Icon */}
-            <div className="w-10 h-10 rounded-full bg-slate-100/80 dark:bg-white/10 border border-slate-200/60 dark:border-white/10 text-slate-900 dark:text-white text-[15px] font-black flex items-center justify-center flex-shrink-0 shadow-sm">
-              {i + 1}
-            </div>
-            
-            {/* Main content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <div className="text-[15px] font-bold text-slate-900 dark:text-white tracking-tight flex-1 flex items-center flex-wrap gap-x-2 gap-y-1">
-                  <span>{g.title}</span>
-                  {g.productTitle && (
-                    <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100/60 px-2 py-0.5 rounded-md truncate max-w-[200px]">
-                      <Search className="w-3 h-3 text-emerald-500" />
-                      <span className="truncate">{g.productTitle}</span>
-                    </span>
-                  )}
-                </div>
-                <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full flex-shrink-0 ring-1 ${
-                  g.severity === "high" ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 ring-red-200/50 dark:ring-red-500/20" :
-                  g.severity === "medium" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 ring-amber-200/50 dark:ring-amber-500/20" :
-                  "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 ring-violet-200/50 dark:ring-violet-500/20"
-                }`}>
-                  {g.severity} Priority
-                </span>
-              </div>
-              <p className="text-[13px] text-slate-500 dark:text-zinc-300 leading-relaxed truncate max-w-2xl">
-                {g.description ?? "Fixing this issue will significantly improve how AI engines understand and rank your products."}
-              </p>
-            </div>
-            
-            {/* Impact score */}
-            <div className="flex flex-row sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1.5 flex-shrink-0 w-full sm:w-auto mt-2 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-0 border-slate-100 dark:border-white/5">
-              <span className="text-[11px] font-bold text-slate-400 dark:text-zinc-400 uppercase tracking-widest">Impact Score</span>
-              <div className="flex items-center gap-3">
-                <div className="w-20 h-2 bg-slate-200/60 rounded-full overflow-hidden hidden sm:block">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${g.impactScore}%` }} />
-                </div>
-                <span className="text-[18px] font-extrabold text-slate-900 dark:text-white tabular-nums">{g.impactScore}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Page ──────────────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AeoScorePage() {
   const { activeStoreId } = useStore();
   const [, navigate] = useLocation();
 
   const { data: summary, isLoading: summaryLoading } = useGetStoreSummary(activeStoreId ?? "", {
-    query: {
-      queryKey: getGetStoreSummaryQueryKey(activeStoreId ?? ""),
-      enabled: !!activeStoreId,
-    },
+    query: { queryKey: getGetStoreSummaryQueryKey(activeStoreId ?? ""), enabled: !!activeStoreId },
   });
 
   const { data: gapsData, isLoading: gapsLoading } = useListGaps(activeStoreId ?? "", {
-    query: {
-      queryKey: getListGapsQueryKey(activeStoreId ?? ""),
-      enabled: !!activeStoreId,
-    },
+    query: { queryKey: getListGapsQueryKey(activeStoreId ?? ""), enabled: !!activeStoreId },
   });
 
   const isLoading = summaryLoading || gapsLoading;
@@ -350,9 +99,9 @@ export default function AeoScorePage() {
   if (!activeStoreId) {
     return (
       <AppLayout>
-        <div className="flex flex-col items-center justify-center h-[60vh] text-center gap-4">
-          <Brain className="w-10 h-10 text-slate-300" />
-          <p className="text-slate-500 dark:text-zinc-300 text-sm">Connect a store to see your AEO Score</p>
+        <div className="flex flex-col items-center justify-center h-[60vh] text-center gap-3">
+          <Brain className="w-8 h-8 text-slate-300" />
+          <p className="text-[13px] text-slate-500">Connect a store to see your AI Score</p>
           <Button size="sm" onClick={() => navigate("/connect")}>Connect store</Button>
         </div>
       </AppLayout>
@@ -363,7 +112,7 @@ export default function AeoScorePage() {
     return (
       <AppLayout>
         <div className="flex items-center justify-center h-[60vh]">
-          <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+          <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
         </div>
       </AppLayout>
     );
@@ -372,89 +121,236 @@ export default function AeoScorePage() {
   if (!summary || summary.lastAnalyzed == null) {
     return (
       <AppLayout>
-        <div className="p-6 max-w-3xl mx-auto">
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Brain className="w-12 h-12 text-slate-200 mb-4" />
-            <p className="text-lg font-semibold text-slate-700 dark:text-slate-200 mb-2">No AEO data yet</p>
-            <p className="text-sm text-slate-400 dark:text-zinc-400 mb-6 max-w-sm">
-              Run an analysis from the Dashboard to generate your AEO Score breakdown.
-            </p>
-            <Button onClick={() => navigate("/dashboard")} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
-              <Zap className="w-4 h-4" /> Go to Dashboard
-            </Button>
-          </div>
+        <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+          <Brain className="w-10 h-10 text-slate-200" />
+          <p className="text-[14px] font-semibold text-slate-700 dark:text-slate-200">No data yet</p>
+          <p className="text-[12px] text-slate-400 max-w-xs">Run an analysis from the Dashboard to generate your AI Score breakdown.</p>
+          <Button size="sm" onClick={() => navigate("/dashboard")} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+            <Zap className="w-3.5 h-3.5" /> Go to Dashboard
+          </Button>
         </div>
       </AppLayout>
     );
   }
 
-  const gaps = (gapsData ?? []) as unknown as Array<{
-    ruleId: string;
-    title: string;
-    severity: string;
-    impactScore: number;
-    isFixed: boolean;
-    description?: string;
-    productTitle?: string;
-  }>;
+  const overallScore = summary.overallScore ?? 0;
+  const t = tier(overallScore);
+
+  const gaps = ((gapsData ?? []) as unknown as Array<{
+    ruleId: string; title: string; severity: string; impactScore: number;
+    isFixed: boolean; description?: string; productTitle?: string;
+  }>).filter((g) => !g.isFixed).sort((a, b) => b.impactScore - a.impactScore);
+
+  const scores: Record<string, number> = {
+    tagScore: summary.tagScore ?? 0,
+    consistencyScore: summary.consistencyScore ?? 0,
+    clarityScore: summary.clarityScore ?? 0,
+    completenessScore: summary.completenessScore ?? 0,
+    trustScore: summary.trustScore ?? 0,
+    policyScore: summary.policyScore ?? 0,
+    overallScore,
+  };
+
+  const stageScores = JOURNEY_STAGES.map((s) => ({
+    stage: s,
+    score: Math.round(s.dims.reduce((acc, d) => acc + (scores[d.key] ?? 0) * d.weight, 0)),
+  }));
+
+  const weakest = stageScores.reduce((a, b) => (b.score < a.score ? b : a));
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-5">
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Brain className="w-5 h-5 text-emerald-500" />
-            AEO Score
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-zinc-300 mt-0.5">
-            How well AI assistants can understand and recommend your store
-          </p>
+      <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
+
+        {/* ── Page header ── */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-[18px] font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Brain className="w-5 h-5 text-emerald-500" />
+              AI Score
+            </h1>
+            <p className="text-[13px] text-slate-500 dark:text-zinc-400 mt-0.5">
+              How well AI assistants can understand and recommend your store
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigate("/issues")}
+            className="h-8 px-4 text-[13px] font-semibold gap-1.5 rounded-[8px]"
+          >
+            All issues <ArrowRight className="w-3.5 h-3.5" />
+          </Button>
         </div>
 
-        {/* Overall hero */}
-        <OverallHero
-          score={summary.overallScore ?? 0}
-          criticalIssues={summary.criticalIssues ?? 0}
-          pendingFixes={summary.pendingFixes ?? 0}
-          lastAnalyzed={summary.lastAnalyzed}
-        />
-
-        {/* Top issues */}
-        <TopIssues gaps={gaps} />
-
-        {/* Dimension breakdown */}
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3 flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-slate-400 dark:text-zinc-400" /> Score Breakdown
-        </h3>
-        <div className="grid gap-4 md:grid-cols-2">
-          {DIMENSIONS.map((dim) => (
-            <DimensionCard
-              key={dim.key}
-              dimension={dim}
-              score={(summary[dim.key] as number | null | undefined) ?? 0}
-            />
-          ))}
+        {/* ── Score + stats row ── */}
+        <div className="bg-white dark:bg-[#080808] border border-slate-200/60 dark:border-white/10 rounded-[14px] shadow-sm overflow-hidden">
+          <div className="flex items-stretch divide-x divide-slate-100 dark:divide-white/5">
+            {/* Score */}
+            <div className="flex flex-col items-center justify-center gap-2 px-6 py-5 min-w-[120px]">
+              <ScoreArc score={overallScore} color="#10b981" size={72} sw={6} />
+              <span className={`text-[10px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full ${t.cls}`}>{t.label}</span>
+            </div>
+            {/* Stats */}
+            {[
+              { label: "Critical", value: summary.criticalIssues ?? 0, dot: "bg-red-500" },
+              { label: "Pending fixes", value: summary.pendingFixes ?? 0, dot: "bg-amber-500" },
+              { label: "Applied fixes", value: summary.appliedFixes ?? 0, dot: "bg-emerald-500" },
+            ].map(({ label, value, dot }) => (
+              <div key={label} className="flex flex-col justify-center px-6 py-5 flex-1">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className={`w-2 h-2 rounded-full ${dot}`} />
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
+                </div>
+                <span className="text-[28px] font-extrabold text-slate-900 dark:text-white tabular-nums leading-none">{value}</span>
+              </div>
+            ))}
+            {/* Last analyzed */}
+            <div className="flex flex-col justify-center px-6 py-5 hidden sm:flex">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Analyzed</span>
+              <span className="text-[14px] font-bold text-slate-700 dark:text-zinc-300">
+                {new Date(summary.lastAnalyzed!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              </span>
+              <span className="text-[11px] text-slate-400">
+                {new Date(summary.lastAnalyzed!).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Footer CTA */}
-        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* ── Top issues ── */}
+        {gaps.slice(0, 3).length > 0 && (
+          <div className="bg-white dark:bg-[#080808] border border-slate-200/60 dark:border-white/10 rounded-[14px] shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-white/5">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-emerald-500" />
+                <span className="text-[14px] font-bold text-slate-800 dark:text-zinc-200">Top Opportunities</span>
+              </div>
+              <button
+                onClick={() => navigate("/issues")}
+                className="text-[12px] font-semibold text-slate-400 hover:text-emerald-600 transition-colors flex items-center gap-1"
+              >
+                View all <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-white/5">
+              {gaps.slice(0, 3).map((g, i) => (
+                <div key={g.ruleId ?? i} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                  <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-zinc-800 text-[11px] font-black text-slate-600 dark:text-zinc-300 flex items-center justify-center shrink-0">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[13px] font-semibold text-slate-800 dark:text-zinc-200 truncate">{g.title}</span>
+                      {g.productTitle && (
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded truncate max-w-[160px]">{g.productTitle}</span>
+                      )}
+                    </div>
+                    {g.description && (
+                      <p className="text-[12px] text-slate-400 dark:text-zinc-500 truncate mt-0.5">{g.description}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      g.severity === "high" ? "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"
+                      : g.severity === "medium" ? "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400"
+                      : "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400"
+                    }`}>{g.severity}</span>
+                    <span className="text-[12px] font-bold text-slate-500 dark:text-zinc-400 tabular-nums">{g.impactScore}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── AI Buyer Journey (includes all dimension scores) ── */}
+        <div className="bg-white dark:bg-[#080808] border border-slate-200/60 dark:border-white/10 rounded-[14px] shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 dark:border-white/5">
+            <div className="flex items-center gap-2">
+              <Map className="w-4 h-4 text-emerald-500" />
+              <span className="text-[14px] font-bold text-slate-800 dark:text-zinc-200">Score Breakdown & Buyer Journey</span>
+            </div>
+            <span className="text-[12px] text-slate-400">
+              Weakest: <span className="font-bold text-amber-600 dark:text-amber-400">{weakest.stage.label} ({weakest.score})</span>
+            </span>
+          </div>
+
+          {/* Flow pills */}
+          <div className="flex items-center gap-1.5 px-5 py-3.5 border-b border-slate-100 dark:border-white/5 overflow-x-auto">
+            {stageScores.map(({ stage, score: ss }, i) => {
+              const pill = ss >= 75
+                ? "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/20 dark:border-emerald-800"
+                : ss >= 50
+                ? "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/20 dark:border-amber-800"
+                : "text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-900/20 dark:border-red-800";
+              return (
+                <div key={stage.id} className="flex items-center gap-1.5 shrink-0">
+                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold border ${pill}`}>
+                    <stage.icon className="w-3 h-3" />
+                    {stage.label} <span className="tabular-nums">{ss}</span>
+                  </div>
+                  {i < stageScores.length - 1 && <ArrowRight className="w-3.5 h-3.5 text-slate-300 dark:text-zinc-600" />}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Stage detail grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-100 dark:bg-white/5">
+            {stageScores.map(({ stage, score: ss }) => (
+              <div key={stage.id} className="bg-white dark:bg-[#080808] px-5 py-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${stage.color}18` }}>
+                    <stage.icon className="w-4 h-4" style={{ color: stage.color }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-bold text-slate-800 dark:text-zinc-200">{stage.label}</p>
+                    <p className="text-[11px] text-slate-400 dark:text-zinc-500 truncate">{stage.subtitle}</p>
+                  </div>
+                  <span className="text-[22px] font-extrabold tabular-nums shrink-0" style={{ color: stage.color }}>{ss}</span>
+                </div>
+                <div className="space-y-2 mt-1">
+                  {stage.dims.map((dim) => {
+                    const v = scores[dim.key] ?? 0;
+                    const dimTier = tier(v);
+                    return (
+                      <div key={dim.key} className="flex items-center gap-2">
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-zinc-400 w-24 shrink-0">{dim.label}</span>
+                        <div className="flex-1 h-2 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${Math.min(100, v)}%`, backgroundColor: stage.color }} />
+                        </div>
+                        <span className="text-[12px] font-bold tabular-nums w-6 text-right" style={{ color: stage.color }}>{Math.round(v)}</span>
+                        <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full shrink-0 ${dimTier.cls}`}>{dimTier.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {ss < 50 && (
+                  <p className="mt-2.5 text-[11px] text-slate-500 dark:text-zinc-500 leading-relaxed border-t border-slate-100 dark:border-white/5 pt-2">{stage.tip}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Quick nav ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
-            { label: "View all issues", icon: AlertCircle, href: "/issues" },
-            { label: "Apply quick fixes", icon: Zap, href: "/fixes" },
+            { label: "All issues", icon: AlertCircle, href: "/issues" },
+            { label: "Quick fixes", icon: Zap, href: "/fixes" },
             { label: "AI perception", icon: Brain, href: "/ai-readiness" },
             { label: "Content tools", icon: FileText, href: "/content" },
           ].map(({ label, icon: Icon, href }) => (
             <button
               key={href}
               onClick={() => navigate(href)}
-              className="flex items-center gap-2 text-sm text-slate-600 dark:text-zinc-200 hover:text-emerald-700 bg-white dark:bg-[#080808] border border-slate-200 dark:border-white/10 hover:border-emerald-200 rounded-lg px-3 py-2.5 transition-colors"
+              className="flex items-center gap-2 text-[13px] text-slate-600 dark:text-zinc-300 hover:text-emerald-700 bg-white dark:bg-[#080808] border border-slate-200 dark:border-white/10 hover:border-emerald-200 rounded-[8px] px-4 py-2.5 transition-colors"
             >
-              <Icon className="w-4 h-4 flex-shrink-0" />
+              <Icon className="w-4 h-4 shrink-0" />
               <span className="truncate">{label}</span>
             </button>
           ))}
         </div>
+
       </div>
     </AppLayout>
   );

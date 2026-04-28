@@ -31,8 +31,8 @@ export default function Settings() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -47,10 +47,10 @@ export default function Settings() {
       await logout();
       navigate("/");
     } catch (err) {
-      toast({ 
-        title: "Deletion failed", 
+      toast({
+        title: "Deletion failed",
         description: err instanceof Error ? err.message : "Something went wrong",
-        variant: "destructive" 
+        variant: "destructive"
       });
     } finally {
       setIsDeletingAccount(false);
@@ -126,9 +126,10 @@ export default function Settings() {
                 <p className="text-[12px] text-slate-400 dark:text-zinc-400 font-medium">Avatar provided by Google Auth.</p>
                 <Button variant="outline" className="h-8 px-3 text-[11px] font-bold rounded-[6px] bg-white dark:bg-[#111214] border-slate-200 dark:border-white/10 hover:dark:bg-white/10">Update Profile</Button>
               </div>
-              </div>
-            </section>
-              {/* ── Section: Plan ── */}
+            </div>
+          </section>
+
+          {/* ── Section: Plan ── */}
           <section className="space-y-4">
             <div>
               <h2 className="text-[16px] font-bold text-slate-900 dark:text-white tracking-tight">Subscription Plan</h2>
@@ -147,7 +148,7 @@ export default function Settings() {
                   <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tighter">$0<span className="text-sm font-normal text-slate-400 dark:text-zinc-400">/mo</span></p>
                 </div>
               </div>
-              
+
               <div className="px-6 py-6 border-t border-slate-100 dark:border-white/5 bg-slate-50/20 dark:bg-white/5 grid grid-cols-2 gap-10">
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
@@ -230,23 +231,29 @@ export default function Settings() {
                        {store.id === activeStoreId ? (
                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-[4px] border border-emerald-100 dark:border-emerald-500/20">ACTIVE</span>
                         ) : (
-                          <button 
+                          <button
                             onClick={() => setActiveStoreId(store.id)}
-                            className="text-[12px] font-medium text-slate-400 dark:text-zinc-400 hover:text-slate-900 dark:text-white transition-colors"
+                            className="text-[12px] font-medium text-slate-400 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                           >
                             Switch to
                           </button>
                         )}
-                        <button 
-                          onClick={() => setConfirmDeleteId(store.id)}
-                          className="text-slate-300 hover:text-red-500 transition-colors p-1"
-                        >
-                          {confirmDeleteId === store.id ? (
-                            <span className="text-[11px] font-bold text-red-600" onClick={(e) => { e.stopPropagation(); handleDelete(store.id); }}>CONFIRM</span>
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
+                        {store.isDemo ? (
+                          <span className="text-[9px] font-extrabold uppercase tracking-widest bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-[4px]">
+                            Demo
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteId(store.id)}
+                            className="text-slate-300 hover:text-red-500 transition-colors p-1"
+                          >
+                            {confirmDeleteId === store.id ? (
+                              <span className="text-[11px] font-bold text-red-600" onClick={(e) => { e.stopPropagation(); handleDelete(store.id); }}>CONFIRM</span>
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -273,9 +280,9 @@ export default function Settings() {
                       key={t}
                       onClick={() => setTheme(t)}
                       className={`px-4 py-1.5 rounded-[6px] text-[12px] font-bold capitalize transition-all ${
-                        theme === t 
-                          ? "bg-white dark:bg-[#111214] text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10" 
-                          : "text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:text-slate-200 border border-transparent"
+                        theme === t
+                          ? "bg-white dark:bg-[#111214] text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/10"
+                          : "text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-slate-200 border border-transparent"
                       }`}
                     >
                       {t}
@@ -285,7 +292,7 @@ export default function Settings() {
               </div>
             </div>
           </section>
-          
+
           {/* ── Section: Session ── */}
           <section className="space-y-4">
             <div>
@@ -298,8 +305,8 @@ export default function Settings() {
                   <h3 className="text-[14px] font-bold text-slate-900 dark:text-white">Sign Out</h3>
                   <p className="text-[13px] text-slate-500 dark:text-zinc-300 mt-1">Sign out of your account on this browser.</p>
                 </div>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={async () => {
                     try {
                       await logout();
@@ -344,7 +351,7 @@ export default function Settings() {
                     </AlertDialogHeader>
                     <AlertDialogFooter className="mt-4">
                       <AlertDialogCancel className="rounded-[6px] border-slate-200 dark:border-white/10">Cancel</AlertDialogCancel>
-                      <AlertDialogAction 
+                      <AlertDialogAction
                         onClick={handleDeleteAccount}
                         disabled={isDeletingAccount}
                         className="bg-red-600 hover:bg-red-700 text-white rounded-[6px] font-bold"

@@ -80,6 +80,19 @@ function ScoreMeter({ score, label }: { score: number; label: string }) {
 
 // ─── FixDetail ───────────────────────────────────────────────────────────────
 
+function ApplyProgressBar({ progress }: { progress: number }) {
+  return (
+    <div className="w-full h-1.5 bg-slate-100 dark:bg-white/10 rounded-full overflow-hidden mt-2">
+      <motion.div
+        className="h-full bg-emerald-500 rounded-full"
+        initial={{ width: "0%" }}
+        animate={{ width: `${progress}%` }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      />
+    </div>
+  );
+}
+
 function FixDetail({
   storeId, productId, type, label,
   scoreValue, existingFix, onFixApplied,
@@ -97,6 +110,9 @@ function FixDetail({
   const [editedContent, setEditedContent] = useState(existingFix?.improvedContent ?? "");
   const [generating, setGenerating] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [applyProgress, setApplyProgress] = useState(0);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [confirmPending, setConfirmPending] = useState(false);
 
   const isApplied = fix?.status === "applied";
 
@@ -108,10 +124,12 @@ function FixDetail({
       setFix(undefined);
       setEditedContent("");
     }
+    setConfirmPending(false);
   }, [existingFix, type]);
 
   async function handleGenerate() {
     setGenerating(true);
+    setConfirmPending(false);
     try {
       const res = await generateProductFix(storeId, productId, type);
       setFix(res.fix);
@@ -126,20 +144,31 @@ function FixDetail({
   async function handleApply() {
     if (!fix) return;
     setApplying(true);
+    setApplyProgress(0);
+    // Animate progress bar: 0→80% over 1.5s, then snap to 100% on completion
+    const interval = setInterval(() => {
+      setApplyProgress((p) => Math.min(p + 12, 80));
+    }, 200);
     try {
       await applyFix(storeId, fix.id, editedContent);
-      toast({ title: "Optimization synchronized" });
+      clearInterval(interval);
+      setApplyProgress(100);
+      await new Promise((r) => setTimeout(r, 350)); // let bar reach 100% visually
+      toast({ title: "Optimization applied" });
       onFixApplied();
       setFix({ ...fix, status: "applied", improvedContent: editedContent });
+      setConfirmPending(false);
     } catch (err) {
-      toast({ title: "Sync failed", variant: "destructive" });
+      clearInterval(interval);
+      setApplyProgress(0);
+      toast({ title: "Apply failed", variant: "destructive" });
     } finally {
       setApplying(false);
     }
   }
 
   return (
-    <motion.div 
+    <motion.div
       key={type}
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
@@ -172,13 +201,43 @@ function FixDetail({
         </div>
       ) : (
         <>
-          <div className="flex-1 space-y-8 overflow-y-auto custom-scrollbar pr-6 pb-6">
+          <div className="flex-1 space-y-5 overflow-y-auto custom-scrollbar pr-6 pb-6">
+            {/* Original vs AI suggestion toggle */}
+            {!isApplied && fix.originalContent && (
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  onClick={() => setShowOriginal((v) => !v)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold transition-colors",
+                    showOriginal
+                      ? "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20"
+                      : "bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-zinc-400 border border-slate-200 dark:border-white/10"
+                  )}
+                >
+                  <Info className="w-3 h-3" />
+                  {showOriginal ? "Hide original" : "Compare with original"}
+                </button>
+              </div>
+            )}
+
+            {/* Original content (collapsible) */}
+            {showOriginal && fix.originalContent && (
+              <div className="bg-amber-50/60 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl p-4">
+                <p className="text-[10px] font-bold text-amber-600 dark:text-amber-500 uppercase tracking-widest mb-2">Current (original)</p>
+                <p className="text-[12px] text-amber-900 dark:text-amber-200 leading-relaxed font-medium whitespace-pre-wrap line-clamp-6">
+                  {fix.originalContent}
+                </p>
+              </div>
+            )}
+
             {/* Editor */}
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                   <span className="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider">Suggested Metadata</span>
-                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                   <span className="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                     {isApplied ? "Applied Content" : "AI Suggested — Edit before applying"}
+                   </span>
+                   {!isApplied && <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
                 </div>
                 {isApplied && (
                   <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-100 dark:border-emerald-500/20">SYNCED</span>
@@ -187,9 +246,10 @@ function FixDetail({
               <div className="relative group">
                 <Textarea
                   value={editedContent}
-                  onChange={(e) => setEditedContent(e.target.value)}
-                  className="min-h-[220px] text-[14px] leading-relaxed bg-slate-50 dark:bg-zinc-950 border-slate-200 dark:border-white/10 rounded-2xl focus:ring-0 focus:border-slate-400 dark:focus:border-white/30 transition-all resize-none font-medium text-slate-800 dark:text-zinc-200 p-6 shadow-inner"
+                  onChange={(e) => { setEditedContent(e.target.value); setConfirmPending(false); }}
+                  className="min-h-[200px] text-[14px] leading-relaxed bg-slate-50 dark:bg-zinc-950 border-slate-200 dark:border-white/10 rounded-2xl focus:ring-0 focus:border-slate-400 dark:focus:border-white/30 transition-all resize-none font-medium text-slate-800 dark:text-zinc-200 p-6 shadow-inner"
                   readOnly={isApplied}
+                  placeholder="Edit the AI suggestion before applying…"
                 />
                 {!isApplied && (
                   <div className="absolute bottom-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -201,24 +261,23 @@ function FixDetail({
 
             {/* Info Cards */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-white/10 rounded-2xl p-5">
+              <div className="bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-white/10 rounded-2xl p-4">
                  <div className="flex items-center gap-2 mb-2">
                     <Search className="w-3.5 h-3.5 text-slate-400" />
                     <p className="text-[11px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest">Strategy</p>
                  </div>
-                 <p className="text-[13px] text-slate-700 dark:text-zinc-300 leading-relaxed font-medium">
+                 <p className="text-[12px] text-slate-700 dark:text-zinc-300 leading-relaxed font-medium">
                    {fix.explanation}
                  </p>
               </div>
-
-              <div className="bg-emerald-500/5 dark:bg-emerald-500/[0.03] border border-emerald-500/10 dark:border-emerald-500/20 rounded-2xl p-5 flex flex-col justify-between">
+              <div className="bg-emerald-500/5 dark:bg-emerald-500/[0.03] border border-emerald-500/10 dark:border-emerald-500/20 rounded-2xl p-4 flex flex-col justify-between">
                  <div className="flex items-center gap-2 mb-2">
                     <TrendingUpIcon className="w-3.5 h-3.5 text-emerald-500" />
-                    <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Performance</p>
+                    <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Estimated Impact</p>
                  </div>
                  <div>
                     <p className="text-[20px] font-black text-emerald-600 dark:text-emerald-400 leading-none">+{fix.estimatedScoreImprovement}</p>
-                    <p className="text-[10px] text-emerald-600/60 dark:text-emerald-500/50 font-bold uppercase tracking-widest mt-1">Impact Points</p>
+                    <p className="text-[10px] text-emerald-600/60 dark:text-emerald-500/50 font-bold uppercase tracking-widest mt-1">Score Points</p>
                  </div>
               </div>
             </div>
@@ -226,22 +285,45 @@ function FixDetail({
 
           {/* Footer Actions */}
           {!isApplied && (
-            <div className="pt-6 mt-auto border-t border-slate-100 dark:border-white/10 flex gap-4">
-              <button
-                onClick={handleGenerate}
-                disabled={generating}
-                className="flex-1 px-6 py-3 rounded-xl border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-[14px] font-bold hover:bg-slate-50 dark:hover:bg-white/5 transition-all disabled:opacity-50"
-              >
-                Regenerate
-              </button>
-              <button
-                onClick={handleApply}
-                disabled={applying}
-                className="flex-[2] flex items-center justify-center gap-2 px-8 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-black text-[14px] font-bold shadow-2xl active:scale-[0.98] transition-all disabled:opacity-50"
-              >
-                {applying ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : <CheckCircle2 className="w-4.5 h-4.5" />}
-                Sync to Catalog
-              </button>
+            <div className="pt-5 mt-auto border-t border-slate-100 dark:border-white/10 space-y-3">
+              {/* Progress bar */}
+              {applying && <ApplyProgressBar progress={applyProgress} />}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleGenerate}
+                  disabled={generating || applying}
+                  className="flex-1 px-6 py-3 rounded-xl border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-[13px] font-bold hover:bg-slate-50 dark:hover:bg-white/5 transition-all disabled:opacity-50"
+                >
+                  Regenerate
+                </button>
+                {confirmPending ? (
+                  <button
+                    onClick={handleApply}
+                    disabled={applying}
+                    className="flex-[2] flex items-center justify-center gap-2 px-8 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[13px] font-bold shadow-xl active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    {applying
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Applying…</>
+                      : <><CheckCircle2 className="w-4 h-4" /> Confirm & Apply</>}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setConfirmPending(true)}
+                    disabled={applying}
+                    className="flex-[2] flex items-center justify-center gap-2 px-8 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-black text-[13px] font-bold shadow-xl active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Apply to Catalog
+                  </button>
+                )}
+              </div>
+              {confirmPending && !applying && (
+                <p className="text-[11px] text-center text-amber-600 dark:text-amber-400 font-medium">
+                  Review your edits above, then click "Confirm & Apply" to save.
+                  <button onClick={() => setConfirmPending(false)} className="ml-2 text-slate-400 hover:text-slate-700 underline">Cancel</button>
+                </p>
+              )}
             </div>
           )}
         </>

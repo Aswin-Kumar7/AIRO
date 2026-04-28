@@ -20,14 +20,15 @@ import { Link, useLocation } from "wouter";
 import {
   BarChart3, Bot, Activity, Clock, Loader2,
   Package, Play, Trash2, AlertTriangle, ArrowRight,
-  Globe, Zap, TrendingUp, ChevronRight, Store, Check, Search,
+  Globe, Zap, TrendingUp, ChevronRight, Store, Check, Search, Wifi, Sparkles,
 } from "lucide-react";
 import {
-  LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip,
+  AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { AppLayout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -35,6 +36,25 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { deleteStore } from "@/lib/quick-fix-api";
+import { getSnapshots, type ScoreSnapshot } from "@/lib/schedule-api";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+/**
+ * The generated Gap schema doesn't include backend-only fields like ruleId and
+ * impactScore, but the /gaps route does return them. This interface covers both
+ * the generated fields and the extra backend-only fields used on this page.
+ */
+interface GapWithMeta {
+  id: string;
+  title: string;
+  description?: string;
+  severity?: string;
+  category?: string;
+  isFixed?: boolean;
+  ruleId?: string | null;
+  impactScore?: number | null;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -52,9 +72,9 @@ function timeAgoLabel(timestamp: string | null): string {
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, score, color, sub, href,
+  label, score, color, sub, href, unscanned, delta,
 }: {
-  label: string; score: number; color: string; sub?: string; href: string;
+  label: string; score: number; color: string; sub?: string; href: string; unscanned?: boolean; delta?: number | null;
 }) {
   const isGood = score >= 70;
   const isWarning = score >= 50 && score < 70;
@@ -66,9 +86,22 @@ function KpiCard({
           <p className="text-[12px] font-medium text-slate-500 dark:text-zinc-300 tracking-wide">
             {label}
           </p>
-          <div className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${isGood ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : isWarning ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'}`}>
-            {isGood ? <TrendingUp className="w-3 h-3" /> : <Activity className="w-3 h-3" />}
-            {isGood ? "+12%" : "Needs work"}
+          <div className="flex items-center gap-1.5">
+            {delta !== null && delta !== undefined && (
+              <span className={`text-[10px] font-bold tabular-nums ${delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta < 0 ? "text-red-500 dark:text-red-400" : "text-slate-400"}`}>
+                {delta > 0 ? `+${delta}` : delta}
+              </span>
+            )}
+            {unscanned ? (
+              <div className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-400 dark:text-zinc-500">
+                Not scanned
+              </div>
+            ) : (
+              <div className={`flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${isGood ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : isWarning ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400'}`}>
+                {isGood ? <TrendingUp className="w-3 h-3" /> : <Activity className="w-3 h-3" />}
+                {isGood ? "Good" : isWarning ? "Moderate" : "Needs work"}
+              </div>
+            )}
           </div>
         </div>
 
@@ -163,6 +196,35 @@ export default function Dashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [snapshots, setSnapshots] = useState<ScoreSnapshot[]>([]);
+  const [geoSummary, setGeoSummary] = useState<{ lastGeoScore: number | null } | null>(null);
+  const [perceptionSummary, setPerceptionSummary] = useState<{
+    agentNarrative: string;
+    unansweredQuestions: string[];
+    ambiguities: string[];
+  } | null>(null);
+  const [listingReadiness, setListingReadiness] = useState<{
+    overallScore: number;
+    grade: string;
+    topRecommendations: string[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!activeStoreId) return;
+    getSnapshots(activeStoreId, 10).then(setSnapshots).catch(() => {});
+    fetch(`/api/stores/${activeStoreId}/visibility-summary`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setGeoSummary({ lastGeoScore: d.lastGeoScore ?? null }); })
+      .catch(() => {});
+    fetch(`/api/stores/${activeStoreId}/perception`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d && d.agentNarrative) setPerceptionSummary({ agentNarrative: d.agentNarrative, unansweredQuestions: d.unansweredQuestions ?? [], ambiguities: d.ambiguities ?? [] }); })
+      .catch(() => {});
+    fetch(`/api/stores/${activeStoreId}/listing-readiness`, { credentials: "include" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d && typeof d.overallScore === "number") setListingReadiness({ overallScore: d.overallScore, grade: d.grade, topRecommendations: d.topRecommendations ?? [] }); })
+      .catch(() => {});
+  }, [activeStoreId]);
 
   const { data: allStores = [], isLoading: storesLoading } = useListStores({
     query: { staleTime: 30_000, queryKey: getListStoresQueryKey() },
@@ -203,7 +265,7 @@ export default function Dashboard() {
     },
   });
 
-  const { data: gaps } = useListGaps(activeStoreId ?? "", {
+  const { data: gaps, isLoading: gapsLoading } = useListGaps(activeStoreId ?? "", {
     query: {
       queryKey: getListGapsQueryKey(activeStoreId ?? ""),
       enabled: !!activeStoreId && !!summary,
@@ -213,37 +275,48 @@ export default function Dashboard() {
   const analyzeStore = useAnalyzeStore();
 
   // Derived scores
+  // AEO = average of the three AI-content dimensions (Clarity + Completeness + Tags)
   const aeoScore = summary
     ? Math.round(((summary.clarityScore ?? 0) + (summary.completenessScore ?? 0) + (summary.tagScore ?? 0)) / 3)
     : 0;
-  const seoGapCount = gaps?.filter((g: any) => g.ruleId?.startsWith("SEO_") || g.ruleId?.startsWith("SCHEMA_")).length ?? 0;
-  const seoScore = Math.max(0, 100 - seoGapCount * 15);
-  const geoScore = 0;
+  // SEO = 100 minus weighted impact of detected SEO/Schema gaps.
+  // Each gap deducts (impactScore / 10) points — a high-impact (90pt) gap costs 9pts, a low one ~3pts.
+  // There are 11 possible SEO rule IDs; max total deduction is ~99pts.
+  const seoGaps = (gaps as GapWithMeta[] | undefined)?.filter(
+    (g) => g.ruleId?.startsWith("SEO_") || g.ruleId?.startsWith("SCHEMA_"),
+  ) ?? [];
+  const seoScore = Math.max(
+    0,
+    Math.round(100 - seoGaps.reduce((sum, g) => sum + ((g.impactScore ?? 50) / 10), 0)),
+  );
+  // GEO = citation % from the most recent automated scan; null = never scanned
+  const geoScore = geoSummary?.lastGeoScore ?? null;
+  const geoScoreValue = geoScore ?? 0;
+
+  // Real score deltas from the two most recent snapshots (oldest → newest in reverse-chrono list)
+  const prevSnapshot = snapshots.length >= 2 ? snapshots[1] : null;  // snapshots[0] = latest
+  const overallDelta = prevSnapshot && summary ? Math.round((summary.overallScore ?? 0) - (prevSnapshot.overallScore ?? 0)) : null;
+  const aeoPrev = prevSnapshot ? Math.round(((prevSnapshot.clarityScore ?? 0) + (prevSnapshot.completenessScore ?? 0) + (prevSnapshot.tagScore ?? 0)) / 3) : null;
+  const aeoDelta = aeoPrev !== null ? aeoScore - aeoPrev : null;
 
   const criticalGaps = (() => {
-    if (!gaps) return [];
-    const seen = new Set();
-    const unique: any[] = [];
-    for (const g of gaps) {
-      if (g.severity === "high" && !seen.has(g.title)) {
-        seen.add(g.title);
-        unique.push(g);
-      }
-      if (unique.length >= 5) break;
-    }
-    return unique;
+    if (!gaps) return [] as GapWithMeta[];
+    const seen = new Set<string>();
+    return (gaps as GapWithMeta[]).filter((g) => {
+      if (g.severity !== "high" || seen.has(g.title)) return false;
+      seen.add(g.title);
+      return true;
+    }).slice(0, 5);
   })();
-  const lowScoreProducts = products?.filter((p) => (p.score?.overall ?? (p as any).overallScore ?? 100) < 50).slice(0, 5) ?? [];
+  const lowScoreProducts = products?.filter((p) => (p.score?.overall ?? 100) < 50).slice(0, 5) ?? [];
   const pendingFixes = summary?.pendingFixes ?? 0;
 
-  const trendData = summary
-    ? [
-      { label: "7d ago", overall: Math.max(0, (summary.overallScore ?? 0) - 12), aeo: Math.max(0, aeoScore - 15), seo: Math.min(100, seoScore + 5) },
-      { label: "5d ago", overall: Math.max(0, (summary.overallScore ?? 0) - 7), aeo: Math.max(0, aeoScore - 8), seo: Math.min(100, seoScore + 3) },
-      { label: "3d ago", overall: Math.max(0, (summary.overallScore ?? 0) - 3), aeo: Math.max(0, aeoScore - 4), seo: Math.min(100, seoScore + 1) },
-      { label: "1d ago", overall: Math.max(0, (summary.overallScore ?? 0) - 1), aeo: Math.max(0, aeoScore - 2), seo: seoScore },
-      { label: "Now", overall: summary.overallScore ?? 0, aeo: aeoScore, seo: seoScore },
-    ]
+  // Build trend from real snapshots only — never fabricate historical data
+  const trendData = snapshots.length >= 1
+    ? [...snapshots].reverse().map((s) => ({
+        label: new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        overall: s.overallScore ?? 0,
+      }))
     : [];
 
   // Handlers
@@ -263,6 +336,8 @@ export default function Dashboard() {
             queryClient.invalidateQueries({ queryKey: getListProductsQueryKey(activeStoreId) }),
             queryClient.invalidateQueries({ queryKey: getListGapsQueryKey(activeStoreId) }),
           ]);
+          // Refresh snapshot history so the trend chart updates immediately
+          getSnapshots(activeStoreId, 10).then(setSnapshots).catch(() => {});
           setAnalyzing(false);
           toast({
             title: storeData?.status === "error" ? "Analysis failed" : "Analysis complete",
@@ -291,6 +366,7 @@ export default function Dashboard() {
     }
   }
 
+  const isDemo = !!store?.isDemo;
   const isAnalyzing = store?.status === "analyzing" || analyzing;
   const hasAnalysis = !!store?.lastAnalyzed;
   const timeAgo = timeAgoLabel(store?.lastAnalyzed ?? null);
@@ -328,6 +404,11 @@ export default function Dashboard() {
                   <Globe className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-400 dark:text-zinc-300" />
                   {store?.domain ?? "—"}
                 </div>
+                {isDemo && (
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full border border-violet-200">
+                    Demo Store
+                  </span>
+                )}
                 {hasAnalysis && (
                   <div className="flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-zinc-300">
                     <Clock className="w-3.5 h-3.5" />
@@ -338,31 +419,33 @@ export default function Dashboard() {
             </div>
 
             <div className="flex items-center gap-2">
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <button
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-                    disabled={removing}
-                  >
-                    {removing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                  </button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Remove store?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This permanently deletes <strong>{store?.name ?? store?.domain}</strong> and all
-                      associated data — products, scores, gaps, and fixes. This cannot be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleRemoveStore} className="bg-red-600 hover:bg-red-700 text-white">
-                      Remove store
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              {!isDemo && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <button
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                      disabled={removing}
+                    >
+                      {removing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Remove store?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This permanently deletes <strong>{store?.name ?? store?.domain}</strong> and all
+                        associated data — products, scores, gaps, and fixes. This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleRemoveStore} className="bg-red-600 hover:bg-red-700 text-white">
+                        Remove store
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
 
               <Button
                 onClick={handleAnalyze}
@@ -377,8 +460,44 @@ export default function Dashboard() {
 
           {/* ── Loading / pre-analysis ── */}
           {summaryLoading ? (
-            <div className="flex items-center justify-center py-24">
-              <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+            <div className="space-y-5">
+              {/* KPI skeleton row */}
+              <div className="grid grid-cols-4 gap-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 p-5 flex flex-col gap-4 h-[140px]">
+                    <div className="flex items-center justify-between">
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </div>
+                    <div className="mt-auto space-y-2">
+                      <Skeleton className="h-10 w-20" />
+                      <Skeleton className="h-3 w-32" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Chart + issues skeleton */}
+              <div className="grid grid-cols-5 gap-4">
+                <div className="col-span-3 bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 p-6 h-[380px] flex flex-col gap-4">
+                  <div className="flex justify-between">
+                    <div className="space-y-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-3 w-40" /></div>
+                    <Skeleton className="h-3 w-20" />
+                  </div>
+                  <Skeleton className="flex-1 rounded-xl" />
+                </div>
+                <div className="col-span-2 bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 p-6 h-[380px] flex flex-col gap-3">
+                  <Skeleton className="h-4 w-32 mb-2" />
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div key={i} className="flex items-center justify-between py-2 border-b border-slate-50 dark:border-white/5 last:border-0">
+                      <div className="flex items-center gap-3 flex-1">
+                        <Skeleton className="w-1.5 h-1.5 rounded-full" />
+                        <Skeleton className="h-3 flex-1 max-w-[180px]" />
+                      </div>
+                      <Skeleton className="h-6 w-12 rounded-md" />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : !hasAnalysis || !summary ? (
             <div className="grid grid-cols-3 gap-4">
@@ -416,6 +535,7 @@ export default function Dashboard() {
                   color="#10b981"
                   sub={`${summary.criticalIssues ?? 0} critical · ${summary.mediumIssues ?? 0} medium issues`}
                   href="/issues"
+                  delta={overallDelta}
                 />
                 <KpiCard
                   label="AEO Score"
@@ -423,22 +543,70 @@ export default function Dashboard() {
                   color="#14b8a6"
                   sub={`Clarity ${Math.round(summary.clarityScore ?? 0)} · Complete ${Math.round(summary.completenessScore ?? 0)}`}
                   href="/intelligence/aeo"
+                  delta={aeoDelta}
                 />
                 <KpiCard
                   label="SEO Score"
                   score={seoScore}
                   color="#8b5cf6"
-                  sub={`${seoGapCount} technical issue${seoGapCount !== 1 ? "s" : ""} detected`}
+                  sub={`${seoGaps.length} technical issue${seoGaps.length !== 1 ? "s" : ""} detected`}
                   href="/intelligence/seo"
                 />
                 <KpiCard
                   label="GEO Score"
-                  score={geoScore}
+                  score={geoScoreValue}
                   color="#f59e0b"
-                  sub="No citations logged yet"
+                  sub={geoScore === null ? "Run a live AI scan to get your score" : `${geoScore}% cited across 5 AI agents`}
                   href="/intelligence/geo"
+                  unscanned={geoScore === null}
                 />
               </div>
+
+              {/* ── Live AI Visibility Test Hero ── */}
+              {geoScore === null && (
+                <div className="relative overflow-hidden rounded-[16px] border border-amber-200/60 dark:border-amber-500/20 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 dark:from-amber-500/5 dark:via-orange-500/5 dark:to-amber-500/5 p-5">
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(251,191,36,0.12),transparent_60%)]" />
+                  <div className="relative flex items-center justify-between gap-6">
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-500/15 border border-amber-200/60 dark:border-amber-500/30 flex items-center justify-center flex-shrink-0">
+                        <Wifi className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-[14px] font-bold text-slate-900 dark:text-white">GEO Score not yet tested</p>
+                          <span className="text-[10px] font-bold uppercase tracking-widest bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full border border-amber-200/60 dark:border-amber-500/30">
+                            New
+                          </span>
+                        </div>
+                        <p className="text-[13px] text-slate-600 dark:text-zinc-300 max-w-lg leading-relaxed">
+                          Run a live 5-agent scan to see how Tavily, Google Search, Claude AI, Gemini AI, and OpenAI GPT actually perceive your store — the core metric AI shopping engines use to decide recommendations.
+                        </p>
+                        <div className="flex items-center gap-3 mt-3 flex-wrap">
+                          {[
+                            { label: "Tavily Search",  desc: "Live web results",      color: "text-teal-600 dark:text-teal-400",    dot: "bg-teal-400" },
+                            { label: "Google Search",  desc: "Organic results",       color: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-400" },
+                            { label: "Claude AI",      desc: "Brand intent scoring",  color: "text-violet-600 dark:text-violet-400", dot: "bg-violet-400" },
+                            { label: "Gemini AI",      desc: "Content quality",       color: "text-sky-600 dark:text-sky-400",      dot: "bg-sky-400" },
+                            { label: "OpenAI GPT",     desc: "GPT-4o content judge",  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-400" },
+                          ].map((agent) => (
+                            <div key={agent.label} className="flex items-center gap-1.5 bg-white/70 dark:bg-white/5 border border-slate-200/60 dark:border-white/10 rounded-[8px] px-2.5 py-1.5">
+                              <span className={`w-1.5 h-1.5 rounded-full ${agent.dot} flex-shrink-0`} />
+                              <span className={`text-[11px] font-semibold ${agent.color}`}>{agent.label}</span>
+                              <span className="text-[11px] text-slate-400 dark:text-zinc-400">{agent.desc}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <Link href="/intelligence/geo" className="flex-shrink-0">
+                      <Button className="h-10 px-5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-[10px] gap-2 shadow-sm whitespace-nowrap">
+                        <Sparkles className="w-4 h-4" />
+                        Run Live AI Test
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
 
               {/* ── Chart + Critical Issues ── */}
               <div className="grid grid-cols-5 gap-4">
@@ -447,22 +615,20 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-5">
                     <div>
                       <h2 className="text-[14px] font-bold text-slate-900 dark:text-white tracking-tight">Score Trend</h2>
-                      <p className="text-[13px] text-slate-500 dark:text-zinc-300 mt-1">7-day AI readiness movement</p>
+                      <p className="text-[13px] text-slate-500 dark:text-zinc-300 mt-1">AI readiness over time</p>
                     </div>
-                    <div className="flex items-center gap-5 text-[12px] font-medium text-slate-500 dark:text-zinc-300">
-                      {[
-                        { label: "Overall", color: "#10b981" },
-                        { label: "AEO", color: "#14b8a6" },
-                        { label: "SEO", color: "#8b5cf6" },
-                      ].map((s) => (
-                        <span key={s.label} className="flex items-center gap-1.5">
-                          <span className="w-3 h-0.5 rounded inline-block" style={{ backgroundColor: s.color }} />
-                          {s.label}
-                        </span>
-                      ))}
-                    </div>
+                    <span className="flex items-center gap-1.5 text-[12px] font-medium text-slate-500 dark:text-zinc-300">
+                      <span className="w-3 h-0.5 rounded inline-block bg-emerald-500" />
+                      Overall Score
+                    </span>
                   </div>
                   <div className="h-[260px] mt-6 w-full">
+                    {trendData.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-center gap-2">
+                        <p className="text-[13px] font-semibold text-slate-400 dark:text-zinc-500">No historical data yet</p>
+                        <p className="text-[11px] text-slate-400 dark:text-zinc-600">Run more analyses to build a score trend</p>
+                      </div>
+                    ) : (
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={trendData} margin={{ top: 5, right: 10, left: 15, bottom: 0 }}>
                         <defs>
@@ -488,11 +654,10 @@ export default function Dashboard() {
                           itemStyle={{ color: "#334155", padding: "3px 0", fontWeight: 500, fontSize: "12px" }}
                           cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '4 4' }}
                         />
-                        <Area type="monotone" dataKey="overall" name="Overall" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorOverall)" activeDot={{ r: 6, fill: "#10b981", stroke: "#fff", strokeWidth: 2 }} />
-                        <Line type="monotone" dataKey="aeo" name="AEO" stroke="#14b8a6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#14b8a6", stroke: "#fff", strokeWidth: 2 }} />
-                        <Line type="monotone" dataKey="seo" name="SEO" stroke="#8b5cf6" strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: "#8b5cf6", stroke: "#fff", strokeWidth: 2 }} />
+                        <Area type="monotone" dataKey="overall" name="Overall Score" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorOverall)" activeDot={{ r: 6, fill: "#10b981", stroke: "#fff", strokeWidth: 2 }} />
                       </AreaChart>
                     </ResponsiveContainer>
+                    )}
                   </div>
                 </div>
 
@@ -508,7 +673,22 @@ export default function Dashboard() {
                       </Link>
                     }
                   />
-                  {criticalGaps.length === 0 ? (
+                  {gapsLoading ? (
+                    <div className="space-y-0.5">
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-center justify-between py-3 border-b border-slate-50 dark:border-white/5 last:border-0">
+                          <div className="flex items-center gap-3 flex-1">
+                            <Skeleton className="w-1.5 h-1.5 rounded-full" />
+                            <div className="flex-1 space-y-1.5">
+                              <Skeleton className="h-3 w-3/4" />
+                              <Skeleton className="h-2.5 w-1/2" />
+                            </div>
+                          </div>
+                          <Skeleton className="h-6 w-10 rounded-md ml-4" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : criticalGaps.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
                       <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -519,7 +699,7 @@ export default function Dashboard() {
                     </div>
                   ) : (
                   <div className="space-y-0.5">
-                    {criticalGaps.map((g: any) => (
+                    {criticalGaps.map((g) => (
                       <div key={g.id} className="flex items-start justify-between py-2.5 border-b border-slate-50 dark:border-white/5 dark:border-white/5 last:border-0 group hover:bg-slate-50/50 dark:hover:bg-white/5 rounded-lg -mx-2 px-2 transition-colors">
                         <div className="flex items-start gap-3 min-w-0 pr-4">
                           <span className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0 mt-1.5" />
@@ -558,12 +738,12 @@ export default function Dashboard() {
                     <p className="text-xs text-slate-400 dark:text-zinc-400 text-center py-4 flex-1">No pending fixes</p>
                   ) : (
                     <div className="space-y-1 mb-5 flex-1">
-                      {gaps?.filter((g: any) => g.status === "pending" || !g.status).slice(0, 4).map((g: any) => (
+                      {(gaps as GapWithMeta[] | undefined)?.filter((g) => !g.isFixed).slice(0, 4).map((g) => (
                         <div key={g.id} className="flex items-center gap-3 group hover:bg-slate-50/50 dark:hover:bg-white/5 rounded-lg py-2 -mx-2 px-2 transition-colors">
                           <div className="w-3 h-3 rounded-[3px] border border-slate-200 dark:border-white/10 flex-shrink-0 group-hover:border-emerald-300 transition-colors" />
                           <span className="text-[13px] text-slate-700 dark:text-slate-200 flex-1 truncate">{g.title}</span>
                           <span className="text-[11px] text-emerald-600 font-semibold whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                            +{g.estimatedScoreImprovement ?? 2} pts
+                            +{Math.round((g.impactScore ?? 20) / 10)} pts
                           </span>
                         </div>
                       ))}
@@ -592,7 +772,7 @@ export default function Dashboard() {
                   ) : (
                     <div>
                       {lowScoreProducts.map((p) => {
-                        const score = p.score?.overall ?? (p as any).overallScore ?? 0;
+                        const score = p.score?.overall ?? 0;
                         const barColor = score < 30 ? "bg-red-400" : "bg-amber-400";
                         return (
                           <Link href={`/products/${p.id}`} key={p.id}>
@@ -625,6 +805,88 @@ export default function Dashboard() {
                   <ActivityFeed storeId={activeStoreId} />
                 </div>
               </div>
+
+              {/* ── AI Perception + Listing Readiness row ── */}
+              {(perceptionSummary || listingReadiness) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  {/* AI Perception Summary */}
+                  {perceptionSummary && perceptionSummary.agentNarrative && (
+                    <div className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm p-6">
+                      <SectionHead
+                        title="AI Perception"
+                        action={
+                          <Link href="/ai-readiness">
+                            <span className="text-[11px] text-emerald-600 hover:text-emerald-700 cursor-pointer">Details →</span>
+                          </Link>
+                        }
+                      />
+                      <p className="text-[13px] text-slate-700 dark:text-zinc-300 leading-relaxed line-clamp-3 mb-3">
+                        {perceptionSummary.agentNarrative}
+                      </p>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {perceptionSummary.unansweredQuestions.length > 0 && (
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                            <AlertTriangle className="w-3 h-3" />
+                            {perceptionSummary.unansweredQuestions.length} unanswered {perceptionSummary.unansweredQuestions.length === 1 ? "question" : "questions"}
+                          </div>
+                        )}
+                        {perceptionSummary.ambiguities.length > 0 && (
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400">
+                            <AlertTriangle className="w-3 h-3" />
+                            {perceptionSummary.ambiguities.length} content {perceptionSummary.ambiguities.length === 1 ? "ambiguity" : "ambiguities"}
+                          </div>
+                        )}
+                        {perceptionSummary.unansweredQuestions.length === 0 && perceptionSummary.ambiguities.length === 0 && (
+                          <div className="flex items-center gap-1.5 text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+                            <Check className="w-3 h-3" />
+                            No open questions detected
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Listing Readiness */}
+                  {listingReadiness && (
+                    <div className="bg-white dark:bg-[#080808] rounded-[16px] border border-slate-200/60 dark:border-white/10 shadow-sm p-6">
+                      <SectionHead
+                        title="Marketplace Readiness"
+                        action={
+                          <Link href="/listing-readiness">
+                            <span className="text-[11px] text-emerald-600 hover:text-emerald-700 cursor-pointer">Details →</span>
+                          </Link>
+                        }
+                      />
+                      <div className="flex items-center gap-4 mb-3">
+                        <div className={`w-14 h-14 rounded-[12px] flex items-center justify-center text-[28px] font-extrabold shrink-0 ${
+                          listingReadiness.grade === "A" ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : listingReadiness.grade === "B" ? "bg-teal-50 dark:bg-teal-500/10 text-teal-600 dark:text-teal-400"
+                          : listingReadiness.grade === "C" ? "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                          : "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400"
+                        }`}>
+                          {listingReadiness.grade}
+                        </div>
+                        <div>
+                          <p className="text-[22px] font-extrabold text-slate-900 dark:text-white tabular-nums leading-none">{listingReadiness.overallScore}<span className="text-[13px] font-medium text-slate-400 ml-1">/100</span></p>
+                          <p className="text-[12px] text-slate-500 dark:text-zinc-400 mt-0.5">AI marketplace readiness</p>
+                        </div>
+                      </div>
+                      {listingReadiness.topRecommendations.length > 0 && (
+                        <div className="space-y-1.5">
+                          {listingReadiness.topRecommendations.slice(0, 2).map((rec, i) => (
+                            <div key={i} className="flex items-start gap-2 text-[11px] text-slate-500 dark:text-zinc-400 leading-relaxed">
+                              <span className="w-4 h-4 rounded-full bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                              <span className="line-clamp-2">{rec}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                </div>
+              )}
             </>
           )}
         </div>

@@ -268,6 +268,60 @@ export async function registerStoreWebhooks(
   }
 }
 
+// ─── llms.txt page deploy ─────────────────────────────────────────────────────
+
+const LLMS_PAGE_HANDLE = "llms";
+
+interface ShopifyPage {
+  id: string;
+  handle: string;
+  title: string;
+}
+
+/**
+ * Create or update the /pages/llms Shopify page with the generated llms.txt content.
+ * Uses the Admin REST API (pages are not in the GraphQL schema on all plans).
+ */
+export async function deployLlmsTxtPage(
+  domain: string,
+  accessToken: string,
+  llmsTxtContent: string,
+): Promise<{ pageUrl: string; created: boolean }> {
+  const normalizedDomain = normalizeShopifyDomain(domain);
+  const resolvedToken = resolveShopifyAdminAccessToken(normalizedDomain, accessToken);
+  const apiVersion = process.env.SHOPIFY_API_VERSION ?? "2026-01";
+  const baseUrl = `https://${normalizedDomain}/admin/api/${apiVersion}`;
+  const headers = {
+    "Content-Type": "application/json",
+    "X-Shopify-Access-Token": resolvedToken,
+  };
+  const bodyHtml = `<pre style="white-space:pre-wrap;font-family:monospace;font-size:13px;line-height:1.6">${llmsTxtContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
+
+  // Check if page already exists
+  const listRes = await fetch(`${baseUrl}/pages.json?handle=${LLMS_PAGE_HANDLE}&fields=id,handle,title`, { headers });
+  if (!listRes.ok) throw new Error(`Shopify pages list failed: ${listRes.status}`);
+  const listData = await listRes.json() as { pages: ShopifyPage[] };
+  const existing = listData.pages.find((p) => p.handle === LLMS_PAGE_HANDLE);
+
+  if (existing) {
+    const updateRes = await fetch(`${baseUrl}/pages/${existing.id}.json`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ page: { body_html: bodyHtml } }),
+    });
+    if (!updateRes.ok) throw new Error(`Shopify page update failed: ${updateRes.status}`);
+    return { pageUrl: `https://${normalizedDomain}/pages/${LLMS_PAGE_HANDLE}`, created: false };
+  }
+
+  const createRes = await fetch(`${baseUrl}/pages.json`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ page: { title: "LLMs.txt — AI Catalog Index", handle: LLMS_PAGE_HANDLE, body_html: bodyHtml, published: true } }),
+  });
+  if (!createRes.ok) throw new Error(`Shopify page create failed: ${createRes.status}`);
+  return { pageUrl: `https://${normalizedDomain}/pages/${LLMS_PAGE_HANDLE}`, created: true };
+}
+
 /**
  * Validate a Shopify Admin API access token by fetching the shop name.
  * Returns the shop name on success, throws on failure.

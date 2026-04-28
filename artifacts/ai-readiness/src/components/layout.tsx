@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Package, Wrench, CheckSquare,
   Brain, GitBranch, Settings, BarChart3, Store,
-  ChevronDown, LogOut, Plus, Check, Search, LineChart, Globe
+  ChevronDown, LogOut, Plus, Check, Search, LineChart, Globe, CalendarClock, Swords
 } from "lucide-react";
 import { useStore } from "@/context/store-context";
 import { useAuth } from "@/context/auth-context";
@@ -68,14 +68,16 @@ const navGroups = [
     items: [
       { href: "/issues", label: "Issues", icon: Wrench },
       { href: "/fixes", label: "Quick Fixes", icon: CheckSquare },
+      { href: "/listing-readiness", label: "Listing Readiness", icon: Store },
     ],
   },
   {
     label: "Intelligence",
     items: [
-      { href: "/intelligence/aeo", label: "AEO Score", icon: Search, isNew: true },
+      { href: "/intelligence/aeo", label: "AI Score", icon: Search },
       { href: "/intelligence/seo", label: "SEO Audit", icon: LineChart },
-      { href: "/intelligence/geo", label: "GEO Tracker", icon: Globe, isNew: true },
+      { href: "/intelligence/geo", label: "GEO Tracker", icon: Globe },
+      { href: "/competitors", label: "Competitor Gap", icon: Swords },
     ],
   },
   {
@@ -84,6 +86,7 @@ const navGroups = [
       { href: "/ai-readiness", label: "AI Readiness", icon: Brain },
       { href: "/content", label: "Content", icon: GitBranch },
       { href: "/tools", label: "Tools", icon: BarChart3 },
+      { href: "/schedule", label: "Schedule", icon: CalendarClock },
     ],
   },
 ];
@@ -175,6 +178,11 @@ function StoreSelector() {
           <span className="text-[13px] font-bold text-slate-700 dark:text-white tracking-tight">
             {activeStore?.name ?? activeStore?.domain ?? "Select store"}
           </span>
+          {activeStore?.isDemo && (
+            <span className="text-[9px] font-extrabold uppercase tracking-widest bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-[4px]">
+              Demo
+            </span>
+          )}
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-400 dark:text-zinc-300 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
         </button>
       </DropdownMenuTrigger>
@@ -190,6 +198,11 @@ function StoreSelector() {
           >
             <Store className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-400 flex-shrink-0" />
             <span className="truncate flex-1">{store.name ?? store.domain}</span>
+            {store.isDemo && (
+              <span className="text-[9px] font-extrabold uppercase tracking-widest bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-[4px] flex-shrink-0">
+                Demo
+              </span>
+            )}
             {store.id === activeStoreId && (
               <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
             )}

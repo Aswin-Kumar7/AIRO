@@ -24,6 +24,10 @@ import Settings from "@/pages/settings";
 import AeoScorePage from "@/pages/aeo-score";
 import SeoAuditPage from "@/pages/seo-audit";
 import GeoTrackerPage from "@/pages/geo-tracker";
+import SchedulePage from "@/pages/schedule";
+import CompetitorsPage from "@/pages/competitors";
+import BuyerJourneyPage from "@/pages/buyer-journey";
+import ListingReadinessPage from "@/pages/listing-readiness";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -163,6 +167,18 @@ function Router() {
         </Route>
         <Route path="/settings">
           {() => <ProtectedRoute component={Settings} />}
+        </Route>
+        <Route path="/schedule">
+          {() => <ProtectedRoute component={SchedulePage} />}
+        </Route>
+        <Route path="/competitors">
+          {() => <ProtectedRoute component={CompetitorsPage} />}
+        </Route>
+        <Route path="/buyer-journey">
+          {() => <ProtectedRoute component={BuyerJourneyPage} />}
+        </Route>
+        <Route path="/listing-readiness">
+          {() => <ProtectedRoute component={ListingReadinessPage} />}
         </Route>
         <Route component={NotFound} />
       </Switch>

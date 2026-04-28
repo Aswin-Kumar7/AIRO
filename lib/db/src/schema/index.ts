@@ -10,3 +10,6 @@ export * from "./perception_reports";
 export * from "./jobs";
 export * from "./session";
 export * from "./visibility_checks";
+export * from "./scheduled_analyses";
+export * from "./score_snapshots";
+export * from "./product_score_history";

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { db, storesTable, activityTable } from "@workspace/db";
 import {
   hasConfiguredShopifyAdminAccessToken,
@@ -12,15 +12,12 @@ import { getConnectionMode, maskStoredAccessToken, upsertConnectedStore } from "
 import { resolveAccessToken } from "../lib/crypto";
 import { fetchAndUpsertProducts } from "../lib/fetch-products";
 import { logger } from "../lib/logger";
+import { DEMO_STORE_ID } from "../lib/demo";
 
 const router: IRouter = Router();
 
-router.get("/stores", async (req, res): Promise<void> => {
-  req.log.info("Listing stores");
-  const stores = await db.select().from(storesTable)
-    .where(eq(storesTable.userId, req.session.userId!))
-    .orderBy(desc(storesTable.createdAt));
-  res.json(stores.map(s => ({
+function serializeStore(s: typeof storesTable.$inferSelect, isDemo = false) {
+  return {
     id: s.id,
     domain: s.domain,
     name: s.name,
@@ -34,7 +31,25 @@ router.get("/stores", async (req, res): Promise<void> => {
     overallScore: s.overallScore,
     productCount: s.productCount,
     createdAt: s.createdAt.toISOString(),
-  })));
+    isDemo,
+  };
+}
+
+router.get("/stores", async (req, res): Promise<void> => {
+  req.log.info("Listing stores");
+  const userStores = await db.select().from(storesTable)
+    .where(eq(storesTable.userId, req.session.userId!))
+    .orderBy(desc(storesTable.createdAt));
+
+  const userOwnsDemo = userStores.some(s => s.id === DEMO_STORE_ID);
+  const result = userStores.map(s => serializeStore(s, s.id === DEMO_STORE_ID));
+
+  if (!userOwnsDemo) {
+    const [demo] = await db.select().from(storesTable).where(eq(storesTable.id, DEMO_STORE_ID));
+    if (demo) result.push(serializeStore(demo, true));
+  }
+
+  res.json(result);
 });
 
 router.post("/stores", async (req, res): Promise<void> => {
@@ -121,30 +136,23 @@ router.post("/stores", async (req, res): Promise<void> => {
 
 router.get("/stores/:storeId", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session.userId!)));
+  const whereClause = storeId === DEMO_STORE_ID
+    ? eq(storesTable.id, storeId)
+    : and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session.userId!));
+  const [store] = await db.select().from(storesTable).where(whereClause);
   if (!store) {
     res.status(404).json({ error: "Store not found" });
     return;
   }
-  res.json({
-    id: store.id,
-    domain: store.domain,
-    name: store.name,
-    accessToken: maskStoredAccessToken(store.accessToken),
-    accessTokenConfigured: true,
-    connectionMode: getConnectionMode(store.accessToken),
-    desiredPositioning: store.desiredPositioning ?? null,
-    status: store.status,
-    productsFetched: store.productsFetched,
-    lastAnalyzed: store.lastAnalyzed?.toISOString() ?? null,
-    overallScore: store.overallScore,
-    productCount: store.productCount,
-    createdAt: store.createdAt.toISOString(),
-  });
+  res.json(serializeStore(store, storeId === DEMO_STORE_ID));
 });
 
 router.patch("/stores/:storeId/positioning", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  if (storeId === DEMO_STORE_ID) {
+    res.status(403).json({ error: "Demo store is read-only." });
+    return;
+  }
   const { desiredPositioning } = req.body as { desiredPositioning?: string };
 
   if (typeof desiredPositioning !== "string") {
@@ -170,6 +178,10 @@ router.patch("/stores/:storeId/positioning", async (req, res): Promise<void> => 
 
 router.delete("/stores/:storeId", async (req, res): Promise<void> => {
   const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  if (storeId === DEMO_STORE_ID) {
+    res.status(403).json({ error: "Demo store cannot be removed." });
+    return;
+  }
   const [store] = await db.delete(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session.userId!))).returning();
   if (!store) {
     res.status(404).json({ error: "Store not found" });

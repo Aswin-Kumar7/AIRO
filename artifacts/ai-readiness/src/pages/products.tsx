@@ -196,11 +196,7 @@ export default function Products() {
                               Good
                             </span>
                           )}
-                          {product.hasAppliedFixes && (
-                            <span className="ml-2 text-[10px] font-semibold text-violet-700 dark:text-violet-400 bg-violet-100/80 dark:bg-violet-500/10 px-2 py-0.5 rounded-full">
-                              Fixed
-                            </span>
-                          )}
+
                         </div>
                         <ChevronRight className="w-4 h-4 text-slate-300 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
                       </div>
