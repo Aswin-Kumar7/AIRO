@@ -3,7 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import { db, visibilityChecksTable, productsTable } from "@workspace/db";
 import { generateId } from "../lib/id";
 import { runGeoScan } from "../lib/geo-real";
-import { getOwnedStore, isDemoStore } from "../lib/owned-store";
+import { getOwnedStore } from "../lib/owned-store";
 
 const router: IRouter = Router();
 
@@ -152,10 +152,6 @@ router.post("/stores/:storeId/geo/scan", async (req, res): Promise<void> => {
   const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
-  if (isDemoStore(storeId)) {
-    res.status(403).json({ error: "GEO scan is not available for the demo store — connect your own store first." });
-    return;
-  }
   const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(403).json({ error: "Forbidden" }); return; }
 
