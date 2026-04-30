@@ -95,7 +95,7 @@ app.use(session({
   store: new PgStore({
     pool: sessionPool,
     tableName: "session",
-    createTableIfMissing: process.env.NODE_ENV !== "production",
+    createTableIfMissing: true,
   }),
   name: "sid",
   secret: SESSION_SECRET,
