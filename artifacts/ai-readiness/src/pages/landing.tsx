@@ -406,22 +406,32 @@ function Hero({ onAnalyze }: { onAnalyze: (url: string) => void }) {
 
 // ─── Social Proof ─────────────────────────────────────────────────────────────
 
-const BRANDS = ["Kasparro", "Gemini", "Shopify", "Drizzle", "Express", "Vite", "Hackathon"];
+const BRANDS = [
+  { name: "Shopify",      color: "#96BF48", letter: "S" },
+  { name: "AWS Bedrock",  color: "#FF9900", letter: "⬡" },
+  { name: "Anthropic",    color: "#C96442", letter: "A" },
+  { name: "Gemini AI",    color: "#4285F4", letter: "G" },
+  { name: "Tavily",       color: "#6366F1", letter: "T" },
+  { name: "SerpAPI",      color: "#10B981", letter: "S" },
+  { name: "Neon",         color: "#00E5A0", letter: "N" },
+  { name: "React",        color: "#61DAFB", letter: "⚛" },
+  { name: "TypeScript",   color: "#3178C6", letter: "TS" },
+];
 
 function SocialProof() {
   return (
     <section className="py-24 bg-[#fafafa]">
       <div className="max-w-6xl mx-auto px-6">
         <p className="text-center text-[19px] text-[#222] font-semibold mb-12">
-          Built for the Kasparro Agentic Commerce Hackathon
+          Powered by the best AI &amp; commerce infrastructure
         </p>
         <div className="relative overflow-hidden">
           <div className="flex gap-6 items-center" style={{ animation: "kasMarquee 35s linear infinite" }}>
             {[...BRANDS, ...BRANDS, ...BRANDS].map((brand, i) => (
               <div key={i} className="flex items-center justify-center px-8 py-4 bg-white dark:bg-[#080808] border border-slate-200/50 rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
                 <span className="text-slate-800 dark:text-slate-200 font-bold text-[15px] tracking-tight whitespace-nowrap select-none flex items-center gap-2">
-                  <div className="w-4 h-4 bg-slate-800 rounded-sm" style={{ clipPath: "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)" }}></div>
-                  {brand}
+                  <div className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[9px] font-black" style={{ backgroundColor: brand.color }}>{brand.letter}</div>
+                  {brand.name}
                 </span>
               </div>
             ))}
