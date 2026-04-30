@@ -1,6 +1,6 @@
 <div align="center">
 
-# AIRO — AI Representation Optimizer
+# Kasparro AIRO — AI Readiness Optimizer
 
 **Make your Shopify store visible to AI shopping agents before your competitors do.**
 
@@ -22,7 +22,11 @@
 
 <br/>
 
-[**Live Demo**](https://kasparro-airo.vercel.app) &nbsp;·&nbsp; [**API Health**](https://api-airo.up.railway.app/api/healthz) &nbsp;·&nbsp; [**Decision Log**](./DECISION_LOG.md)
+[**Live Demo**](https://kasparro-airo.vercel.app) &nbsp;·&nbsp; [**Demo Video**](https://drive.google.com/file/d/1vdipj1HiDAcAwYM2L9jNZhGkn36hyO1_/view?usp=sharing) &nbsp;·&nbsp; [**API Health**](https://api-airo.up.railway.app/api/healthz)
+
+[**Product Document**](./docs/Kasparro_Product_Document.pdf) &nbsp;·&nbsp; [**Technical Document**](./docs/Kasparro_Technical_Document.pdf) &nbsp;·&nbsp; [**Decision Log**](./DECISION_LOG.md)
+
+*(For in-depth documentation, see the [**Detailed Docs Directory**](./docs/detailed/))*
 
 <br/>
 
@@ -32,15 +36,48 @@
 
 ---
 
-## What is AIRO?
+## 🎯 Problem Statement
 
-AI shopping assistants — ChatGPT, Gemini, Claude, Perplexity — are answering product queries directly. They don't rank pages; they cite stores whose content they can understand and trust.
+The landscape of search is fundamentally changing. AI shopping assistants—such as ChatGPT, Google Gemini, Claude, and Perplexity—are answering product queries directly. **They no longer rank pages; they synthesize answers and cite stores whose content they can understand, trust, and extract structured data from.** 
 
-AIRO analyzes every product in your Shopify catalog through five AI platforms simultaneously, scores what's missing, generates targeted fixes, and syncs improvements back to Shopify in one click — no code, no developer, no guesswork.
+Most Shopify stores are optimized for traditional SEO, meaning they are virtually invisible to these modern AI engines. **Kasparro AIRO (AI Readiness Optimizer)** bridges this gap by analyzing every product in your Shopify catalog through five major AI platforms simultaneously. It scores what is missing, generates targeted fixes using LLMs, and syncs those improvements directly back to Shopify in one click—ensuring your store is the one cited when buyers ask AI for recommendations.
 
 ---
 
-## Features
+## 💻 Product Walkthrough & Screenshots
+
+### 1. Dashboard Overview
+A comprehensive overview of your store's AI readiness, aggregating scores, active issues, and recent scans.
+![Dashboard Overview](./docs/images/dashboard.png)
+
+### 2. AI Readiness & Listing Readiness
+Detailed breakdown of your AI representation score, tracking clarity, completeness, entity coverage, and structured data across your entire catalog.
+<div align="center">
+  <img src="./docs/images/aireadiness.png" width="49%" />
+  <img src="./docs/images/listingreadiness.png" width="49%" />
+</div>
+
+### 3. GEO (Generative Engine Optimization) Tracker
+Live analysis of your store's performance across 5 different AI agents (Tavily, SerpAPI, Bedrock Nova, Claude 3, and Gemini).
+![GEO Tracker](./docs/images/geotracker.png)
+
+### 4. Products & Detailed View
+Per-product report cards with specific, actionable steps to improve AI visibility.
+<div align="center">
+  <img src="./docs/images/products.png" width="49%" />
+  <img src="./docs/images/products-detailedview.png" width="49%" />
+</div>
+
+### 5. SEO Audit & Quick Fixes
+Deterministic rule engine flagging missing descriptions, thin content, and absent pricing context, coupled with one-click AI-generated rewrites pushed directly to the Shopify Admin API.
+<div align="center">
+  <img src="./docs/images/seoaudit.png" width="49%" />
+  <img src="./docs/images/quick-fixes.png" width="49%" />
+</div>
+
+---
+
+## ✨ Features
 
 | Feature | Description |
 |---|---|
@@ -53,7 +90,9 @@ AIRO analyzes every product in your Shopify catalog through five AI platforms si
 
 ---
 
-## System Architecture
+## 🏗️ System Architecture
+
+AIRO divides its operations logically between deterministic evaluations and AI-driven optimizations. The backend architecture consists of a high-performance Express server integrated with Neon PostgreSQL and an orchestrated AI execution layer.
 
 ```mermaid
 graph TD
@@ -93,7 +132,9 @@ graph TD
 
 ---
 
-## GEO Scanner — 5-Agent Pipeline
+## 🤖 GEO Scanner — 5-Agent Pipeline
+
+All 5 agents run in parallel. Each answers a different question about your store's AI visibility to determine a true generative engine optimization score.
 
 ```mermaid
 flowchart LR
@@ -108,19 +149,19 @@ flowchart LR
     A & B & C & D & E --> R([GEO Score\n+ Recommendations])
 ```
 
-All 5 agents run in parallel. Each answers a different question about your store's AI visibility.
-
 | Agent | Platform | What it measures |
 |---|---|---|
-| Tavily | Live web search | Whether your domain appears in AI retrieval sources |
-| SerpAPI | Google Search | Top-10 organic ranking presence |
-| Nova Lite | AWS Bedrock | Brand-level awareness baked into model training data |
-| Claude 3 Haiku | AWS Bedrock | Product content quality for AI recommendation |
-| Gemini | Google AI | Store perception and recommendation likelihood |
+| **Tavily** | Live web search | Whether your domain appears in AI retrieval sources |
+| **SerpAPI** | Google Search | Top-10 organic ranking presence |
+| **Nova Lite** | AWS Bedrock | Brand-level awareness baked into model training data |
+| **Claude 3 Haiku** | AWS Bedrock | Product content quality for AI recommendation |
+| **Gemini** | Google AI | Store perception and recommendation likelihood |
 
 ---
 
-## AI vs Deterministic Boundary
+## ⚖️ AI vs Deterministic Boundary
+
+Gap detection uses a **deterministic rule engine** — not an LLM — so every result is reproducible, auditable, and unit-testable. AI handles what only AI can do: writing better content and simulating how an agent perceives the store.
 
 ```mermaid
 graph LR
@@ -137,13 +178,13 @@ graph LR
     end
 ```
 
-Gap detection uses a deterministic rule engine — not an LLM — so every result is reproducible, auditable, and unit-testable. AI handles what only AI can do: writing better content and simulating how an agent perceives the store.
-
-Gap IDs are deterministic: `gap_{storeId[-8]}_{productId[-8]}_{ruleId}` — the same violation on the same product always produces the same ID, enabling progress tracking without a separate mapping table.
+> **Note on Identifiers:** Gap IDs are highly deterministic (`gap_{storeId[-8]}_{productId[-8]}_{ruleId}`). The exact same violation on the exact same product always produces the identical ID. This enables perfect progress tracking without maintaining a massive, complex mapping table in the database.
 
 ---
 
-## CI/CD Workflow
+## 🔄 CI/CD Workflow
+
+AIRO utilizes an automated pipeline ensuring type-safety, rapid deployment, and isolated staging via GitHub Actions.
 
 ```mermaid
 flowchart TD
@@ -161,9 +202,11 @@ flowchart TD
 
 ---
 
-## Monorepo Structure
+## 📂 Monorepo Structure
 
-```
+We use `pnpm` workspaces to manage our frontend, backend API, and shared logic layers cleanly.
+
+```text
 AIRO/
 ├── artifacts/
 │   ├── api-server/              # Express API — Railway
@@ -187,170 +230,218 @@ AIRO/
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-### Frontend
-
+### Frontend Architecture
 | Technology | Version | Purpose |
 |---|---|---|
-| React | 19 | UI framework |
-| Vite | 7 | Build tool |
-| Tailwind CSS | 4 | Styling |
-| Framer Motion | 12 | Animations |
-| TanStack Query | 5 | Server state |
-| Wouter | — | Client-side routing |
+| **React** | 19 | UI framework |
+| **Vite** | 7 | Build tool & Development server |
+| **Tailwind CSS** | 4 | Highly customizable utility-first styling |
+| **Framer Motion** | 12 | Smooth, hardware-accelerated animations |
+| **TanStack Query** | 5 | Asynchronous server state management |
+| **Wouter** | — | Lightweight client-side routing |
 
-### Backend
-
+### Backend Engineering
 | Technology | Version | Purpose |
 |---|---|---|
-| Node.js | 20 | Runtime |
-| Express | 4 | HTTP server |
-| Drizzle ORM | 0.45 | Database queries |
-| Neon PostgreSQL | — | Primary database |
-| connect-pg-simple | — | Session persistence |
-| esbuild | 0.27 | API bundler |
+| **Node.js** | 20 | High-performance runtime environment |
+| **Express** | 4 | Robust HTTP server |
+| **Drizzle ORM** | 0.45 | Type-safe database queries and migrations |
+| **Neon PostgreSQL** | — | Primary serverless database layer |
+| **connect-pg-simple** | — | Secure session persistence |
+| **esbuild** | 0.27 | Ultra-fast API bundler |
 
-### AI & Data Services
-
+### AI & Data Infrastructure
 | Service | Model | Role |
 |---|---|---|
-| AWS Bedrock | `apac.amazon.nova-lite-v1:0` | Brand knowledge agent |
-| AWS Bedrock | `apac.anthropic.claude-3-haiku-20240307-v1:0` | Content quality judge |
-| Google Gemini | `gemini-2.0-flash` | Perception analysis |
-| Tavily | Search API | Live web retrieval |
-| SerpAPI | Google Search API | Organic ranking signals |
-| OpenRouter + Groq | — | Gemini failover chain |
+| **AWS Bedrock** | `apac.amazon.nova-lite-v1:0` | Brand knowledge perception agent |
+| **AWS Bedrock** | `apac.anthropic.claude-3-haiku-20240307-v1:0` | Efficient content quality analysis judge |
+| **Google Gemini** | `gemini-2.0-flash` | Deep perception and synthesis engine |
+| **Tavily** | Search API | Live web context retrieval |
+| **SerpAPI** | Google Search API | Accurate organic ranking signals |
+| **OpenRouter / Groq** | — | Highly-available Gemini failover chains |
 
 ---
 
-## Local Development
+## 🚀 Setup Instructions
 
 ### Prerequisites
 
-- Node.js 20+, pnpm 10+
-- Shopify Partner account + development store
-- Google OAuth credentials
-- Neon database URL
+| Requirement | Version | Notes |
+|---|---|---|
+| Node.js | 20+ | `node --version` to verify |
+| pnpm | 10+ | `npm install -g pnpm` |
+| Shopify Partner account | — | [Create one here](https://partners.shopify.com/) — needs a development store |
+| Google Cloud project | — | OAuth 2.0 credentials with `http://localhost:4000/api/auth/google/callback` as an authorized redirect URI |
+| Neon database | — | Free tier is sufficient — copy the connection string |
 
-### Setup
+---
+
+### Step 1 — Clone and install
 
 ```bash
 git clone https://github.com/Aswin-Kumar7/AIRO.git
 cd AIRO
 pnpm install
-cp artifacts/api-server/.env.example artifacts/api-server/.env
-# fill in your values
-pnpm migrate
-pnpm --filter @workspace/api-server run dev   # port 4000
-pnpm --filter @workspace/ai-readiness run dev # port 5173
 ```
 
-### Environment Variables
+This installs all workspace packages (`api-server`, `ai-readiness`, `lib/db`, `lib/api-zod`, `lib/api-client-react`) in one pass.
 
-**API Server** (`artifacts/api-server/.env`):
+---
+
+### Step 2 — Configure environment variables
+
+Create the API env file:
+
+```bash
+cp artifacts/api-server/.env.example artifacts/api-server/.env
+```
+
+Then fill in each section:
+
+**`artifacts/api-server/.env`**
 
 ```env
+# ── App ──────────────────────────────────────────────────────────────────────
 NODE_ENV=development
 PORT=4000
-DATABASE_URL=postgresql://...
-SESSION_SECRET=          # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-TOKEN_ENCRYPTION_KEY=    # same command
+FRONTEND_URL=http://localhost:5173
+APP_BASE_URL=http://localhost:4000
 
+# ── Database ─────────────────────────────────────────────────────────────────
+DATABASE_URL=postgresql://user:pass@host/dbname?sslmode=require
+
+# ── Session & Encryption ─────────────────────────────────────────────────────
+# Generate both with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+SESSION_SECRET=<64-char hex>
+TOKEN_ENCRYPTION_KEY=<64-char hex>
+
+# ── Shopify ───────────────────────────────────────────────────────────────────
+# From your Shopify Partner dashboard → Apps → your app
 SHOPIFY_API_KEY=...
 SHOPIFY_API_SECRET=...
 SHOPIFY_APP_URL=http://localhost:4000
 SHOPIFY_SCOPES=read_products,write_products,read_content,write_content
 
+# ── Google OAuth ─────────────────────────────────────────────────────────────
+# From Google Cloud Console → APIs & Services → Credentials
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 GOOGLE_REDIRECT_URI=http://localhost:4000/api/auth/google/callback
 
+# ── AI Services ──────────────────────────────────────────────────────────────
+# AWS Bedrock: create an IAM user with BedrockFullAccess, then generate an API key
 BEDROCK_API_KEY=...
 AWS_REGION=ap-south-1
 BEDROCK_MODEL_ID=apac.amazon.nova-lite-v1:0
 BEDROCK_CONTENT_MODEL_ID=apac.anthropic.claude-3-haiku-20240307-v1:0
+
+# Google AI Studio → Get API Key
 GEMINI_API_KEY=...
+
+# tavily.com → Dashboard → API Keys
 TAVILY_API_KEY=...
+
+# serpapi.com → Dashboard → API Key
 SERPAPI_API_KEY=...
+
+# Optional: fallback chain for Gemini if quota is exceeded
 OPENROUTER_API_KEY=...
 GROQ_API_KEY=...
 
+# ── Email (optional) ─────────────────────────────────────────────────────────
 RESEND_API_KEY=...
 EMAIL_FROM=noreply@yourdomain.com
-FRONTEND_URL=http://localhost:5173
-APP_BASE_URL=http://localhost:4000
 ```
 
-**Frontend** (`artifacts/ai-readiness/.env`):
+**`artifacts/ai-readiness/.env`** (frontend only needs one variable locally):
 
 ```env
 VITE_API_URL=http://localhost:4000
 ```
 
+> **Production note:** On Vercel, leave `VITE_API_URL` unset. The `vercel.json` proxy rewrite handles all `/api/*` calls automatically.
+
 ---
 
-## Deployment
+### Step 3 — Run migrations
 
-| Layer | Platform | URL |
+```bash
+pnpm migrate
+```
+
+This runs Drizzle migrations against your Neon database. The `session` table is auto-created on first server startup.
+
+---
+
+### Step 4 — Start development servers
+
+Open two terminals:
+
+```bash
+# Terminal 1 — API (http://localhost:4000)
+pnpm --filter @workspace/api-server run dev
+
+# Terminal 2 — Frontend (http://localhost:5173)
+pnpm --filter @workspace/ai-readiness run dev
+```
+
+The frontend proxies `/api/*` to `localhost:4000` in development via Vite's dev server config, so session cookies work same-origin locally too.
+
+---
+
+## ☁️ Deployment
+
+| Layer | Platform | External URL |
 |---|---|---|
-| Frontend | Vercel | [kasparro-airo.vercel.app](https://kasparro-airo.vercel.app) |
-| API | Railway | [api-airo.up.railway.app](https://api-airo.up.railway.app) |
-| Database | Neon | `ap-southeast-1` region |
+| **Frontend** | Vercel | [kasparro-airo.vercel.app](https://kasparro-airo.vercel.app) |
+| **API Backend** | Railway | [api-airo.up.railway.app](https://api-airo.up.railway.app) |
+| **Database** | Neon | `ap-southeast-1` region (Serverless PostgreSQL) |
 
 ### Railway (API)
-
-1. Connect repo → branch: `dev`
+1. Connect repository branch: `dev`
 2. Dockerfile path: `artifacts/api-server/Dockerfile`
 3. Public port: `4000`
-4. Add all env vars — Railway auto-deploys on push
+4. Add all environment variables. Railway handles auto-deployments on git push.
 
 ### Vercel (Frontend)
-
-1. Connect repo → branch: `dev`
+1. Connect repository branch: `dev`
 2. Root directory: `artifacts/ai-readiness`
 3. Build command: `cd ../.. && pnpm --filter @workspace/ai-readiness run build`
 4. Install command: `cd ../.. && pnpm install --frozen-lockfile`
 5. Output directory: `dist/public`
-6. Leave `VITE_API_URL` unset — `vercel.json` proxies `/api/*` to Railway automatically
+6. Leave `VITE_API_URL` unset — `vercel.json` proxies `/api/*` to Railway automatically.
 
-Session cookies work because the Vercel proxy makes all API calls appear same-origin. No `SameSite=None` workarounds needed.
+*(Note: Session cookies work perfectly in this setup because the Vercel proxy rewrite makes all API calls appear same-origin. No complex `SameSite=None` browser workarounds are needed.)*
 
 ---
 
-## Security
+## 🔒 Security
 
-| Concern | Implementation |
+| Concern | Implementation Detail |
 |---|---|
-| Token storage | AES-256-GCM application-level encryption |
-| CSRF | `csrf-sync` — token validated on all mutating endpoints |
-| Sessions | `express-session` + `connect-pg-simple` backed by Neon |
-| Cross-origin cookies | Vercel proxy rewrite — cookies are first-party |
-| Secret validation | Missing `SESSION_SECRET` in production throws at startup |
-| Transport | HTTPS enforced via Railway + Vercel edge |
+| **Token storage** | AES-256-GCM application-level encryption for all sensitive keys. |
+| **CSRF** | Handled by `csrf-sync` — secure tokens validated on all mutating endpoints. |
+| **Sessions** | `express-session` backed securely by `connect-pg-simple` within Neon PostgreSQL. |
+| **Cross-origin cookies** | Avoided completely. Vercel's proxy rewrite treats cookies natively as first-party. |
+| **Secret validation** | Strict runtime validation; missing `SESSION_SECRET` in production triggers an immediate fast-fail at startup. |
+| **Transport** | Strict HTTPS enforcement maintained via Railway edge network + Vercel's edge caching layer. |
 
 ---
 
-## Team
+## 🤝 Contribution Note
 
-| Contributor | Role |
-|---|---|
-| **Aswin Kumar** | Engineering lead — monorepo architecture, Express API, GEO scanner pipeline, Shopify integration, AI model integration (Bedrock, Gemini, Tavily, SerpAPI), infrastructure (Railway, Vercel, Neon), CI/CD, deterministic gap engine, scoring model design |
-| **Naveen** | Product and frontend — merchant user journey, competitive analysis, go-to-market framing, frontend UI flows, landing page, UX feedback |
+**Team Cipher**
 
----
-
-## Decision Log
-
-All significant architectural and product decisions are in **[DECISION_LOG.md](./DECISION_LOG.md)** — covering infrastructure choices, AI model selection, scope tradeoffs, and security design.
+- **Aswin Kumar (Engineering Lead)**: Led backend architecture, database schema design, and cloud infrastructure integration. Built the robust Express API using Drizzle ORM and Neon, while engineering the highly complex 5-agent GEO parallel scanner. Integrated directly with Shopify Admin API, handled complex AI orchestration with AWS Bedrock, Google Gemini, and automated the deterministic gap engine pipeline. Oversaw full CI/CD deployment automation (Railway, Vercel, GitHub Actions).
+- **Naveen (Product & Frontend Lead)**: Spearheaded initial product validation, feature ideation, and user mapping for merchants. Defined the distinct dashboard metrics and guided aesthetic execution. Implemented the beautiful, high-performance UI flows (React, Tailwind CSS, Framer Motion), built the stunning product landing page, constructed data-dense dashboard views, and aggressively led QA iterations to maintain an exceptionally high standard of user experience.
 
 ---
 
-## License
+## 📄 Decisions & License
 
-MIT © 2026 Aswin Kumar
-
----
+All significant architectural, scoping, and infrastructure decisions can be found in our comprehensive **[DECISION_LOG.md](./DECISION_LOG.md)**.
 
 <div align="center">
 
