@@ -23,7 +23,7 @@
  * Each agent answers a different question, giving a 5-angle view of AI visibility.
  */
 
-import { chatCompletion, callOpenAI } from "./ai-client";
+import { chatCompletion } from "./ai-client";
 import { logger } from "./logger";
 
 // ─── Shared fetch helper ──────────────────────────────────────────────────────
@@ -667,11 +667,12 @@ Respond ONLY with this exact JSON (absolutely no other text):
   }
 }
 
-// ─── OpenAI GPT-4o-mini Content Judge ────────────────────────────────────────
-// Role: second independent AI content-quality judge. Evaluates whether the
-// store's product catalog content is detailed enough for OpenAI's GPT to
-// confidently recommend it. Complements Gemini AI with a different model perspective.
-// Uses callOpenAI() from ai-client.ts — single implementation, no duplication.
+// ─── Bedrock Claude Haiku Content Judge ──────────────────────────────────────
+// Role: second independent AI content-quality judge using AWS Bedrock.
+// Uses BEDROCK_CONTENT_MODEL_ID (defaults to apac.anthropic.claude-3-haiku-20240307-v1:0).
+// Runs a different model from the brand-knowledge queryBedrock() call above,
+// giving two independent Bedrock perspectives in the GEO scan.
+// Same BEDROCK_API_KEY and AWS_REGION as the first Bedrock agent.
 
 async function queryOpenAI(
   query: string,
@@ -680,17 +681,22 @@ async function queryOpenAI(
 ): Promise<AgentQueryResult> {
   const t0 = Date.now();
   const platform = "openai";
-  const platformLabel = "OpenAI GPT";
+  const platformLabel = "Bedrock Content Judge";
   const thinContent = isThinContent(productSample);
 
-  if (!process.env.OPENAI_API_KEY) {
+  const apiKey = process.env.BEDROCK_API_KEY;
+  if (!apiKey) {
     return {
       platform, platformLabel, query, cited: false, citationUrl: null,
       citedSnippet: null, competitorsMentioned: [],
-      reasoning: "OpenAI GPT agent not configured (OPENAI_API_KEY missing).",
-      latencyMs: 0, error: "OPENAI_API_KEY not set",
+      reasoning: "Bedrock Content Judge not configured (BEDROCK_API_KEY missing).",
+      latencyMs: 0, error: "BEDROCK_API_KEY not set",
     };
   }
+
+  const region = process.env.AWS_REGION ?? "ap-south-1";
+  const modelId = process.env.BEDROCK_CONTENT_MODEL_ID ?? "apac.anthropic.claude-3-haiku-20240307-v1:0";
+  const endpoint = `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(modelId)}/invoke`;
 
   try {
     const thinContentInstruction = thinContent
@@ -714,22 +720,43 @@ Evaluation rules (follow strictly):
 Respond ONLY with this exact JSON (absolutely no other text):
 {"rank": <integer 1-10>, "recommend": <true or false>, "reason": "<one sentence — be specific about what matched or didn't>", "missing": "<the most important missing detail that would have changed your answer>"}`;
 
-    const raw = await callOpenAI(
-      [
-        { role: "system", content: "You are a strict JSON-only evaluation assistant. Output ONLY a single valid JSON object — no preamble, no explanation, no markdown fences." },
-        { role: "user", content: userPrompt },
-      ],
-      150,
-      "gpt-4o-mini",
-    );
+    const res = await fetchWithRetry(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        anthropic_version: "bedrock-2023-05-31",
+        system: "You are a strict JSON-only evaluation assistant. Output ONLY a single valid JSON object — no preamble, no explanation, no markdown fences.",
+        messages: [{ role: "user", content: userPrompt }],
+        max_tokens: 150,
+        temperature: 0.0,
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      let errMsg = `Bedrock Content Judge HTTP ${res.status}: ${body.slice(0, 300)}`;
+      if (res.status === 403) errMsg = "Bedrock Content Judge key invalid — check BEDROCK_API_KEY.";
+      if (res.status === 404) errMsg = "Model not found — check BEDROCK_CONTENT_MODEL_ID and AWS_REGION.";
+      throw new Error(errMsg);
+    }
+
+    interface ClaudeBedrockResponse {
+      content?: Array<{ type?: string; text?: string }>;
+    }
+    const data = (await res.json()) as ClaudeBedrockResponse;
+    const raw = data.content?.[0]?.text ?? "";
     const parsed = parseJsonResult(raw);
 
     if (!parsed) {
-      logger.warn({ raw, query }, "OpenAI GPT returned non-JSON response");
+      logger.warn({ raw, query }, "Bedrock Content Judge returned non-JSON response");
       return {
         platform, platformLabel, query, cited: false, rank: 3,
         citationUrl: null, citedSnippet: raw.slice(0, 200), competitorsMentioned: [],
-        reasoning: `OpenAI GPT returned unclear response: ${raw.slice(0, 150)}`,
+        reasoning: `Bedrock Content Judge returned unclear response: ${raw.slice(0, 150)}`,
         latencyMs: Date.now() - t0,
       };
     }
@@ -755,16 +782,16 @@ Respond ONLY with this exact JSON (absolutely no other text):
       citedSnippet: parsed.reason,
       competitorsMentioned: [],
       reasoning: parsed.recommend
-        ? `Rank ${parsed.rank}/10 — OpenAI GPT recommends: ${parsed.reason}`
-        : `Rank ${parsed.rank}/10 — OpenAI GPT would not recommend: ${parsed.reason}${parsed.missing ? ` (missing: ${parsed.missing})` : ""}`,
+        ? `Rank ${parsed.rank}/10 — Bedrock Content Judge recommends: ${parsed.reason}`
+        : `Rank ${parsed.rank}/10 — Bedrock Content Judge would not recommend: ${parsed.reason}${parsed.missing ? ` (missing: ${parsed.missing})` : ""}`,
       latencyMs: Date.now() - t0,
     };
   } catch (err) {
-    logger.warn({ err, query }, "OpenAI GPT Content Judge query failed");
+    logger.warn({ err, query }, "Bedrock Content Judge query failed");
     return {
       platform, platformLabel, query, cited: false, citationUrl: null,
       citedSnippet: null, competitorsMentioned: [], latencyMs: Date.now() - t0,
-      reasoning: "OpenAI GPT query failed.",
+      reasoning: "Bedrock Content Judge query failed.",
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -936,18 +963,18 @@ export async function runGeoScan(params: {
     },
     {
       platform: "openai",
-      label: "OpenAI GPT",
+      label: "Bedrock Content Judge",
       queriesRun: openAiResults.length,
       citedCount: openAiResults.filter((r) => r.cited).length,
       score: openAiScore,
       avgRank: avgRank(openAiResults),
       insight: openAiResults.every((r) => r.error)
-        ? "OpenAI GPT agent not configured — add OPENAI_API_KEY (platform.openai.com)."
+        ? "Bedrock Content Judge not configured — check BEDROCK_API_KEY and BEDROCK_CONTENT_MODEL_ID."
         : openAiScore >= 60
-        ? "OpenAI GPT would confidently recommend your store — your content passes AI quality standards."
+        ? "Bedrock Content Judge would confidently recommend your store — your content passes AI quality standards."
         : openAiScore > 0
-        ? "OpenAI GPT partially recommends you — enrich product descriptions with specs, pricing, and use cases."
-        : "OpenAI GPT would not recommend your store — product content is too thin for confident AI recommendations.",
+        ? "Bedrock Content Judge partially recommends you — enrich product descriptions with specs, pricing, and use cases."
+        : "Bedrock Content Judge would not recommend your store — product content is too thin for confident AI recommendations.",
     },
   ];
 
@@ -957,7 +984,7 @@ export async function runGeoScan(params: {
   if (!serpApiWorking)  configWarnings.push("SERPAPI_API_KEY not set — Google Search skipped");
   if (!bedrockWorking)  configWarnings.push("AWS Bedrock not configured — Claude AI agent skipped");
   if (!internalWorking) configWarnings.push("Internal AI (Gemini/OpenRouter) not configured — content quality agent skipped");
-  if (!openAiWorking)   configWarnings.push("OPENAI_API_KEY not set — OpenAI GPT agent skipped");
+  if (!openAiWorking)   configWarnings.push("BEDROCK_API_KEY not set — Bedrock Content Judge skipped");
 
   return {
     storeId,
