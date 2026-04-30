@@ -1,6 +1,6 @@
 <div align="center">
 
-# Kasparro AIRO — AI Readiness Optimizer
+# Kasparro AIRO — AI Representation Optimizer
 
 **Make your Shopify store visible to AI shopping agents before your competitors do.**
 
@@ -40,17 +40,17 @@
 
 The landscape of search is fundamentally changing. AI shopping assistants—such as ChatGPT, Google Gemini, Claude, and Perplexity—are answering product queries directly. **They no longer rank pages; they synthesize answers and cite stores whose content they can understand, trust, and extract structured data from.** 
 
-Most Shopify stores are optimized for traditional SEO, meaning they are virtually invisible to these modern AI engines. **Kasparro AIRO (AI Readiness Optimizer)** bridges this gap by analyzing every product in your Shopify catalog through five major AI platforms simultaneously. It scores what is missing, generates targeted fixes using LLMs, and syncs those improvements directly back to Shopify in one click—ensuring your store is the one cited when buyers ask AI for recommendations.
+Most Shopify stores are optimized for traditional SEO, meaning they are virtually invisible to these modern AI engines. **Kasparro AIRO (AI Representation Optimizer)** bridges this gap by analyzing every product in your Shopify catalog through five major AI platforms simultaneously. It scores what is missing, generates targeted fixes using LLMs, and syncs those improvements directly back to Shopify in one click—ensuring your store is the one cited when buyers ask AI for recommendations.
 
 ---
 
 ## 💻 Product Walkthrough & Screenshots
 
 ### 1. Dashboard Overview
-A comprehensive overview of your store's AI readiness, aggregating scores, active issues, and recent scans.
+A comprehensive overview of your store's AI Representation, aggregating scores, active issues, and recent scans.
 ![Dashboard Overview](./docs/images/dashboard.png)
 
-### 2. AI Readiness & Listing Readiness
+### 2. AI Representation & Listing Representation
 Detailed breakdown of your AI representation score, tracking clarity, completeness, entity coverage, and structured data across your entire catalog.
 <div align="center">
   <img src="./docs/images/aireadiness.png" width="49%" />
