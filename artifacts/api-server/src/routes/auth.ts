@@ -54,9 +54,13 @@ router.get("/auth/google/callback", async (req, res): Promise<void> => {
     const user = await upsertUserFromGoogle(googleUser);
     req.session.userId = user.id;
     req.session.save((saveErr: unknown) => {
-      if (saveErr) console.error("Session save failed", saveErr);
+      if (saveErr) {
+        console.error("Session save failed", saveErr);
+        res.redirect(`${frontendUrl}/?auth=error&message=session_save_failed`);
+        return;
+      }
+      res.redirect(`${frontendUrl}/?auth=success`);
     });
-    res.redirect(`${frontendUrl}/?auth=success`);
   } catch (err) {
     console.error("Google OAuth callback failed", err);
     const msg = err instanceof Error ? err.message : "oauth_failed";
