@@ -310,7 +310,7 @@ FRONTEND_URL=http://localhost:5173
 APP_BASE_URL=http://localhost:4000
 
 # ── Database ─────────────────────────────────────────────────────────────────
-DATABASE_URL=postgresql://user:pass@host/dbname?sslmode=require
+DATABASE_URL="YOUR_NEON_DATABASE_CONNECTION_STRING"
 
 # ── Session & Encryption ─────────────────────────────────────────────────────
 # Generate both with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
