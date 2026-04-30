@@ -27,7 +27,7 @@ function test(name: string, fn: () => void): void {
 }
 
 /** Mirrors the safeParseJson helper used in ai-features.ts */
-function safeParseJson<T>(raw: string, schema: z.ZodType<T>, fallback: T): T {
+function safeParseJson<S extends z.ZodTypeAny>(raw: string, schema: S, fallback: z.infer<S>): z.infer<S> {
   try {
     const clean = raw.replace(/```json|```/g, "").trim();
     const match = clean.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
@@ -169,7 +169,7 @@ test("valid perception response parses correctly", () => {
     ambiguities: ["Return policy unclear"],
     overallSentiment: "positive",
   });
-  const result: z.infer<typeof perceptionResponseSchema> = safeParseJson(raw, perceptionResponseSchema, perceptionFallback);
+  const result = safeParseJson(raw, perceptionResponseSchema, perceptionFallback);
   assert.equal(result.agentNarrative, "The store sells quality surfboards.");
   assert.equal(result.overallSentiment, "positive");
   assert.equal(result.perceivedStrengths.length, 2);
