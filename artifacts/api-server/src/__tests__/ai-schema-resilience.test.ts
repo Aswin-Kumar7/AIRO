@@ -169,7 +169,7 @@ test("valid perception response parses correctly", () => {
     ambiguities: ["Return policy unclear"],
     overallSentiment: "positive",
   });
-  const result = safeParseJson(raw, perceptionResponseSchema, perceptionFallback);
+  const result: z.infer<typeof perceptionResponseSchema> = safeParseJson(raw, perceptionResponseSchema, perceptionFallback);
   assert.equal(result.agentNarrative, "The store sells quality surfboards.");
   assert.equal(result.overallSentiment, "positive");
   assert.equal(result.perceivedStrengths.length, 2);
