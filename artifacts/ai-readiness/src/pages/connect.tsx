@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AlertCircle, Zap, Store } from "lucide-react";
-const API_BASE = `${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/api`;
+const API_BASE = `${(import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "")}/api`;
 
 function normalize(raw: string) {
   return raw.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0] ?? "";

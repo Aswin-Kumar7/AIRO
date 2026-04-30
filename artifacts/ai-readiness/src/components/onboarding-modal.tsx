@@ -18,7 +18,7 @@ const STEPS = [
   { id: "done", label: "Ready" },
 ];
 
-const API_BASE = `${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/api`;
+const API_BASE = `${(import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "")}/api`;
 
 export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
   const [step, setStep] = useState<"connect" | "done">("connect");
