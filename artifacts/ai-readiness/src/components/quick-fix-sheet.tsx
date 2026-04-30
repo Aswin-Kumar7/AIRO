@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
   Package, Loader2, RefreshCw, CheckCircle2,
-  Zap, ChevronRight,
+  Zap,
   Code2, Copy, Check, FileText, Tag, Pencil, X,
   ArrowRight, Search, Info, TrendingUp as TrendingUpIcon,
 } from "lucide-react";
@@ -95,7 +95,7 @@ function ApplyProgressBar({ progress }: { progress: number }) {
 
 function FixDetail({
   storeId, productId, type, label,
-  scoreValue, existingFix, onFixApplied,
+  scoreValue: _scoreValue, existingFix, onFixApplied,
 }: {
   storeId: string;
   productId: string;
@@ -355,7 +355,7 @@ function CopyBtn({ text }: { text: string }) {
 export function QuickFixSheet({
   storeId,
   productId,
-  productTitle,
+  productTitle: _productTitle,
   isOpen,
   onClose,
 }: {

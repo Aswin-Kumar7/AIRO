@@ -414,7 +414,10 @@ export async function analyzeImageQuality(imageUrl: string | null, productTitle:
   if (!imageUrl) return noImage;
 
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { score: 50, productIdentifiable: true, issues: [], suggestions: [] };
+  // When Gemini key is missing we cannot assess image quality. Return a neutral score (70)
+  // with an empty issues array so no gap is written and the score doesn't suppress real issues.
+  // This avoids a phantom 50 that would trigger spurious image-quality gap entries.
+  if (!apiKey) return { score: 70, productIdentifiable: true, issues: [], suggestions: ["Set GEMINI_API_KEY to enable real image quality analysis."] };
 
   try {
     // Fetch image as base64 for Gemini Vision

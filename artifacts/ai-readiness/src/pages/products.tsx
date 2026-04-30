@@ -3,7 +3,7 @@ import { useStore } from "@/context/store-context";
 import { useListProducts, getListProductsQueryKey } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout";
 import { Input } from "@/components/ui/input";
-import { Loader2, Package, Search, AlertTriangle, CheckCircle, ChevronRight } from "lucide-react";
+import { Loader2, Package, Search, CheckCircle, ChevronRight } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 

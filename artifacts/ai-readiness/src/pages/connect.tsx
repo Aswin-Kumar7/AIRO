@@ -1,6 +1,4 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
-import { useStore } from "@/context/store-context";
 import { AppLayout } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +19,6 @@ function validateDomain(raw: string): string | null {
 export default function ConnectStore() {
   const [domain, setDomain] = useState("");
   const [error, setError] = useState("");
-  const [, navigate] = useLocation();
 
   useEffect(() => {
     const pending = sessionStorage.getItem("pendingStoreUrl");

@@ -1,6 +1,5 @@
 import { Router, type IRouter, Request, Response } from "express";
 import { eq, and, isNotNull, ne } from "drizzle-orm";
-import { DEMO_STORE_ID } from "../lib/demo";
 import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import {
   db,
@@ -16,9 +15,10 @@ import {
 import { logger } from "../lib/logger";
 import { generateId } from "../lib/id";
 import { analysisQueue } from "../lib/analysis-queue";
-import { executeAnalysisPipeline } from "../lib/analysis-pipeline";
+import { executeAnalysisPipeline, ASPIRATIONAL_BENCHMARK } from "../lib/analysis-pipeline";
 import { getOwnedStore } from "../lib/owned-store";
 import { getAiFallbackStats } from "../lib/ai-client";
+import { percentile } from "../lib/math-utils";
 
 const router: IRouter = Router();
 
@@ -32,7 +32,7 @@ const analysisLimiter = rateLimit({
 });
 
 router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, res: Response): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -150,7 +150,7 @@ router.post("/stores/:storeId/analyze", analysisLimiter, async (req: Request, re
 });
 
 router.get("/jobs/:jobId", async (req: Request, res: Response): Promise<void> => {
-  const jobId = Array.isArray(req.params.jobId) ? req.params.jobId[0] : req.params.jobId;
+  const jobId = req.params.jobId as string;
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, jobId));
   if (!job) {
     res.status(404).json({ error: "Job not found" });
@@ -177,7 +177,7 @@ router.get("/jobs/:jobId", async (req: Request, res: Response): Promise<void> =>
 });
 
 router.get("/stores/:storeId/summary", async (req: Request, res: Response): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -213,7 +213,7 @@ router.get("/stores/:storeId/summary", async (req: Request, res: Response): Prom
 });
 
 router.get("/stores/:storeId/gaps", async (req: Request, res: Response): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -252,7 +252,7 @@ router.get("/stores/:storeId/gaps", async (req: Request, res: Response): Promise
 });
 
 router.get("/stores/:storeId/consistency", async (req: Request, res: Response): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -275,18 +275,10 @@ router.get("/stores/:storeId/consistency", async (req: Request, res: Response): 
   });
 });
 
-const ASPIRATIONAL_BENCHMARK = {
-  clarity: 82, completeness: 78, trust: 75, tags: 72, consistency: 80, policy: 85, overall: 79,
-};
-
-function percentile(sortedValues: number[], p: number): number {
-  if (sortedValues.length === 0) return 0;
-  const idx = Math.ceil((p / 100) * sortedValues.length) - 1;
-  return sortedValues[Math.max(0, Math.min(idx, sortedValues.length - 1))]!;
-}
+// ASPIRATIONAL_BENCHMARK and percentile() are imported — single source of truth
 
 router.get("/stores/:storeId/benchmark", async (req: Request, res: Response): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -304,7 +296,7 @@ router.get("/stores/:storeId/benchmark", async (req: Request, res: Response): Pr
   const cachedSource = (summary?.benchmarkSource as "real-p90" | "aspirational" | null) ?? null;
   const cachedSampleSize = summary?.benchmarkSampleSize ?? 0;
 
-  let benchmarkScores: typeof ASPIRATIONAL_BENCHMARK;
+  let benchmarkScores: Record<keyof typeof ASPIRATIONAL_BENCHMARK, number>;
   let benchmarkSource: "real-p90" | "aspirational";
   let benchmarkSampleSize: number;
 

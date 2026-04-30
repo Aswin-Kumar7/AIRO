@@ -2,8 +2,11 @@ import { Resend } from "resend";
 import { logger } from "./logger";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-// onboarding@resend.dev works without domain verification — safe for Vercel deployments.
-// Set EMAIL_FROM to a verified custom domain address in production.
+// onboarding@resend.dev works without domain verification — safe for development/staging.
+// In production, set EMAIL_FROM to a verified custom domain address (e.g. reports@yourdomain.com).
+if (process.env.NODE_ENV === "production" && !process.env.EMAIL_FROM) {
+  logger.warn("EMAIL_FROM is not set — using unverified Resend sandbox address. Emails may be rejected in production. Set EMAIL_FROM to a verified sender.");
+}
 const FROM_ADDRESS = process.env.EMAIL_FROM ?? "onboarding@resend.dev";
 
 export interface ScoreData {

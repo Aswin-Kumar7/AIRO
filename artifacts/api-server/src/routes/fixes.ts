@@ -95,7 +95,7 @@ async function applyFixToShopify(
 }
 
 router.get("/stores/:storeId/fixes", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -137,8 +137,8 @@ router.get("/stores/:storeId/fixes", async (req, res): Promise<void> => {
 });
 
 router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const fixId = Array.isArray(req.params.fixId) ? req.params.fixId[0] : req.params.fixId;
+  const storeId = req.params.storeId as string;
+  const fixId = req.params.fixId as string;
   const { improvedContent } = req.body as { improvedContent?: string };
 
   const [fix] = await db
@@ -161,7 +161,7 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  const store = await getOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -237,7 +237,7 @@ router.post("/stores/:storeId/fixes/:fixId/apply", async (req, res): Promise<voi
 });
 
 router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const { fixIds } = req.body as { fixIds?: string[] };
 
   if (!fixIds || !Array.isArray(fixIds)) {
@@ -256,14 +256,18 @@ router.post("/stores/:storeId/fixes/bulk-apply", async (req, res): Promise<void>
     return;
   }
 
-  const results: Array<{ fixId: string; success: boolean; shopifySynced: boolean; shopifyError: string | null }> = [];
+  const results: Array<{ fixId: string; success: boolean; reason?: string; shopifySynced: boolean; shopifyError: string | null }> = [];
 
   for (const fixId of fixIds) {
     const [fix] = await db.select().from(fixesTable)
       .where(and(eq(fixesTable.id, fixId), eq(fixesTable.storeId, storeId)));
 
-    if (!fix || fix.status === "applied") {
-      results.push({ fixId, success: false, shopifySynced: false, shopifyError: null });
+    if (!fix) {
+      results.push({ fixId, success: false, reason: "not_found", shopifySynced: false, shopifyError: null });
+      continue;
+    }
+    if (fix.status === "applied") {
+      results.push({ fixId, success: false, reason: "already_applied", shopifySynced: fix.shopifySynced, shopifyError: fix.shopifyError ?? null });
       continue;
     }
 

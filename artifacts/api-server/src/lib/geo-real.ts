@@ -87,6 +87,8 @@ export interface GeoScanReport {
   topMissedQueries: string[];
   topCompetitors: string[];   // domains mentioned most often instead of you
   scannedAt: string;
+  /** API keys that were not configured — score should be treated as partial when this is non-empty */
+  configWarnings: string[];
   platformSummary: Array<{
     platform: string;
     label: string;
@@ -222,7 +224,14 @@ export function generateBuyerQueries(
   // 1 comparison / discovery query
   queries.push(fill(templates[6] ?? `best small online stores for {type} besides Amazon`, primaryType));
 
-  return [...new Set(queries)].slice(0, 6);
+  const unique = [...new Set(queries)];
+  // If dedup shrank the list below 6, pad with additional template variants (4.15).
+  const fallbackTemplates = templates.filter((_, i) => i >= 4);
+  for (let i = 0; unique.length < 6 && i < fallbackTemplates.length; i++) {
+    const candidate = fill(fallbackTemplates[i]!, primaryType);
+    if (!unique.includes(candidate)) unique.push(candidate);
+  }
+  return unique.slice(0, 6);
 }
 
 // ─── Tavily Search agent ──────────────────────────────────────────────────────
@@ -779,24 +788,19 @@ export async function runGeoScan(params: {
 
   logger.info({ storeId, queryCount: queries.length }, "Starting real GEO scan across 5 AI platforms");
 
-  // Run all queries across all 5 agents in parallel (respect rate limits)
-  const allResults: AgentQueryResult[] = [];
-
-  // Batch queries to avoid hammering APIs — 5 agents × BATCH queries per iteration
-  const BATCH = 3;
-  for (let i = 0; i < queries.length; i += BATCH) {
-    const batch = queries.slice(i, i + BATCH);
-    const batchResults = await Promise.all(
-      batch.flatMap((query) => [
-        queryTavily(query, storeDomain, storeName),
-        querySerpApi(query, storeDomain, storeName),
-        queryBedrock(query, storeDomain, storeName, productSample),
-        queryInternalAI(query, storeName, productSample),
-        queryOpenAI(query, storeName, productSample),
-      ]),
-    );
-    allResults.push(...batchResults);
-  }
+  // Run all queries across all 5 platforms in one parallel wave (3.4).
+  // Each individual agent call already has its own AbortSignal.timeout() so the
+  // total wall time is bounded by a single max(individual call latency) ≈ 20s,
+  // not BATCH_COUNT × 20s as the old sequential-batch approach produced.
+  const allResults: AgentQueryResult[] = await Promise.all(
+    queries.flatMap((query) => [
+      queryTavily(query, storeDomain, storeName),
+      querySerpApi(query, storeDomain, storeName),
+      queryBedrock(query, storeDomain, storeName, productSample),
+      queryInternalAI(query, storeName, productSample),
+      queryOpenAI(query, storeName, productSample),
+    ]),
+  );
 
   // Compute per-platform scores
   const tavilyResults = allResults.filter((r) => r.platform === "tavily");
@@ -947,6 +951,14 @@ export async function runGeoScan(params: {
     },
   ];
 
+  // Collect config warnings so the UI can explain a depressed score
+  const configWarnings: string[] = [];
+  if (!tavilyWorking)   configWarnings.push("TAVILY_API_KEY not set — live web search skipped");
+  if (!serpApiWorking)  configWarnings.push("SERPAPI_API_KEY not set — Google Search skipped");
+  if (!bedrockWorking)  configWarnings.push("AWS Bedrock not configured — Claude AI agent skipped");
+  if (!internalWorking) configWarnings.push("Internal AI (Gemini/OpenRouter) not configured — content quality agent skipped");
+  if (!openAiWorking)   configWarnings.push("OPENAI_API_KEY not set — OpenAI GPT agent skipped");
+
   return {
     storeId,
     storeDomain,
@@ -962,6 +974,7 @@ export async function runGeoScan(params: {
     topMissedQueries,
     topCompetitors,
     scannedAt,
+    configWarnings,
     platformSummary,
   };
 }

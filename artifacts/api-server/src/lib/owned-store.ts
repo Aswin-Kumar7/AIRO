@@ -2,16 +2,16 @@
  * Shared store ownership helper.
  *
  * The `router.param("storeId", ...)` middleware in routes/index.ts already
- * enforces per-user isolation at the DB level, so this function's auth check
- * is a defence-in-depth layer (belt-and-suspenders). The primary job here
- * is to fetch the store record so callers have access to fields like domain
- * and accessToken without an extra query.
+ * enforces per-user isolation at the DB level AND attaches the verified store
+ * to res.locals.ownedStore. getOwnedStore() checks that cache first so most
+ * handlers pay zero extra DB round-trips.
  *
  * Why a single shared function instead of copy-pasting across every route:
  * Any future changes (e.g., org-level ownership, IP allow-lists) need to
  * be made in exactly one place.
  */
 
+import type { Response } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, storesTable } from "@workspace/db";
 import { DEMO_STORE_ID } from "./demo";
@@ -28,13 +28,24 @@ export function isDemoStore(storeId: string): boolean {
 
 /**
  * Returns the store if it belongs to `userId`, or null otherwise.
- * Demo store is always readable by any authenticated user.
+ *
+ * Fast path: if the router.param middleware already verified ownership and
+ * attached the store to res.locals.ownedStore, we return it immediately
+ * (zero extra DB queries). Only falls through to a fresh SELECT for routes
+ * that are called without a :storeId param context (e.g. demo store, direct
+ * API calls that bypass the param middleware).
  */
 export async function getOwnedStore(
   storeId: string,
   userId: string | undefined,
+  res?: Response,
 ): Promise<OwnedStore | null> {
   if (!userId) return null;
+
+  // Fast path — param middleware already verified + attached the store
+  if (res?.locals.ownedStore && (res.locals.ownedStore as OwnedStore).id === storeId) {
+    return res.locals.ownedStore as OwnedStore;
+  }
 
   if (storeId === DEMO_STORE_ID) {
     const [store] = await db

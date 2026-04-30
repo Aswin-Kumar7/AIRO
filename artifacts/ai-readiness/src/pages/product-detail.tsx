@@ -15,7 +15,6 @@ import {
 import { Link, useLocation } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { QuickFixSheet } from "@/components/quick-fix-sheet";
-import { useToast } from "@/hooks/use-toast";
 import { getProductAiQa, type ProductQaResult } from "@/lib/features-api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Loader2, Bot, CheckCircle, HelpCircle, AlertCircle,
-  Target, Save, Shuffle, ChevronDown, ChevronUp,
+  Save, Shuffle,
 } from "lucide-react";
 import { getStorePerception, updateStorePositioning } from "@/lib/insights-api";
 import { ScoreRing } from "@/components/score-ring";
@@ -24,7 +24,6 @@ function PerceptionTab({ storeId }: { storeId: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [positioning, setPositioning] = useState("");
-  const [posOpen, setPosOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["store-perception", storeId],
@@ -43,7 +42,6 @@ function PerceptionTab({ storeId }: { storeId: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["store-perception", storeId] });
       toast({ title: "Positioning saved" });
-      setPosOpen(false);
     },
   });
 

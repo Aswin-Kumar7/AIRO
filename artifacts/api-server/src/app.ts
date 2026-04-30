@@ -18,7 +18,7 @@ if (process.env.NODE_ENV === "production" && SESSION_SECRET === DEV_SECRET) {
 
 // Routes that don't require authentication
 const PUBLIC_ROUTE_PREFIXES = [
-  "/api/health",
+  "/api/healthz",
   "/api/auth/",
   "/api/shopify/install",
   "/api/shopify/callback",
@@ -36,6 +36,22 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
 }
 
 const app: Express = express();
+
+// Trust the first reverse-proxy hop (Railway, Render, Vercel rewrites).
+// Required for secure cookies and correct req.ip / rate-limit key under a proxy.
+app.set("trust proxy", 1);
+
+// ─── Security headers ──────────────────────────────────────────────────────────
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
+  }
+  next();
+});
 
 app.use(
   pinoHttp({

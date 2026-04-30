@@ -124,7 +124,12 @@ function buildFallbackNarrative(
   const desiredPositioning = input.desiredPositioning
     ? ` The merchant wants the store to be perceived as: ${input.desiredPositioning}.`
     : "";
-  const agentNarrative = `${input.storeName} has ${input.products.length} analyzed products. An AI shopping agent can describe the catalog at a high level, but confidence improves when product details, trust signals, and FAQ coverage are more consistent.${desiredPositioning}`;
+  const criticalGapSummary = (() => {
+    const criticalGaps = (input.topGaps ?? []).filter(g => g.severity === "high").slice(0, 3);
+    if (criticalGaps.length === 0) return "";
+    return ` Top content issues include: ${criticalGaps.map(g => g.title).join("; ")}.`;
+  })();
+  const agentNarrative = `${input.storeName} has ${input.products.length} analyzed products. An AI shopping agent can describe the catalog at a high level, but confidence improves when product details, trust signals, and FAQ coverage are more consistent.${criticalGapSummary}${desiredPositioning}`;
 
   return {
     agentNarrative,

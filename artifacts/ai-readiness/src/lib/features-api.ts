@@ -1,23 +1,4 @@
-import { getCsrfToken } from "./csrf-service";
-async function requestJson<T>(input: string): Promise<T> {
-  let headers = {};
-  // Assume GET by default, but allow for future extension
-  const method = "GET";
-  if (method !== "GET" && method !== "HEAD") {
-    const csrfToken = await getCsrfToken();
-    headers = { ...headers, "x-csrf-token": csrfToken };
-  }
-  const res = await fetch(input, { credentials: "include", headers });
-  if (!res.ok) {
-    let message = `HTTP ${res.status}`;
-    try {
-      const data = (await res.json()) as { error?: string };
-      if (data.error) message = data.error;
-    } catch { /* ignore */ }
-    throw new Error(message);
-  }
-  return res.json() as Promise<T>;
-}
+import { requestJson } from "./http";
 
 export interface TopicalCluster {
   topic: string;

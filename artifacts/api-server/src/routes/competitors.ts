@@ -1,8 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, avg as sqlAvg } from "drizzle-orm";
-import { db, productsTable, storesTable } from "@workspace/db";
+import { db, productsTable } from "@workspace/db";
 import { analyzeCompetitor, buildGapInsights } from "../lib/competitor-analyzer";
-import { and } from "drizzle-orm";
 import { getOwnedStore } from "../lib/owned-store";
 
 const router: IRouter = Router();

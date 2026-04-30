@@ -8,8 +8,16 @@ import { ingestStore } from "./shopify-ingestion";
 import { resolveAccessToken } from "./crypto";
 import { generateId } from "./id";
 import { logger } from "./logger";
+import { buildProductRow } from "./math-utils";
 
 export async function fetchAndUpsertProducts(store: Store): Promise<{ productCount: number }> {
+  // 3.8: Refuse to delete+replace products while an analysis is running — the pipeline
+  // reads the products table mid-run and a concurrent delete would corrupt the analysis.
+  if (store.status === "analyzing") {
+    logger.warn({ storeId: store.id }, "fetchAndUpsertProducts skipped — analysis in progress");
+    return { productCount: store.productCount ?? 0 };
+  }
+
   logger.info({ storeId: store.id }, "Fetching products from Shopify");
 
   const snapshot = await ingestStore(store.domain, resolveAccessToken(store.accessToken));
@@ -22,22 +30,7 @@ export async function fetchAndUpsertProducts(store: Store): Promise<{ productCou
   // Replace products — analysis scores start fresh (analyzedAt: null)
   await db.delete(productsTable).where(eq(productsTable.storeId, store.id));
   await db.insert(productsTable).values(
-    snapshot.products.map((p) => ({
-      id: generateId(),
-      storeId: store.id,
-      shopifyProductId: p.shopifyId,
-      title: p.title,
-      description: p.description,
-      productType: p.productType,
-      vendor: p.vendor,
-      tags: p.tags,
-      collections: p.collections,
-      imageUrl: p.imageUrl,
-      price: p.price,
-      reviewCount: p.reviewCount,
-      reviewRating: p.reviewRating,
-      hasStructuredData: p.hasStructuredData,
-    })),
+    snapshot.products.map((p) => buildProductRow(store.id, p)),
   );
 
   await db.update(storesTable).set({

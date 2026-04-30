@@ -31,6 +31,9 @@ type Gap = {
   isFixed: boolean;
 };
 
+/** Numeric rank for each severity level — lower = higher priority. */
+const SEVERITY_RANK: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
 // ─── Visual config ────────────────────────────────────────────────────────────
 
 const SEV_DOT: Record<string, string> = {
@@ -308,18 +311,22 @@ export default function Issues() {
 
   const displayGaps = showFixed ? allGaps : openGaps;
 
-  const quickWins = displayGaps.filter(
-    (g) =>
-      !g.isFixed &&
-      (g.effortLevel === "low" || !g.effortLevel) &&
-      (g.impactScore ?? 50) >= 40,
+  // ID-based sets give deterministic bucket assignment regardless of object reference
+  // stability across query re-renders (4.7: non-deterministic .includes() fixed).
+  const quickWinIds = new Set(
+    displayGaps
+      .filter((g) => !g.isFixed && (g.effortLevel === "low" || !g.effortLevel) && (g.impactScore ?? 50) >= 40)
+      .map((g) => g.id),
   );
-  const highPriority = displayGaps.filter(
-    (g) => !g.isFixed && g.severity === "high" && !quickWins.includes(g),
+  const highPriorityIds = new Set(
+    displayGaps
+      .filter((g) => !g.isFixed && g.severity === "high" && !quickWinIds.has(g.id))
+      .map((g) => g.id),
   );
+  const quickWins = displayGaps.filter((g) => quickWinIds.has(g.id));
+  const highPriority = displayGaps.filter((g) => highPriorityIds.has(g.id));
   const improvements = displayGaps.filter(
-    (g) =>
-      !g.isFixed && !quickWins.includes(g) && !highPriority.includes(g),
+    (g) => !g.isFixed && !quickWinIds.has(g.id) && !highPriorityIds.has(g.id),
   );
 
   const critCount = openGaps.filter((g) => g.severity === "high").length;
@@ -328,8 +335,8 @@ export default function Issues() {
   const plan = planData?.prioritizedActionPlan ?? [];
   const sorted = [...plan].sort(
     (a, b) =>
-      ({ high: 0, medium: 1, low: 2 }[a.severity] ?? 2) -
-      ({ high: 0, medium: 1, low: 2 }[b.severity] ?? 2),
+      (SEVERITY_RANK[a.severity] ?? 2) -
+      (SEVERITY_RANK[b.severity] ?? 2),
   );
 
   function refresh() {
@@ -487,8 +494,8 @@ export default function Issues() {
                   if (items.length === 0) return null;
                   const offset = sorted.filter(
                     (i) =>
-                      ({ high: 0, medium: 1, low: 2 }[i.severity] ?? 2) <
-                      ({ high: 0, medium: 1, low: 2 }[cfg.sev] ?? 2),
+                      (SEVERITY_RANK[i.severity] ?? 2) <
+                      (SEVERITY_RANK[cfg.sev] ?? 2),
                   ).length;
                   return (
                     <div key={cfg.sev} className="mb-6">

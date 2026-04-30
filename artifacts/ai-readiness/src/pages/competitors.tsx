@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Loader2, Plus, Trash2, BarChart3, TrendingUp, TrendingDown,
+  Loader2, Plus, Trash2, BarChart3, TrendingUp,
   AlertCircle, CheckCircle2, Globe, Lightbulb, Search, Wifi,
 } from "lucide-react";
 

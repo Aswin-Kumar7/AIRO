@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useStore } from "@/context/store-context";
 import { useListStores, getListStoresQueryKey } from "@workspace/api-client-react";
 import { OnboardingModal } from "@/components/onboarding-modal";
@@ -15,12 +15,12 @@ import {
   useListGaps,
   getListGapsQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import {
-  BarChart3, Bot, Activity, Clock, Loader2,
+  Bot, Activity, Clock, Loader2,
   Package, Play, Trash2, AlertTriangle, ArrowRight,
-  Globe, Zap, TrendingUp, ChevronRight, Store, Check, Search, Wifi, Sparkles,
+  Globe, Zap, TrendingUp, Store, Check, Search, Wifi, Sparkles,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
@@ -41,9 +41,21 @@ import { getSnapshots, type ScoreSnapshot } from "@/lib/schedule-api";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /**
+ * The generated Store schema omits backend-only fields that the /stores/:id route
+ * does return. Extend here to avoid unsafe `any` casts (4.18 pattern: explicit extension
+ * beats silent cast).
+ */
+type StoreWithMeta = { productsFetched?: boolean; [k: string]: unknown };
+
+/**
  * The generated Gap schema doesn't include backend-only fields like ruleId and
- * impactScore, but the /gaps route does return them. This interface covers both
- * the generated fields and the extra backend-only fields used on this page.
+ * impactScore, but the /gaps route DOES return them (see analysis.ts GET /gaps, line ~248).
+ * This interface covers both the generated fields and the extra backend-only fields.
+ *
+ * 4.18: If the backend ever stops returning ruleId/impactScore, seoGaps would silently
+ * become empty and seoScore would jump to 100. The `store?.lastAnalyzed` guard below
+ * prevents the 100-on-unanalyzed false-positive, but a backend regression would still
+ * produce a misleading score. The TODO is to add ruleId/impactScore to the OpenAPI spec.
  */
 interface GapWithMeta {
   id: string;
@@ -52,7 +64,9 @@ interface GapWithMeta {
   severity?: string;
   category?: string;
   isFixed?: boolean;
+  /** Populated by GET /gaps — must remain in the route's serialization. */
   ruleId?: string | null;
+  /** Populated by GET /gaps — must remain in the route's serialization. */
   impactScore?: number | null;
 }
 
@@ -72,7 +86,7 @@ function timeAgoLabel(timestamp: string | null): string {
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  label, score, color, sub, href, unscanned, delta,
+  label, score, color: _color, sub, href, unscanned, delta,
 }: {
   label: string; score: number; color: string; sub?: string; href: string; unscanned?: boolean; delta?: number | null;
 }) {
@@ -196,35 +210,68 @@ export default function Dashboard() {
   const [analyzing, setAnalyzing] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [snapshots, setSnapshots] = useState<ScoreSnapshot[]>([]);
-  const [geoSummary, setGeoSummary] = useState<{ lastGeoScore: number | null } | null>(null);
-  const [perceptionSummary, setPerceptionSummary] = useState<{
+  // Stable ref to the poll interval so we can clear it on unmount or completion
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Snapshots (trend chart + deltas) ─────────────────────────────────────────
+  const { data: snapshots = [] } = useQuery<ScoreSnapshot[]>({
+    queryKey: ["snapshots", activeStoreId],
+    queryFn: () => getSnapshots(activeStoreId!, 10),
+    enabled: !!activeStoreId,
+    staleTime: 60_000,
+  });
+
+  // ── GEO visibility summary ────────────────────────────────────────────────────
+  const { data: geoSummary } = useQuery<{ lastGeoScore: number | null } | null>({
+    queryKey: ["visibility-summary", activeStoreId],
+    queryFn: () =>
+      fetch(`/api/stores/${activeStoreId}/visibility-summary`, { credentials: "include" })
+        .then((r) => r.ok ? r.json() : null)
+        .catch(() => null),
+    enabled: !!activeStoreId,
+    staleTime: 5 * 60_000,
+  });
+
+  // ── AI Perception summary ─────────────────────────────────────────────────────
+  const { data: perceptionSummary } = useQuery<{
     agentNarrative: string;
     unansweredQuestions: string[];
     ambiguities: string[];
-  } | null>(null);
-  const [listingReadiness, setListingReadiness] = useState<{
+  } | null>({
+    queryKey: ["perception", activeStoreId],
+    queryFn: () =>
+      fetch(`/api/stores/${activeStoreId}/perception`, { credentials: "include" })
+        .then((r) => r.ok ? r.json() : null)
+        .catch(() => null),
+    enabled: !!activeStoreId,
+    staleTime: 5 * 60_000,
+    select: (d) =>
+      d?.agentNarrative
+        ? { agentNarrative: d.agentNarrative, unansweredQuestions: d.unansweredQuestions ?? [], ambiguities: d.ambiguities ?? [] }
+        : null,
+  });
+
+  // ── Listing readiness ─────────────────────────────────────────────────────────
+  const { data: listingReadiness } = useQuery<{
     overallScore: number;
     grade: string;
     topRecommendations: string[];
-  } | null>(null);
+  } | null>({
+    queryKey: ["listing-readiness", activeStoreId],
+    queryFn: () =>
+      fetch(`/api/stores/${activeStoreId}/listing-readiness`, { credentials: "include" })
+        .then((r) => r.ok ? r.json() : null)
+        .catch(() => null),
+    enabled: !!activeStoreId,
+    staleTime: 5 * 60_000,
+    select: (d) =>
+      d && typeof d.overallScore === "number"
+        ? { overallScore: d.overallScore, grade: d.grade, topRecommendations: d.topRecommendations ?? [] }
+        : null,
+  });
 
-  useEffect(() => {
-    if (!activeStoreId) return;
-    getSnapshots(activeStoreId, 10).then(setSnapshots).catch(() => {});
-    fetch(`/api/stores/${activeStoreId}/visibility-summary`, { credentials: "include" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d) setGeoSummary({ lastGeoScore: d.lastGeoScore ?? null }); })
-      .catch(() => {});
-    fetch(`/api/stores/${activeStoreId}/perception`, { credentials: "include" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d && d.agentNarrative) setPerceptionSummary({ agentNarrative: d.agentNarrative, unansweredQuestions: d.unansweredQuestions ?? [], ambiguities: d.ambiguities ?? [] }); })
-      .catch(() => {});
-    fetch(`/api/stores/${activeStoreId}/listing-readiness`, { credentials: "include" })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => { if (d && typeof d.overallScore === "number") setListingReadiness({ overallScore: d.overallScore, grade: d.grade, topRecommendations: d.topRecommendations ?? [] }); })
-      .catch(() => {});
-  }, [activeStoreId]);
+  // Clean up poll interval if the component unmounts while analysis is running
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const { data: allStores = [], isLoading: storesLoading } = useListStores({
     query: { staleTime: 30_000, queryKey: getListStoresQueryKey() },
@@ -247,11 +294,41 @@ export default function Dashboard() {
       enabled: !!activeStoreId,
       queryKey: getGetStoreQueryKey(activeStoreId!),
       refetchInterval: (query) => {
-        const data = query.state.data as { productsFetched?: boolean } | undefined;
-        return data && !data.productsFetched ? 3000 : false;
+        const data = query.state.data as { productsFetched?: boolean; status?: string } | undefined;
+        // Poll while products haven't loaded yet OR while an analysis job is running
+        if (!data?.productsFetched) return 3000;
+        if (data.status === "analyzing") return 4000;
+        return false;
       },
     },
   });
+
+  // When the store transitions out of "analyzing" state, finalise the analysis flow.
+  // This replaces the manual setInterval in handleAnalyze — no race condition, no leak.
+  useEffect(() => {
+    if (!analyzing) return;
+    if (store?.status !== "analyzed" && store?.status !== "error") return;
+
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setAnalyzing(false);
+
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: getGetStoreSummaryQueryKey(activeStoreId!) }),
+      queryClient.invalidateQueries({ queryKey: getGetStoreActivityQueryKey(activeStoreId!) }),
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey(activeStoreId!) }),
+      queryClient.invalidateQueries({ queryKey: getListGapsQueryKey(activeStoreId!) }),
+      queryClient.invalidateQueries({ queryKey: ["snapshots", activeStoreId] }),
+      queryClient.invalidateQueries({ queryKey: ["perception", activeStoreId] }),
+      queryClient.invalidateQueries({ queryKey: ["listing-readiness", activeStoreId] }),
+    ]);
+
+    toast({
+      title: store.status === "error" ? "Analysis failed" : "Analysis complete",
+      description: store.status === "error" ? "Check activity for details." : "Scores updated.",
+      variant: store.status === "error" ? "destructive" : undefined,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store?.status, analyzing]);
 
   const { data: summary, isLoading: summaryLoading } = useGetStoreSummary(activeStoreId!, {
     query: { enabled: !!activeStoreId, queryKey: getGetStoreSummaryQueryKey(activeStoreId!) },
@@ -261,7 +338,13 @@ export default function Dashboard() {
     query: {
       enabled: !!activeStoreId,
       queryKey: getListProductsQueryKey(activeStoreId!),
-      refetchInterval: (query) => (!query.state.data || query.state.data.length === 0 ? 3000 : false),
+      // Only poll while the store hasn't yet fetched products from Shopify.
+      // Once productsFetched is true (even if product count is 0), stop — otherwise
+      // a store with a genuinely empty catalog would poll forever (4.8).
+      refetchInterval: (query) => {
+        if ((store as unknown as StoreWithMeta)?.productsFetched) return false;
+        return !query.state.data || query.state.data.length === 0 ? 3000 : false;
+      },
     },
   });
 
@@ -281,22 +364,28 @@ export default function Dashboard() {
     : 0;
   // SEO = 100 minus weighted impact of detected SEO/Schema gaps.
   // Each gap deducts (impactScore / 10) points — a high-impact (90pt) gap costs 9pts, a low one ~3pts.
-  // There are 11 possible SEO rule IDs; max total deduction is ~99pts.
+  // Guard: only compute after an analysis has run — an empty gaps array on an unanalyzed
+  // store would otherwise produce a misleading "SEO Score 100".
   const seoGaps = (gaps as GapWithMeta[] | undefined)?.filter(
     (g) => g.ruleId?.startsWith("SEO_") || g.ruleId?.startsWith("SCHEMA_"),
   ) ?? [];
-  const seoScore = Math.max(
-    0,
-    Math.round(100 - seoGaps.reduce((sum, g) => sum + ((g.impactScore ?? 50) / 10), 0)),
-  );
+  const seoScore = store?.lastAnalyzed
+    ? Math.max(0, Math.round(100 - seoGaps.reduce((sum, g) => sum + ((g.impactScore ?? 50) / 10), 0)))
+    : null;
   // GEO = citation % from the most recent automated scan; null = never scanned
   const geoScore = geoSummary?.lastGeoScore ?? null;
   const geoScoreValue = geoScore ?? 0;
 
-  // Real score deltas from the two most recent snapshots (oldest → newest in reverse-chrono list)
-  const prevSnapshot = snapshots.length >= 2 ? snapshots[1] : null;  // snapshots[0] = latest
-  const overallDelta = prevSnapshot && summary ? Math.round((summary.overallScore ?? 0) - (prevSnapshot.overallScore ?? 0)) : null;
-  const aeoPrev = prevSnapshot ? Math.round(((prevSnapshot.clarityScore ?? 0) + (prevSnapshot.completenessScore ?? 0) + (prevSnapshot.tagScore ?? 0)) / 3) : null;
+  // Real score deltas — use only non-error snapshots (4.4: null overallScore = error run).
+  // Error snapshots have overallScore:null; including them would show a fake +score delta.
+  const validSnapshots = snapshots.filter((s) => s.overallScore != null);
+  const prevSnapshot = validSnapshots.length >= 2 ? validSnapshots[1] : null;  // [0] = latest
+  const overallDelta = prevSnapshot && summary
+    ? Math.round((summary.overallScore ?? 0) - (prevSnapshot.overallScore ?? 0))
+    : null;
+  const aeoPrev = prevSnapshot
+    ? Math.round(((prevSnapshot.clarityScore ?? 0) + (prevSnapshot.completenessScore ?? 0) + (prevSnapshot.tagScore ?? 0)) / 3)
+    : null;
   const aeoDelta = aeoPrev !== null ? aeoScore - aeoPrev : null;
 
   const criticalGaps = (() => {
@@ -311,9 +400,10 @@ export default function Dashboard() {
   const lowScoreProducts = products?.filter((p) => (p.score?.overall ?? 100) < 50).slice(0, 5) ?? [];
   const pendingFixes = summary?.pendingFixes ?? 0;
 
-  // Build trend from real snapshots only — never fabricate historical data
-  const trendData = snapshots.length >= 1
-    ? [...snapshots].reverse().map((s) => ({
+  // Build trend from valid (non-error) snapshots only — error runs have overallScore:null
+  // and would appear as a false zero dip in the chart (4.4).
+  const trendData = validSnapshots.length >= 1
+    ? [...validSnapshots].reverse().map((s) => ({
         label: new Date(s.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
         overall: s.overallScore ?? 0,
       }))
@@ -322,33 +412,27 @@ export default function Dashboard() {
   // Handlers
   async function handleAnalyze() {
     if (!activeStoreId) return;
+    
+    // Optimistically set to "analyzing" so the useEffect doesn't instantly fire
+    // when re-analyzing a store that is already "analyzed" in the cache.
+    queryClient.setQueryData(getGetStoreQueryKey(activeStoreId), (old: any) => 
+      old ? { ...old, status: "analyzing" } : old
+    );
+    
     setAnalyzing(true);
+    
     try {
       await analyzeStore.mutateAsync({ storeId: activeStoreId });
-      const poll = setInterval(async () => {
-        await queryClient.invalidateQueries({ queryKey: getGetStoreQueryKey(activeStoreId) });
-        const storeData = queryClient.getQueryData<{ status: string }>(getGetStoreQueryKey(activeStoreId));
-        if (storeData?.status === "analyzed" || storeData?.status === "error") {
-          clearInterval(poll);
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: getGetStoreSummaryQueryKey(activeStoreId) }),
-            queryClient.invalidateQueries({ queryKey: getGetStoreActivityQueryKey(activeStoreId) }),
-            queryClient.invalidateQueries({ queryKey: getListProductsQueryKey(activeStoreId) }),
-            queryClient.invalidateQueries({ queryKey: getListGapsQueryKey(activeStoreId) }),
-          ]);
-          // Refresh snapshot history so the trend chart updates immediately
-          getSnapshots(activeStoreId, 10).then(setSnapshots).catch(() => {});
-          setAnalyzing(false);
-          toast({
-            title: storeData?.status === "error" ? "Analysis failed" : "Analysis complete",
-            description: storeData?.status === "error" ? "Check activity for details." : "Scores updated.",
-            variant: storeData?.status === "error" ? "destructive" : undefined,
-          });
-        }
-      }, 4000);
+      // Completion is detected by the useEffect watching store.status above.
+      // The store hook's refetchInterval already polls at 4 s while status==="analyzing".
     } catch (err) {
       setAnalyzing(false);
-      toast({ title: "Could not start analysis", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+      queryClient.invalidateQueries({ queryKey: getGetStoreQueryKey(activeStoreId) });
+      toast({
+        title: "Could not start analysis",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
     }
   }
 
@@ -527,6 +611,17 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
+              {/* ── Stale-score warning: last analysis run failed (4.19) ── */}
+              {store?.status === "error" && (
+                <div className="flex items-center gap-3 px-4 py-3 rounded-[12px] bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20 text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                  <p className="text-[13px] font-medium">
+                    The last analysis run failed — scores shown are from a previous run and may be stale.
+                    Check the <span className="font-bold">Activity</span> feed for details, then re-run analysis.
+                  </p>
+                </div>
+              )}
+
               {/* ── KPI score row ── */}
               <div className="grid grid-cols-4 gap-4">
                 <KpiCard
@@ -547,10 +642,11 @@ export default function Dashboard() {
                 />
                 <KpiCard
                   label="SEO Score"
-                  score={seoScore}
+                  score={seoScore ?? 0}
                   color="#8b5cf6"
-                  sub={`${seoGaps.length} technical issue${seoGaps.length !== 1 ? "s" : ""} detected`}
+                  sub={seoScore !== null ? `${seoGaps.length} technical issue${seoGaps.length !== 1 ? "s" : ""} detected` : "Run analysis to calculate"}
                   href="/intelligence/seo"
+                  unscanned={seoScore === null}
                 />
                 <KpiCard
                   label="GEO Score"

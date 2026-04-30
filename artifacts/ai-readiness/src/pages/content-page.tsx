@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Loader2, BookOpen, AlertCircle, TrendingUp,
-  Package, Target, Link2, ArrowRight, Zap,
+  Target, Link2, ArrowRight, Zap,
   MessageSquare, XCircle, Search,
 } from "lucide-react";
 import {

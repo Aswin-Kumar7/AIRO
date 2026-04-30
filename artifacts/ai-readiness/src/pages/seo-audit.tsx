@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { useStore } from "@/context/store-context";
-import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Loader2, Search, CheckCircle2, XCircle, AlertCircle,
+  Loader2, Search, CheckCircle2, AlertCircle,
   Globe, FileSearch, Link2, AlertTriangle, Zap, Info,
   ChevronRight, ChevronDown, ChevronUp,
 } from "lucide-react";
@@ -46,14 +44,6 @@ const RULE_ICONS: Record<string, React.FC<{ className?: string }>> = {
   SCHEMA_OFFERS_INCOMPLETE: AlertTriangle,
   SCHEMA_MISSING_BRAND: AlertTriangle,
   TAXONOMY_TOO_GENERIC: Search,
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  robots: "Crawlability",
-  sitemap: "Sitemap",
-  meta: "Meta Tags",
-  schema: "Structured Data",
-  taxonomy: "Taxonomy",
 };
 
 function getRuleCategory(ruleId: string): string {

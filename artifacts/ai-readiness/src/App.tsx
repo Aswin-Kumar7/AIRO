@@ -5,9 +5,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { StoreProvider } from "@/context/store-context";
 import { AuthProvider, useAuth } from "@/context/auth-context";
-import { Loader2, AlertCircle, Zap } from "lucide-react";
+import { AlertCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, type ComponentType } from "react";
+import { useState, useEffect, type ComponentType } from "react";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
@@ -26,7 +26,6 @@ import SeoAuditPage from "@/pages/seo-audit";
 import GeoTrackerPage from "@/pages/geo-tracker";
 import SchedulePage from "@/pages/schedule";
 import CompetitorsPage from "@/pages/competitors";
-import BuyerJourneyPage from "@/pages/buyer-journey";
 import ListingReadinessPage from "@/pages/listing-readiness";
 
 const queryClient = new QueryClient({
@@ -38,6 +37,12 @@ const queryClient = new QueryClient({
 function ProtectedRoute({ component: Component, ...props }: { component: ComponentType<any> } & any) {
   const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
+
+  // Navigate in an effect — calling navigate() during render is a side-effect
+  // that triggers a React warning in strict mode and causes a double-render flash.
+  useEffect(() => {
+    if (!isLoading && !user) navigate("/");
+  }, [isLoading, user, navigate]);
 
   if (isLoading) {
     return (
@@ -51,10 +56,7 @@ function ProtectedRoute({ component: Component, ...props }: { component: Compone
     );
   }
 
-  if (!user) {
-    navigate("/");
-    return null;
-  }
+  if (!user) return null;
 
   return <Component {...props} />;
 }
@@ -173,9 +175,6 @@ function Router() {
         </Route>
         <Route path="/competitors">
           {() => <ProtectedRoute component={CompetitorsPage} />}
-        </Route>
-        <Route path="/buyer-journey">
-          {() => <ProtectedRoute component={BuyerJourneyPage} />}
         </Route>
         <Route path="/listing-readiness">
           {() => <ProtectedRoute component={ListingReadinessPage} />}

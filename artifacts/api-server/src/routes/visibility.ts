@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and, desc } from "drizzle-orm";
-import { db, storesTable, visibilityChecksTable, productsTable } from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
+import { db, visibilityChecksTable, productsTable } from "@workspace/db";
 import { generateId } from "../lib/id";
 import { runGeoScan } from "../lib/geo-real";
 import { getOwnedStore, isDemoStore } from "../lib/owned-store";
@@ -9,7 +9,7 @@ const router: IRouter = Router();
 
 /** GET /stores/:storeId/visibility-checks — list all citation checks */
 router.get("/stores/:storeId/visibility-checks", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -34,7 +34,7 @@ router.get("/stores/:storeId/visibility-checks", async (req, res): Promise<void>
 
 /** POST /stores/:storeId/visibility-checks — log a new citation check */
 router.post("/stores/:storeId/visibility-checks", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -80,7 +80,7 @@ router.post("/stores/:storeId/visibility-checks", async (req, res): Promise<void
 
 /** GET /stores/:storeId/visibility-summary — citation rate & trend */
 router.get("/stores/:storeId/visibility-summary", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -149,7 +149,7 @@ router.get("/stores/:storeId/visibility-summary", async (req, res): Promise<void
  *   - Internal AI (content quality recommendation test via Gemini/OpenRouter/Groq)
  */
 router.post("/stores/:storeId/geo/scan", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   if (isDemoStore(storeId)) {

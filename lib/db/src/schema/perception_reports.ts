@@ -1,9 +1,11 @@
 import { pgTable, text, timestamp, jsonb, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { storesTable } from "./stores";
 
 export const perceptionReportsTable = pgTable("perception_reports", {
-  storeId: text("store_id").primaryKey(),
+  // PK doubles as FK — storeId is unique so no separate index needed
+  storeId: text("store_id").primaryKey().references(() => storesTable.id, { onDelete: "cascade" }),
   agentNarrative: text("agent_narrative").notNull().default(""),
   unansweredQuestions: jsonb("unanswered_questions").notNull().default([]),
   ambiguities: jsonb("ambiguities").notNull().default([]),

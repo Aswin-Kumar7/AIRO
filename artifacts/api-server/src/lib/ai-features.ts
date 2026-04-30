@@ -130,7 +130,7 @@ function safeParseJson(raw: string): unknown {
 
 export async function runQuerySimulation(
   storeName: string,
-  storeDescription: string,
+  _storeDescription: string,
   products: Array<{ id: string; title: string; description: string | null; productType: string | null; tags: string[]; price: string | null }>
 ): Promise<QuerySimulationResult[]> {
   const catalogSnapshot = products.slice(0, 15).map(p => ({

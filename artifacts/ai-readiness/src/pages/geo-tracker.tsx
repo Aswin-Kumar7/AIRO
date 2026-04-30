@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Loader2, Globe, CheckCircle2, XCircle, AlertCircle,
-  Zap, TrendingUp, TrendingDown, Search, BarChart3,
+  Loader2, CheckCircle2, XCircle, AlertCircle,
+  Zap, TrendingDown, Search, BarChart3,
   ChevronDown, ChevronUp, Sparkles, Radio,
 } from "lucide-react";
 

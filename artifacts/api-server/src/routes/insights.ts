@@ -1,12 +1,12 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   db,
   perceptionReportsTable,
   productsTable,
-  storesTable,
   storeSummariesTable,
 } from "@workspace/db";
+type PolicyBodiesMap = Record<string, string | null | undefined>;
 import { buildTagOptimizerItems } from "../lib/tag-optimizer";
 import { computeListingReadiness } from "../lib/listing-readiness";
 import { getOwnedStore } from "../lib/owned-store";
@@ -14,13 +14,13 @@ import { getOwnedStore } from "../lib/owned-store";
 const router: IRouter = Router();
 
 router.get("/stores/:storeId/tag-optimizer", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  const store = await getOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -43,7 +43,7 @@ router.get("/stores/:storeId/tag-optimizer", async (req, res): Promise<void> => 
 });
 
 router.get("/stores/:storeId/perception", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -90,12 +90,12 @@ router.get("/stores/:storeId/perception", async (req, res): Promise<void> => {
 
 // GET /stores/:storeId/listing-readiness
 router.get("/stores/:storeId/listing-readiness", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(404).json({ error: "Store not found." }); return; }
 
-  const [products, summary] = await Promise.all([
+  const [products, summary, perceptionReport] = await Promise.all([
     db.select({
       description: productsTable.description,
       imageUrl: productsTable.imageUrl,
@@ -110,6 +110,7 @@ router.get("/stores/:storeId/listing-readiness", async (req, res): Promise<void>
       imageQualityScore: productsTable.imageQualityScore,
     }).from(productsTable).where(eq(productsTable.storeId, storeId)),
     db.select({ policyScore: storeSummariesTable.policyScore, completenessScore: storeSummariesTable.completenessScore, trustScore: storeSummariesTable.trustScore }).from(storeSummariesTable).where(eq(storeSummariesTable.storeId, storeId)).then((rows) => rows[0] ?? null),
+    db.select({ policyBodies: perceptionReportsTable.policyBodies }).from(perceptionReportsTable).where(eq(perceptionReportsTable.storeId, storeId)).then((rows) => rows[0] ?? null),
   ]);
 
   if (products.length === 0) {
@@ -120,6 +121,12 @@ router.get("/stores/:storeId/listing-readiness", async (req, res): Promise<void>
   const avg = (vals: number[]) => vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
 
   const policyScore = summary?.policyScore ?? 0;
+  // Derive real policy booleans from stored policy text bodies (set during analysis).
+  // Fall back to policyScore heuristic only when policy bodies haven't been fetched yet.
+  const policyBodies = (perceptionReport?.policyBodies as PolicyBodiesMap | null) ?? null;
+  const hasRefundPolicy = policyBodies ? Boolean(policyBodies["refund"]?.trim()) : policyScore > 0;
+  const hasShippingPolicy = policyBodies ? Boolean(policyBodies["shipping"]?.trim()) : policyScore > 0;
+  const hasPrivacyPolicy = policyBodies ? Boolean(policyBodies["privacy"]?.trim()) : policyScore > 20;
 
   const stripHtml = (html: string | null) =>
     (html ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -143,9 +150,9 @@ router.get("/stores/:storeId/listing-readiness", async (req, res): Promise<void>
     avgImageQualityScore: avg(products.filter((p) => p.imageQualityScore != null).map((p) => p.imageQualityScore!)),
     // % of products with completenessScore >= 60 (decent quality)
     productsWithDecentCompleteness: products.filter((p) => (p.completenessScore ?? 0) >= 60).length,
-    hasRefundPolicy: policyScore > 0,
-    hasShippingPolicy: policyScore > 0,
-    hasPrivacyPolicy: policyScore > 20,
+    hasRefundPolicy,
+    hasShippingPolicy,
+    hasPrivacyPolicy,
   });
 
   res.json(report);

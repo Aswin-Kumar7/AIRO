@@ -32,7 +32,6 @@ export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const { logout } = useAuth();
   const { theme, setTheme } = useTheme();
@@ -62,7 +61,6 @@ export default function Settings() {
       setConfirmDeleteId(storeId);
       return;
     }
-    setDeletingId(storeId);
     try {
       await deleteStore(storeId);
       if (activeStoreId === storeId) {
@@ -74,8 +72,6 @@ export default function Settings() {
       setConfirmDeleteId(null);
     } catch {
       toast({ title: "Failed to remove store", variant: "destructive" });
-    } finally {
-      setDeletingId(null);
     }
   }
 

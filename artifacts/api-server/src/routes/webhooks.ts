@@ -5,6 +5,20 @@ import { db, productsTable, storesTable, activityTable } from "@workspace/db";
 import { normalizeShopifyDomain } from "../lib/shopify-client";
 import { generateId } from "../lib/id";
 
+// In-memory dedup set for webhook idempotency: key = storeId:shopifyProductId:type, TTL 60s.
+// Prevents duplicate activity entries when Shopify retries a webhook concurrently.
+const recentWebhooks = new Map<string, number>();
+function isDuplicateWebhook(key: string): boolean {
+  const now = Date.now();
+  // Purge stale entries
+  for (const [k, ts] of recentWebhooks) {
+    if (now - ts > 60_000) recentWebhooks.delete(k);
+  }
+  if (recentWebhooks.has(key)) return true;
+  recentWebhooks.set(key, now);
+  return false;
+}
+
 const router: IRouter = Router();
 
 interface ShopifyProductWebhookPayload {
@@ -35,28 +49,48 @@ function getRawBody(req: import("express").Request): Buffer | null {
   return req.rawBody ?? null;
 }
 
-// ─── PRODUCTS_UPDATE ──────────────────────────────────────────────────────────
-
-router.post("/shopify/webhooks/products-update", async (req, res): Promise<void> => {
+/**
+ * Validates a Shopify webhook request: checks HMAC, parses the raw body, and
+ * normalizes the shop domain. Returns an error string on failure or `null` on
+ * success (with `rawBody` and `normalizedDomain` populated).
+ */
+function validateWebhookRequest(req: import("express").Request): { error: string; status: number } | { error: null; rawBody: Buffer; normalizedDomain: string } {
   const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string | undefined;
   const shopDomain = req.headers["x-shopify-shop-domain"] as string | undefined;
   const secret = process.env.SHOPIFY_API_SECRET ?? "";
 
   if (!hmacHeader || !shopDomain || !secret) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
+    return { error: "Unauthorized", status: 401 };
   }
 
   const rawBody = getRawBody(req);
   if (!rawBody) {
-    res.status(400).json({ error: "Raw body unavailable" });
-    return;
+    return { error: "Raw body unavailable", status: 400 };
   }
 
   if (!verifyWebhookHmac(rawBody, hmacHeader, secret)) {
-    res.status(401).json({ error: "HMAC verification failed" });
+    return { error: "HMAC verification failed", status: 401 };
+  }
+
+  let normalizedDomain: string;
+  try {
+    normalizedDomain = normalizeShopifyDomain(shopDomain);
+  } catch {
+    return { error: "Invalid shop domain", status: 400 };
+  }
+
+  return { error: null, rawBody, normalizedDomain };
+}
+
+// ─── PRODUCTS_UPDATE ──────────────────────────────────────────────────────────
+
+router.post("/shopify/webhooks/products-update", async (req, res): Promise<void> => {
+  const validation = validateWebhookRequest(req);
+  if (validation.error !== null) {
+    res.status(validation.status).json({ error: validation.error });
     return;
   }
+  const { rawBody, normalizedDomain } = validation;
 
   // Ack immediately — Shopify retries if no 200 within 5s
   res.status(200).end();
@@ -65,13 +99,6 @@ router.post("/shopify/webhooks/products-update", async (req, res): Promise<void>
     try {
       const payload = JSON.parse(rawBody.toString()) as ShopifyProductWebhookPayload;
       const shopifyProductId = `gid://shopify/Product/${payload.id}`;
-
-      let normalizedDomain: string;
-      try {
-        normalizedDomain = normalizeShopifyDomain(shopDomain);
-      } catch {
-        return;
-      }
 
       // Find the store this webhook belongs to
       const [store] = await db.select().from(storesTable).where(eq(storesTable.domain, normalizedDomain));
@@ -103,13 +130,18 @@ router.post("/shopify/webhooks/products-update", async (req, res): Promise<void>
         .returning({ id: productsTable.id });
 
       if (updated.length > 0) {
-        await db.insert(activityTable).values({
-          id: generateId(),
-          storeId: store.id,
-          type: "product_updated",
-          message: `Product synced via webhook: ${payload.title}`,
-          metadata: { shopifyProductId, source: "webhook" },
-        });
+        // Dedup activity log: Shopify retries webhooks within 60s on timeout;
+        // the DB update is idempotent but we don't want duplicate activity entries.
+        const dedupKey = `${store.id}:${shopifyProductId}:product_updated`;
+        if (!isDuplicateWebhook(dedupKey)) {
+          await db.insert(activityTable).values({
+            id: generateId(),
+            storeId: store.id,
+            type: "product_updated",
+            message: `Product synced via webhook: ${payload.title}`,
+            metadata: { shopifyProductId, source: "webhook" },
+          });
+        }
       }
     } catch {
       // Non-fatal — webhook processing errors are not retriable here
@@ -120,25 +152,12 @@ router.post("/shopify/webhooks/products-update", async (req, res): Promise<void>
 // ─── PRODUCTS_DELETE ──────────────────────────────────────────────────────────
 
 router.post("/shopify/webhooks/products-delete", async (req, res): Promise<void> => {
-  const hmacHeader = req.headers["x-shopify-hmac-sha256"] as string | undefined;
-  const shopDomain = req.headers["x-shopify-shop-domain"] as string | undefined;
-  const secret = process.env.SHOPIFY_API_SECRET ?? "";
-
-  if (!hmacHeader || !shopDomain || !secret) {
-    res.status(401).json({ error: "Unauthorized" });
+  const validation = validateWebhookRequest(req);
+  if (validation.error !== null) {
+    res.status(validation.status).json({ error: validation.error });
     return;
   }
-
-  const rawBody = getRawBody(req);
-  if (!rawBody) {
-    res.status(400).json({ error: "Raw body unavailable" });
-    return;
-  }
-
-  if (!verifyWebhookHmac(rawBody, hmacHeader, secret)) {
-    res.status(401).json({ error: "HMAC verification failed" });
-    return;
-  }
+  const { rawBody, normalizedDomain } = validation;
 
   res.status(200).end();
 
@@ -146,13 +165,6 @@ router.post("/shopify/webhooks/products-delete", async (req, res): Promise<void>
     try {
       const payload = JSON.parse(rawBody.toString()) as { id: number };
       const shopifyProductId = `gid://shopify/Product/${payload.id}`;
-
-      let normalizedDomain: string;
-      try {
-        normalizedDomain = normalizeShopifyDomain(shopDomain);
-      } catch {
-        return;
-      }
 
       const [store] = await db.select().from(storesTable).where(eq(storesTable.domain, normalizedDomain));
       if (!store) return;

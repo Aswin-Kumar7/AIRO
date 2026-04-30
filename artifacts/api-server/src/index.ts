@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startScheduler } from "./lib/scheduler";
-import { db, jobsTable, storesTable } from "@workspace/db";
+import { db, jobsTable, storesTable, pool } from "@workspace/db";
 import { eq, and, lt } from "drizzle-orm";
 
 /**
@@ -52,7 +52,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
+const server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -61,4 +61,39 @@ app.listen(port, (err) => {
   logger.info({ port }, "Server listening");
   void recoverStuckJobs();
   startScheduler();
+});
+
+// ─── Graceful shutdown ─────────────────────────────────────────────────────────
+// Railway/Render send SIGTERM before force-killing the container.
+// We stop accepting new connections, wait for in-flight requests to drain,
+// then close the DB pool so the process exits cleanly (exit code 0).
+function shutdown(signal: string): void {
+  logger.info({ signal }, "Shutdown signal received — draining connections");
+  server.close(async () => {
+    try {
+      await pool.end();
+      logger.info("DB pool closed — exiting cleanly");
+    } catch (err) {
+      logger.error({ err }, "Error closing DB pool during shutdown");
+    }
+    process.exit(0);
+  });
+
+  // Force-kill after 15 s if drain takes too long
+  setTimeout(() => {
+    logger.warn("Graceful shutdown timeout — forcing exit");
+    process.exit(1);
+  }, 15_000).unref();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT",  () => shutdown("SIGINT"));
+
+// Log unhandled rejections instead of crashing silently
+process.on("unhandledRejection", (reason) => {
+  logger.error({ reason }, "Unhandled promise rejection");
+});
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err }, "Uncaught exception — exiting");
+  process.exit(1);
 });

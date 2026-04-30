@@ -19,20 +19,38 @@ import { DEMO_STORE_ID } from "../lib/demo";
 
 const router: IRouter = Router();
 
-// Globally enforce H-3: per-user store isolation at the query level
+// Globally enforce authentication + per-user store isolation (H-3).
+// app.ts already applies a global requireAuth middleware, so the param handler
+// only needs the ownership SELECT — but still returns 401 for unauthenticated
+// requests (not 404) by checking userId before querying the DB.
+// The verified store is attached to res.locals.ownedStore so route handlers can
+// read it directly without a second SELECT — halving DB round-trips per request.
 router.param("storeId", async (req, res, next, storeId) => {
   if (!storeId || storeId === "new" || storeId === "bulk-apply") return next();
+
+  // Authenticate first — emit 401 before attempting any DB lookup
+  const userId = req.session?.userId;
+  if (!userId && storeId !== DEMO_STORE_ID) {
+    res.status(401).json({ error: "Not authenticated" });
+    return;
+  }
+  res.locals.userId = userId;
+
   if (storeId === DEMO_STORE_ID) return next();
-  
+
   try {
-    const [store] = await db.select().from(storesTable)
-      .where(and(eq(storesTable.id, storeId), eq(storesTable.userId, req.session?.userId ?? "")));
-    
+    const [store] = await db
+      .select()
+      .from(storesTable)
+      .where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId!)));
+
     if (!store) {
       res.status(404).json({ error: "Store not found or access denied." });
       return;
     }
-    // We can also attach the verified store to `req.locals` or similar if needed, but the primary goal is authorization.
+
+    // Attach for handler reuse — avoids a second getOwnedStore() SELECT in every handler
+    res.locals.ownedStore = store;
     next();
   } catch (err) {
     next(err);

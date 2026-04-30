@@ -216,8 +216,8 @@ async function runScheduledAnalysis(
     })
     .where(eq(scoreSnapshotsTable.id, snapshotId));
 
-  // Send AI Visibility Pulse for weekly schedules (supplementary email with AI-focused framing)
-  if (schedule.frequency === "weekly" && sent && recipients.length > 0) {
+  // Send AI Visibility Pulse for all schedule frequencies (supplementary email with AI-focused framing)
+  if (sent && recipients.length > 0) {
     const topIssues = (finalSummary.prioritizedActionPlan as Array<{ title?: string; severity?: string }> | undefined ?? [])
       .slice(0, 5)
       .map((item) => ({ title: item.title ?? "Unknown issue", severity: item.severity ?? "medium" }));
@@ -250,6 +250,9 @@ export function computeNextRun(schedule: typeof scheduledAnalysesTable.$inferSel
 
   const candidate = new Date(nowInTz);
   candidate.setMinutes(0, 0, 0);
+  // NOTE: despite the column name "hourUtc", this value is treated as the hour in the
+  // store's local timezone (schedule.timezone). The UI captures a local-time hour and
+  // stores it in this column. fromZonedTime() below converts back to UTC for DB storage.
   candidate.setHours(schedule.hourUtc);
 
   if (schedule.frequency === "daily") {

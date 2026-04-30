@@ -1,4 +1,4 @@
-import { getCsrfToken } from "./csrf-service";
+import { requestJson } from "./http";
 export type ActionPlanItem = {
   gapId: string;
   gap: string;
@@ -32,28 +32,6 @@ export type StorePerceptionResponse = {
   updatedAt: string | null;
 };
 
-async function requestJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
-  let headers = { ...(init?.headers || {}) };
-  const method = (init?.method || "GET").toUpperCase();
-  if (method !== "GET" && method !== "HEAD") {
-    const csrfToken = await getCsrfToken();
-    headers = { ...headers, "x-csrf-token": csrfToken };
-  }
-  const response = await fetch(input, { credentials: "include", ...init, headers });
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`;
-    try {
-      const data = (await response.json()) as { error?: string };
-      if (data.error) {
-        message = data.error;
-      }
-    } catch {
-      // Ignore JSON parsing failures and use the default status-based message.
-    }
-    throw new Error(message);
-  }
-  return response.json() as Promise<T>;
-}
 
 export function getStorePerception(storeId: string): Promise<StorePerceptionResponse> {
   return requestJson<StorePerceptionResponse>(`/api/stores/${storeId}/perception`);

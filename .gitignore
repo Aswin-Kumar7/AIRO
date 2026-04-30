@@ -11,6 +11,10 @@ out-tsc
 # dependencies
 node_modules
 
+new_functions.py
+generate_docs.js
+unpacked_prod/
+
 # IDEs and editors
 /.idea
 .project
@@ -41,3 +45,4 @@ testem.log
 .DS_Store
 Thumbs.db
 .env.*
+!.env.example

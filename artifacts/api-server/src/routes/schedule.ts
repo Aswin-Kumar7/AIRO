@@ -1,16 +1,15 @@
 import { Router, type IRouter } from "express";
 import { eq, and, desc } from "drizzle-orm";
-import { db, storesTable, scheduledAnalysesTable, scoreSnapshotsTable } from "@workspace/db";
+import { db, scheduledAnalysesTable, scoreSnapshotsTable } from "@workspace/db";
 import { computeNextRun } from "../lib/scheduler";
 import { sendScheduledReport } from "../lib/email";
-import { generateId } from "../lib/id";
 import { getOwnedStore } from "../lib/owned-store";
 
 const router: IRouter = Router();
 
 // GET /stores/:storeId/schedule
 router.get("/stores/:storeId/schedule", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -23,7 +22,7 @@ router.get("/stores/:storeId/schedule", async (req, res): Promise<void> => {
 
 // PUT /stores/:storeId/schedule  — upsert full schedule config
 router.put("/stores/:storeId/schedule", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -76,7 +75,7 @@ router.put("/stores/:storeId/schedule", async (req, res): Promise<void> => {
 
 // PATCH /stores/:storeId/schedule/toggle  — enable/disable without touching other settings
 router.patch("/stores/:storeId/schedule/toggle", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -100,7 +99,7 @@ router.patch("/stores/:storeId/schedule/toggle", async (req, res): Promise<void>
 
 // PATCH /stores/:storeId/schedule/pause  — soft pause (keeps schedule config)
 router.patch("/stores/:storeId/schedule/pause", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -124,7 +123,7 @@ router.patch("/stores/:storeId/schedule/pause", async (req, res): Promise<void> 
 
 // DELETE /stores/:storeId/schedule
 router.delete("/stores/:storeId/schedule", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -136,7 +135,7 @@ router.delete("/stores/:storeId/schedule", async (req, res): Promise<void> => {
 
 // GET /stores/:storeId/snapshots  — paginated run history
 router.get("/stores/:storeId/snapshots", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -158,8 +157,8 @@ router.get("/stores/:storeId/snapshots", async (req, res): Promise<void> => {
 
 // GET /stores/:storeId/snapshots/:snapshotId
 router.get("/stores/:storeId/snapshots/:snapshotId", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const snapshotId = Array.isArray(req.params.snapshotId) ? req.params.snapshotId[0] : req.params.snapshotId;
+  const storeId = req.params.storeId as string;
+  const snapshotId = req.params.snapshotId;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -176,7 +175,7 @@ router.get("/stores/:storeId/snapshots/:snapshotId", async (req, res): Promise<v
 
 // POST /stores/:storeId/schedule/test-email  — send a test report right now
 router.post("/stores/:storeId/schedule/test-email", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -224,7 +223,7 @@ router.post("/stores/:storeId/schedule/test-email", async (req, res): Promise<vo
 
 // GET /stores/:storeId/snapshots/export.csv  — Google Sheets-compatible CSV export
 router.get("/stores/:storeId/snapshots/export.csv", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);

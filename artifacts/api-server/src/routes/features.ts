@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, storesTable, productsTable, storeSummariesTable, perceptionReportsTable } from "@workspace/db";
+import { db, productsTable, storeSummariesTable, perceptionReportsTable } from "@workspace/db";
 import {
   runQuerySimulation,
   analyzeTopicalAuthority,
@@ -18,16 +18,29 @@ import { getOwnedStore } from "../lib/owned-store";
 const router: IRouter = Router();
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
+// ─── Per-store generation lock (3.5) ─────────────────────────────────────────
+// Prevents concurrent GET requests from racing to generate + write cache simultaneously.
+// Key = `${storeId}:${endpoint}`. Cleared when the promise settles.
+const generationLocks = new Map<string, Promise<unknown>>();
+
+function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = generationLocks.get(key);
+  if (existing) return existing as Promise<T>;
+  const p = fn().finally(() => generationLocks.delete(key));
+  generationLocks.set(key, p);
+  return p;
+}
+
 // ─── LLMs.txt Generator ───────────────────────────────────────────────────────
 
 router.get("/stores/:storeId/llms-txt", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  const store = await getOwnedStore(storeId, userId);
   if (!store) { res.status(403).json({ error: "Forbidden: Store does not belong to user" }); return; }
 
   const products = await db.select().from(productsTable).where(eq(productsTable.storeId, storeId));
@@ -52,7 +65,7 @@ router.get("/stores/:storeId/llms-txt", async (req, res): Promise<void> => {
 // ─── Live AI Query Simulation ─────────────────────────────────────────────────
 
 router.get("/stores/:storeId/query-simulation", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -79,31 +92,34 @@ router.get("/stores/:storeId/query-simulation", async (req, res): Promise<void> 
   }
 
   req.log.info({ storeId, productCount: products.length }, "Running query simulation");
-  const results = await runQuerySimulation(
-    store.name ?? store.domain,
-    store.desiredPositioning ?? "",
-    products.map(p => ({
-      id: p.id,
-      title: p.title,
-      description: p.description,
-      productType: p.productType,
-      tags: p.tags,
-      price: p.price,
-    }))
-  );
+  const { results, generatedAt } = await withLock(`${storeId}:query-simulation`, async () => {
+    const r = await runQuerySimulation(
+      store.name ?? store.domain,
+      store.desiredPositioning ?? "",
+      products.map(p => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        productType: p.productType,
+        tags: p.tags,
+        price: p.price,
+      }))
+    );
+    const ts = new Date();
+    await db.update(storeSummariesTable)
+      .set({ querySimulationResults: r, querySimulationCachedAt: ts, queryCatalogHash: currentHash })
+      .where(eq(storeSummariesTable.storeId, storeId));
+    return { results: r, generatedAt: ts.toISOString() };
+  });
 
-  await db.update(storeSummariesTable)
-    .set({ querySimulationResults: results, querySimulationCachedAt: new Date(), queryCatalogHash: currentHash })
-    .where(eq(storeSummariesTable.storeId, storeId));
-
-  const successCount = results.filter(r => r.wouldRecommend).length;
-  res.json({ storeId, results, successCount, totalQueries: results.length, generatedAt: new Date().toISOString(), cached: false });
+  const successCount = results.filter((r: { wouldRecommend: boolean }) => r.wouldRecommend).length;
+  res.json({ storeId, results, successCount, totalQueries: results.length, generatedAt, cached: false });
 });
 
 // ─── Topical Authority ────────────────────────────────────────────────────────
 
 router.get("/stores/:storeId/topical-authority", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -130,31 +146,34 @@ router.get("/stores/:storeId/topical-authority", async (req, res): Promise<void>
   }
 
   req.log.info({ storeId, productCount: products.length }, "Analyzing topical authority");
-  const clusters = await analyzeTopicalAuthority(
-    products.map(p => ({
-      id: p.id,
-      title: p.title,
-      description: p.description,
-      productType: p.productType,
-      tags: p.tags,
-    }))
-  );
-
-  await db.update(storeSummariesTable)
-    .set({ topicalAuthorityResults: clusters, topicalAuthorityCachedAt: new Date(), topicalCatalogHash: topicalHash })
-    .where(eq(storeSummariesTable.storeId, storeId));
+  const { clusters, generatedAt: taGeneratedAt } = await withLock(`${storeId}:topical-authority`, async () => {
+    const c = await analyzeTopicalAuthority(
+      products.map(p => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        productType: p.productType,
+        tags: p.tags,
+      }))
+    );
+    const ts = new Date();
+    await db.update(storeSummariesTable)
+      .set({ topicalAuthorityResults: c, topicalAuthorityCachedAt: ts, topicalCatalogHash: topicalHash })
+      .where(eq(storeSummariesTable.storeId, storeId));
+    return { clusters: c, generatedAt: ts.toISOString() };
+  });
 
   const avgCoverage = clusters.length
-    ? Math.round(clusters.reduce((s, c) => s + c.coverageScore, 0) / clusters.length)
+    ? Math.round((clusters as Array<{ coverageScore: number }>).reduce((s, c) => s + c.coverageScore, 0) / clusters.length)
     : 0;
 
-  res.json({ storeId, clusters, totalProducts: products.length, averageCoverageScore: avgCoverage, generatedAt: new Date().toISOString(), cached: false });
+  res.json({ storeId, clusters, totalProducts: products.length, averageCoverageScore: avgCoverage, generatedAt: taGeneratedAt, cached: false });
 });
 
 // ─── Internal Link Audit ──────────────────────────────────────────────────────
 
 router.get("/stores/:storeId/internal-links", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -179,27 +198,30 @@ router.get("/stores/:storeId/internal-links", async (req, res): Promise<void> =>
   }
 
   req.log.info({ storeId, productCount: products.length }, "Analyzing internal links");
-  const suggestions = await analyzeInternalLinks(
-    products.map(p => ({
-      id: p.id,
-      title: p.title,
-      description: p.description,
-      productType: p.productType,
-      tags: p.tags,
-    }))
-  );
+  const { suggestions, generatedAt: linksGeneratedAt } = await withLock(`${storeId}:internal-links`, async () => {
+    const s = await analyzeInternalLinks(
+      products.map(p => ({
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        productType: p.productType,
+        tags: p.tags,
+      }))
+    );
+    const ts = new Date();
+    await db.update(storeSummariesTable)
+      .set({ internalLinksResults: s, internalLinksCachedAt: ts, linksCatalogHash: linksHash })
+      .where(eq(storeSummariesTable.storeId, storeId));
+    return { suggestions: s, generatedAt: ts.toISOString() };
+  });
 
-  await db.update(storeSummariesTable)
-    .set({ internalLinksResults: suggestions, internalLinksCachedAt: new Date(), linksCatalogHash: linksHash })
-    .where(eq(storeSummariesTable.storeId, storeId));
-
-  res.json({ storeId, suggestions, totalProducts: products.length, generatedAt: new Date().toISOString(), cached: false });
+  res.json({ storeId, suggestions, totalProducts: products.length, generatedAt: linksGeneratedAt, cached: false });
 });
 
 // ─── FAQ Schema Generator ─────────────────────────────────────────────────────
 
 router.get("/stores/:storeId/faq-schema", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -225,8 +247,8 @@ router.get("/stores/:storeId/faq-schema", async (req, res): Promise<void> => {
 // ─── Product AI Q&A Test ──────────────────────────────────────────────────────
 
 router.get("/stores/:storeId/products/:productId/ai-qa", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
+  const storeId = req.params.storeId as string;
+  const productId = req.params.productId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);
@@ -235,9 +257,9 @@ router.get("/stores/:storeId/products/:productId/ai-qa", async (req, res): Promi
   const [product] = await db
     .select()
     .from(productsTable)
-    .where(eq(productsTable.id, productId));
+    .where(and(eq(productsTable.id, productId), eq(productsTable.storeId, storeId)));
 
-  if (!product || product.storeId !== storeId) {
+  if (!product) {
     res.status(404).json({ error: "Product not found" });
     return;
   }
@@ -291,7 +313,7 @@ router.get("/stores/:storeId/products/:productId/ai-qa", async (req, res): Promi
 // POST /stores/:storeId/llms-txt/deploy
 // Generates the llms.txt content then creates/updates /pages/llms on the store.
 router.post("/stores/:storeId/llms-txt/deploy", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);

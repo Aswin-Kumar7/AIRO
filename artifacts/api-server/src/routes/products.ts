@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, productsTable, gapsTable, fixesTable, storesTable } from "@workspace/db";
+import { db, productsTable, gapsTable, fixesTable } from "@workspace/db";
 import { generateFix } from "../lib/ai-analyzer";
 import { generateAnswerFirstStructure } from "../lib/ai-features";
 import { perceptionReportsTable } from "@workspace/db";
@@ -12,13 +12,13 @@ import { getOwnedStore } from "../lib/owned-store";
 const router: IRouter = Router();
 
 router.post("/stores/:storeId/fetch-products", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const [store] = await db.select().from(storesTable).where(and(eq(storesTable.id, storeId), eq(storesTable.userId, userId)));
+  const store = await getOwnedStore(storeId, userId);
   if (!store) {
     res.status(403).json({ error: "Forbidden: Store does not belong to user" });
     return;
@@ -36,7 +36,7 @@ router.post("/stores/:storeId/fetch-products", async (req, res): Promise<void> =
 });
 
 router.get("/stores/:storeId/products", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
+  const storeId = req.params.storeId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -73,8 +73,8 @@ router.get("/stores/:storeId/products", async (req, res): Promise<void> => {
 });
 
 router.get("/stores/:storeId/products/:productId", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
+  const storeId = req.params.storeId as string;
+  const productId = req.params.productId as string;
   const userId = req.session?.userId;
   if (!userId) {
     res.status(401).json({ error: "Not authenticated" });
@@ -164,8 +164,8 @@ router.get("/stores/:storeId/products/:productId", async (req, res): Promise<voi
 });
 
 router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
+  const storeId = req.params.storeId as string;
+  const productId = req.params.productId as string;
   const { type } = req.body as { type?: string };
   const userId = req.session?.userId;
   if (!userId) {
@@ -288,8 +288,8 @@ router.post("/stores/:storeId/products/:productId/generate-fix", async (req, res
 // ─── Upgrade 4: Answer-first structure generator ───────────────────────────────
 
 router.get("/stores/:storeId/products/:productId/answer-first", async (req, res): Promise<void> => {
-  const storeId = Array.isArray(req.params.storeId) ? req.params.storeId[0] : req.params.storeId;
-  const productId = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
+  const storeId = req.params.storeId as string;
+  const productId = req.params.productId as string;
   const userId = req.session?.userId;
   if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
   const store = await getOwnedStore(storeId, userId);

@@ -110,7 +110,6 @@ function detectIsEnglish(text: string): boolean {
   return nonLatinCount / wordChars.length <= 0.2;
 }
 
-const VOICE_FILLER_PREFIXES = /^(\d{3,}|[A-Z]{2,}\d+|[A-Z0-9]{6,})\b/;
 const CONVERSATIONAL_TERMS = [
   "you ", "your ", "you'll ", "you're ", "you've ",
   "we ", "our ", "we've ", "discover", "meet the", "introducing",
@@ -122,7 +121,6 @@ const MODEL_NUMBER_PATTERN = /^[A-Z0-9\-]{4,}(?:\s|$)/;
 function analyzeTitle(title: string, violations: RuleViolation[]): number {
   let score = 100;
   const words = wordCount(title);
-  const lower = title.toLowerCase();
 
   if (words < 3) {
     violations.push({
@@ -498,7 +496,7 @@ function analyzeVoiceReadiness(title: string, description: string | null, violat
 
 // ─── Comparison readiness rules ───────────────────────────────────────────────
 
-function analyzeComparisonReadiness(description: string | null, tags: string[], violations: RuleViolation[]): void {
+function analyzeComparisonReadiness(description: string | null, _tags: string[], violations: RuleViolation[]): void {
   const plain = stripHtml(description);
   if (!plain || wordCount(plain) < 30) return; // already flagged by DESC_TOO_SHORT
 

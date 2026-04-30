@@ -10,7 +10,6 @@ import {
   productsTable,
   gapsTable,
   fixesTable,
-  activityTable,
   storeSummariesTable,
   consistencyReportsTable,
   perceptionReportsTable,
@@ -25,6 +24,7 @@ import { runTechnicalSeoAudit } from "./technical-seo";
 import { getAiFallbackStats } from "./ai-client";
 import { logger } from "./logger";
 import { generateId } from "./id";
+import { percentile, buildProductRow } from "./math-utils";
 
 /**
  * Deterministic gap ID — same store+product+rule always produces the same ID.
@@ -39,6 +39,11 @@ function deterministicGapId(storeId: string, productId: string | null, ruleId: s
   const scopeShort = scope.slice(-8);
   return `gap_${storeShort}_${scopeShort}_${rule}`;
 }
+
+/** Aspirational benchmark scores used when real peer data is insufficient (< MIN_SAMPLE stores). */
+export const ASPIRATIONAL_BENCHMARK = {
+  clarity: 82, completeness: 78, trust: 75, tags: 72, overall: 79, consistency: 80, policy: 85,
+} as const;
 
 export interface PipelineResult {
   overallScore: number;
@@ -55,11 +60,7 @@ export interface PipelineResult {
   pendingFixes: number;
 }
 
-function percentile(sortedValues: number[], p: number): number {
-  if (sortedValues.length === 0) return 0;
-  const idx = Math.ceil((p / 100) * sortedValues.length) - 1;
-  return sortedValues[Math.max(0, Math.min(idx, sortedValues.length - 1))]!;
-}
+
 
 export async function executeAnalysisPipeline(
   store: typeof storesTable.$inferSelect,
@@ -84,6 +85,8 @@ export async function executeAnalysisPipeline(
   let oldGapIds: string[] = [];
   let oldFixIds: string[] = [];
   let oldProductIds: string[] = [];
+  // Product IDs that had at least one applied fix — used to precisely reset hasAppliedFixes
+  let appliedFixProductIds = new Set<string>();
   let prevScoreMap = new Map<string, { overallScore: number; clarityScore: number; completenessScore: number; trustScore: number; tagScore: number; issueCount: number }>();
   // Track IDs of all gaps upserted in this run — used to prune stale gaps at the end
   const upsertedGapIds = new Set<string>();
@@ -131,33 +134,22 @@ export async function executeAnalysisPipeline(
 
     const [preGaps, preFixes, preProducts, preProductScores] = await Promise.all([
       db.select({ id: gapsTable.id }).from(gapsTable).where(eq(gapsTable.storeId, storeId)),
-      db.select({ id: fixesTable.id }).from(fixesTable).where(eq(fixesTable.storeId, storeId)),
+      db.select({ id: fixesTable.id, status: fixesTable.status, productId: fixesTable.productId }).from(fixesTable).where(eq(fixesTable.storeId, storeId)),
       db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.storeId, storeId)),
       db.select({ shopifyProductId: productsTable.shopifyProductId, overallScore: productsTable.overallScore, clarityScore: productsTable.clarityScore, completenessScore: productsTable.completenessScore, trustScore: productsTable.trustScore, tagScore: productsTable.tagScore, issueCount: productsTable.issueCount }).from(productsTable).where(eq(productsTable.storeId, storeId)),
     ]);
     oldGapIds = preGaps.map((g) => g.id);
     oldFixIds = preFixes.map((f) => f.id);
     oldProductIds = preProducts.map((p) => p.id);
+    // Track which products had applied fixes so we only reset those on re-analysis
+    appliedFixProductIds = new Set(
+      preFixes.filter((f) => f.status === "applied" && f.productId != null).map((f) => f.productId as string),
+    );
     prevScoreMap = new Map(preProductScores.map((p) => [p.shopifyProductId, p]));
 
     if (snapshot.products.length > 0) {
       await db.insert(productsTable).values(
-        snapshot.products.map((p) => ({
-          id: generateId(),
-          storeId,
-          shopifyProductId: p.shopifyId,
-          title: p.title,
-          description: p.description,
-          productType: p.productType,
-          vendor: p.vendor,
-          tags: p.tags,
-          collections: p.collections,
-          imageUrl: p.imageUrl,
-          price: p.price,
-          reviewCount: p.reviewCount,
-          reviewRating: p.reviewRating,
-          hasStructuredData: p.hasStructuredData,
-        })),
+        snapshot.products.map((p) => buildProductRow(storeId, p)),
       );
     }
 
@@ -287,7 +279,10 @@ export async function executeAnalysisPipeline(
       scoringSource: analysis.scoringSource,
       imageQualityScore: imageQuality.score,
       imageQualityIssues: imageQuality.issues,
-      ...(qaResult ? { aiQaResults: qaResult, aiQaCachedAt: new Date() } : {}),
+      // aiQaResults is NOT written here — the on-demand /ai-qa route owns that column.
+      // Pipeline's qaResult is only used for perception narrative quality; clear stale cache
+      // so the features route re-generates with the correct Array<{canAnswer}> shape.
+      ...(qaResult ? { aiQaResults: null, aiQaCachedAt: null } : {}),
       analyzedAt: new Date(),
     }).where(eq(productsTable.id, product.id));
 
@@ -390,11 +385,14 @@ export async function executeAnalysisPipeline(
   if (snapshot) {
     if (oldFixIds.length > 0) {
       await db.delete(fixesTable).where(inArray(fixesTable.id, oldFixIds));
-      // Reset hasAppliedFixes on all products — fix records were deleted.
-      // It will be re-set as users re-apply fixes on the new analysis cycle.
-      await db.update(productsTable)
-        .set({ hasAppliedFixes: false })
-        .where(eq(productsTable.storeId, storeId));
+      // Only reset hasAppliedFixes on products that actually had applied fixes deleted.
+      // Products with only pending fixes were never "applied", so their flag stays false
+      // and the reset is a no-op for them anyway — but this prevents accidental clears.
+      if (appliedFixProductIds.size > 0) {
+        await db.update(productsTable)
+          .set({ hasAppliedFixes: false })
+          .where(and(eq(productsTable.storeId, storeId), inArray(productsTable.id, [...appliedFixProductIds])));
+      }
     }
     // Delete stale gaps: those that existed before this run AND were NOT re-upserted
     // AND are not fixed (preserve fixed gaps for history even if the rule no longer fires)
@@ -421,16 +419,14 @@ export async function executeAnalysisPipeline(
     analyzeStoreConsistency(products.map((p) => ({ title: p.title, description: p.description, tags: p.tags }))),
   );
 
-  await db.insert(consistencyReportsTable).values({
-    storeId,
+  const consistencyFields = {
     overallConsistencyScore: consistency.overallConsistencyScore,
     issues: consistency.issues,
     suggestedStructure: consistency.suggestedStructure,
     analyzedAt: new Date(),
-  }).onConflictDoUpdate({
-    target: consistencyReportsTable.storeId,
-    set: { overallConsistencyScore: consistency.overallConsistencyScore, issues: consistency.issues, suggestedStructure: consistency.suggestedStructure, analyzedAt: new Date() },
-  });
+  };
+  await db.insert(consistencyReportsTable).values({ storeId, ...consistencyFields })
+    .onConflictDoUpdate({ target: consistencyReportsTable.storeId, set: consistencyFields });
 
   const allGaps = await db.select().from(gapsTable).where(eq(gapsTable.storeId, storeId));
   const productTitleMap = new Map(products.map((p) => [p.id, p.title]));
@@ -439,8 +435,9 @@ export async function executeAnalysisPipeline(
   );
 
   const perceptionInputProducts = (snapshot?.products ?? products.map((p) => ({ shopifyId: p.shopifyProductId, title: p.title, description: p.description, productType: p.productType, vendor: p.vendor, tags: p.tags, collections: p.collections, imageUrl: p.imageUrl, price: p.price, reviewCount: p.reviewCount, reviewRating: p.reviewRating, hasStructuredData: p.hasStructuredData })));
-  // Build per-product overallScore map so perception gets actual scores for richer narrative
-  const productScoreMap = new Map(products.map((p) => [p.id, p.overallScore]));
+  // Build per-product overallScore map keyed by shopifyProductId so perception correctly
+  // joins to perceptionInputProducts (which may come from snapshot.products, not DB products).
+  const productScoreMap = new Map(products.map((p) => [p.shopifyProductId, p.overallScore]));
   const perceptionTopGaps = allGaps
     .filter((g) => g.severity === "high" || g.severity === "medium")
     .slice(0, 12)
@@ -450,7 +447,7 @@ export async function executeAnalysisPipeline(
       storeName: store.name,
       domain: store.domain,
       desiredPositioning: store.desiredPositioning ?? null,
-      products: perceptionInputProducts.map((p, i) => ({
+      products: perceptionInputProducts.map((p) => ({
         title: p.title,
         description: p.description,
         tags: p.tags,
@@ -460,7 +457,9 @@ export async function executeAnalysisPipeline(
         hasStructuredData: p.hasStructuredData,
         vendor: p.vendor,
         price: p.price,
-        overallScore: productScoreMap.get(products[i]?.id ?? "") ?? null,
+        // Use shopifyId to join — avoids positional misalignment when snapshot ordering
+        // differs from DB products ordering (especially with >250 products).
+        overallScore: productScoreMap.get(p.shopifyId) ?? null,
       })),
       policies: snapshot?.policies ?? { refund: !allGaps.some((g) => /return policy|refund/i.test(g.title)), shipping: !allGaps.some((g) => /shipping policy/i.test(g.title)), privacy: false, terms: false },
       faqPage: snapshot?.faqPage ?? null,
@@ -469,26 +468,51 @@ export async function executeAnalysisPipeline(
   );
 
   const storedPolicyBodies = snapshot?.policyBodies ? { refund: snapshot.policyBodies.refund, shipping: snapshot.policyBodies.shipping, privacy: snapshot.policyBodies.privacy, terms: snapshot.policyBodies.terms } : null;
-  await db.insert(perceptionReportsTable).values({
-    storeId, agentNarrative: perception.agentNarrative, unansweredQuestions: perception.unansweredQuestions, ambiguities: perception.ambiguities, perceivedStrengths: perception.perceivedStrengths, faqPageFound: Boolean(snapshot?.faqPage), faqPageTitle: snapshot?.faqPage?.title ?? null, faqQuestionCount: perception.faqQuestionCount, faqGaps: perception.faqGaps, policyBodies: storedPolicyBodies, updatedAt: new Date(),
-  }).onConflictDoUpdate({
-    target: perceptionReportsTable.storeId,
-    set: { agentNarrative: perception.agentNarrative, unansweredQuestions: perception.unansweredQuestions, ambiguities: perception.ambiguities, perceivedStrengths: perception.perceivedStrengths, faqPageFound: Boolean(snapshot?.faqPage), faqPageTitle: snapshot?.faqPage?.title ?? null, faqQuestionCount: perception.faqQuestionCount, faqGaps: perception.faqGaps, policyBodies: storedPolicyBodies, updatedAt: new Date() },
-  });
+  const perceptionFields = {
+    agentNarrative: perception.agentNarrative,
+    unansweredQuestions: perception.unansweredQuestions,
+    ambiguities: perception.ambiguities,
+    perceivedStrengths: perception.perceivedStrengths,
+    faqPageFound: Boolean(snapshot?.faqPage),
+    faqPageTitle: snapshot?.faqPage?.title ?? null,
+    faqQuestionCount: perception.faqQuestionCount,
+    faqGaps: perception.faqGaps,
+    policyBodies: storedPolicyBodies,
+    updatedAt: new Date(),
+  };
+  await db.insert(perceptionReportsTable).values({ storeId, ...perceptionFields })
+    .onConflictDoUpdate({ target: perceptionReportsTable.storeId, set: perceptionFields });
 
   const criticalIssues = allGaps.filter((g) => g.severity === "high").length;
   const mediumIssues = allGaps.filter((g) => g.severity === "medium").length;
   const lowIssues = allGaps.filter((g) => g.severity === "low").length;
   const pendingFixes = allFixes.length;
 
-  // appliedFixes: old fixes are deleted on re-analysis, so the real applied count is always 0 post-analysis.
-  // Fixes.ts increments this again as fixes are applied.
-  await db.insert(storeSummariesTable).values({
-    storeId, overallScore: avgOverall, clarityScore: avgClarity, completenessScore: avgCompleteness, trustScore: avgTrust, tagScore: avgTags, consistencyScore: consistency.overallConsistencyScore, policyScore, totalProducts: productCount, analyzedProducts: productCount, criticalIssues, mediumIssues, lowIssues, pendingFixes, appliedFixes: 0, prioritizedActionPlan, updatedAt: new Date(),
-  }).onConflictDoUpdate({
-    target: storeSummariesTable.storeId,
-    set: { overallScore: avgOverall, clarityScore: avgClarity, completenessScore: avgCompleteness, trustScore: avgTrust, tagScore: avgTags, consistencyScore: consistency.overallConsistencyScore, policyScore, totalProducts: productCount, analyzedProducts: productCount, criticalIssues, mediumIssues, lowIssues, pendingFixes, appliedFixes: 0, prioritizedActionPlan, updatedAt: new Date() },
-  });
+  // Single aggregation result object — used by the return, storesTable update, and summaryFields.
+  // appliedFixes: old fixes are deleted on re-analysis, always 0 post-analysis; fixes.ts increments later.
+  const pipelineResult = {
+    overallScore: avgOverall,
+    clarityScore: avgClarity,
+    completenessScore: avgCompleteness,
+    trustScore: avgTrust,
+    tagScore: avgTags,
+    consistencyScore: consistency.overallConsistencyScore,
+    policyScore,
+    totalProducts: productCount,
+    criticalIssues,
+    mediumIssues,
+    lowIssues,
+    pendingFixes,
+  };
+  const summaryFields = {
+    ...pipelineResult,
+    analyzedProducts: productCount,
+    appliedFixes: 0,
+    prioritizedActionPlan,
+    updatedAt: new Date(),
+  };
+  await db.insert(storeSummariesTable).values({ storeId, ...summaryFields })
+    .onConflictDoUpdate({ target: storeSummariesTable.storeId, set: summaryFields });
 
   // CB-8: Precompute benchmark scores
   try {
@@ -501,7 +525,7 @@ export async function executeAnalysisPipeline(
       bScores = { clarity: Math.round(percentile(sortedVals("clarityScore"), 90)), completeness: Math.round(percentile(sortedVals("completenessScore"), 90)), trust: Math.round(percentile(sortedVals("trustScore"), 90)), tags: Math.round(percentile(sortedVals("tagScore"), 90)), overall: Math.round(percentile(sortedVals("overallScore"), 90)), consistency: Math.round(percentile(sortedVals("consistencyScore"), 90)), policy: Math.round(percentile(sortedVals("policyScore"), 90)) };
       bSource = "real-p90";
     } else {
-      bScores = { clarity: 82, completeness: 78, trust: 75, tags: 72, overall: 79, consistency: 80, policy: 85 };
+      bScores = { ...ASPIRATIONAL_BENCHMARK };
       bSource = "aspirational";
     }
     await db.update(storeSummariesTable).set({ benchmarkScores: bScores, benchmarkSource: bSource, benchmarkSampleSize: peerSummaries.length, benchmarkComputedAt: new Date() }).where(eq(storeSummariesTable.storeId, storeId));
@@ -509,10 +533,10 @@ export async function executeAnalysisPipeline(
     logger.warn({ benchmarkErr, storeId, correlationId }, "Benchmark precomputation failed");
   }
 
-  await db.update(storesTable).set({ status: "analyzed", lastAnalyzed: new Date(), overallScore: avgOverall, productCount }).where(eq(storesTable.id, storeId));
+  await db.update(storesTable).set({ status: "analyzed", lastAnalyzed: new Date(), overallScore: pipelineResult.overallScore, productCount }).where(eq(storesTable.id, storeId));
 
   const totalMs = Math.round(performance.now() - analysisStart);
   logger.info({ storeId, correlationId, totalDurationMs: totalMs, stepTimings, aiFallbackStats: getAiFallbackStats(), productCount }, "Analysis pipeline completed");
 
-  return { overallScore: avgOverall, clarityScore: avgClarity, completenessScore: avgCompleteness, trustScore: avgTrust, tagScore: avgTags, consistencyScore: consistency.overallConsistencyScore, policyScore, totalProducts: productCount, criticalIssues, mediumIssues, lowIssues, pendingFixes };
+  return pipelineResult;
 }

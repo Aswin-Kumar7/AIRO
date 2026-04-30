@@ -6,31 +6,17 @@ import { useStore } from "@/context/store-context";
 import { useToast } from "@/hooks/use-toast";
 import {
   motion, AnimatePresence, useInView, useScroll, useTransform,
-  type Variants,
 } from "framer-motion";
 import {
-  ArrowRight, BarChart3, Zap, Cable, Shield, Brain, TrendingUp, Linkedin,
-  ChevronRight, Target, GitBranch, Package, Layers, Menu, X,
-  Activity, AlertTriangle, ClockFading, Sparkles, Bot, ChevronDown, Check, Gift,
+  ArrowRight, BarChart3, Zap, Cable, Brain, TrendingUp, Linkedin,
+  Target, GitBranch, Package, Layers, Menu, X,
+  Activity, AlertTriangle, ClockFading, Sparkles, Check, Gift,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const API_BASE = `${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/api`;
 
 // ─── Animation Variants ───────────────────────────────────────────────────────
-
-const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 24 },
-  visible: (i = 0) => ({
-    opacity: 1, y: 0,
-    transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1], delay: i * 0.08 },
-  }),
-};
-
-const stagger: Variants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.05 } },
-};
 
 // ─── Count-Up Hook ────────────────────────────────────────────────────────────
 
@@ -501,9 +487,6 @@ function FeatureCard({ icon: Icon, title, description }: typeof FEATURES[0]) {
 }
 
 function Features() {
-  const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref as React.RefObject<Element>, { once: true, margin: "-80px" });
-
   return (
     <section id="features" className="py-32 bg-[#fafafa]">
       <div className="max-w-6xl mx-auto px-6">
@@ -527,7 +510,6 @@ function Features() {
         </motion.div>
 
         <div
-          ref={ref}
           className="grid md:grid-cols-2 lg:grid-cols-3 gap-6"
         >
           {FEATURES.map((f, i) => (

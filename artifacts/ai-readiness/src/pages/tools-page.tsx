@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useStore } from "@/context/store-context";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { getLlmsTxt, getFaqSchema } from "@/lib/features-api";
 import { getStorePerception } from "@/lib/insights-api";
-import { useToast } from "@/hooks/use-toast";
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 

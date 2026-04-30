@@ -330,7 +330,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
                       href={item.href}
                       label={item.label}
                       icon={item.icon}
-                      isNew={"isNew" in item ? item.isNew : undefined}
+                      isNew={"isNew" in item ? (item.isNew as boolean) : undefined}
                       badge={
                         item.href === "/fixes"
                           ? (summary?.pendingFixes ?? undefined)

@@ -1,10 +1,11 @@
-import { pgTable, text, timestamp, real, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, real, integer, boolean, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { storesTable } from "./stores";
 
 export const productsTable = pgTable("products", {
   id: text("id").primaryKey(),
-  storeId: text("store_id").notNull(),
+  storeId: text("store_id").notNull().references(() => storesTable.id, { onDelete: "cascade" }),
   shopifyProductId: text("shopify_product_id").notNull(),
   title: text("title").notNull(),
   description: text("description"),
@@ -31,11 +32,16 @@ export const productsTable = pgTable("products", {
   // CB-11: AI output provenance — was clarity score from AI, rule-based fallback, or hard fallback?
   scoringSource: text("scoring_source").$type<"ai" | "rule" | "fallback">(),
   suggestedTags: text("suggested_tags").array().notNull().default([]),
+  // aiQaResults is written exclusively by the on-demand /ai-qa route (Array<{canAnswer,question,answer}>).
+  // The analysis pipeline does NOT write this column — it uses a separate qaMap for perception input.
   aiQaResults: jsonb("ai_qa_results"),
   aiQaCachedAt: timestamp("ai_qa_cached_at", { withTimezone: true }),
   analyzedAt: timestamp("analyzed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index("products_store_id_idx").on(t.storeId),
+  index("products_store_analyzed_idx").on(t.storeId, t.analyzedAt),
+]);
 
 export const insertProductSchema = createInsertSchema(productsTable).omit({ createdAt: true });
 export type InsertProduct = z.infer<typeof insertProductSchema>;
