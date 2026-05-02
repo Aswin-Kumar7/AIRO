@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/context/auth-context";
 import { AlertCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, type ComponentType } from "react";
+import { Analytics } from "@vercel/analytics/react";
 
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
@@ -34,7 +35,10 @@ const queryClient = new QueryClient({
   },
 });
 
-function ProtectedRoute({ component: Component, ...props }: { component: ComponentType<any> } & any) {
+function ProtectedRoute({
+  component: Component,
+  ...props
+}: { component: ComponentType<any> } & any) {
   const { user, isLoading } = useAuth();
   const [, navigate] = useLocation();
 
@@ -48,10 +52,12 @@ function ProtectedRoute({ component: Component, ...props }: { component: Compone
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-black gap-4">
         <div className="relative">
-           <div className="w-12 h-12 rounded-2xl border-4 border-slate-100 dark:border-white/5 border-t-emerald-500 animate-spin" />
-           <Zap className="absolute inset-0 m-auto w-5 h-5 text-emerald-500 animate-pulse" />
+          <div className="w-12 h-12 rounded-2xl border-4 border-slate-100 dark:border-white/5 border-t-emerald-500 animate-spin" />
+          <Zap className="absolute inset-0 m-auto w-5 h-5 text-emerald-500 animate-pulse" />
         </div>
-        <p className="text-[13px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest animate-pulse">Initializing Intelligence...</p>
+        <p className="text-[13px] font-bold text-slate-400 dark:text-zinc-500 uppercase tracking-widest animate-pulse">
+          Initializing Intelligence...
+        </p>
       </div>
     );
   }
@@ -61,7 +67,13 @@ function ProtectedRoute({ component: Component, ...props }: { component: Compone
   return <Component {...props} />;
 }
 
-function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetErrorBoundary: () => void }) {
+function ErrorFallback({
+  error,
+  resetErrorBoundary,
+}: {
+  error: Error;
+  resetErrorBoundary: () => void;
+}) {
   const [showDetails, setShowDetails] = useState(false);
 
   return (
@@ -71,30 +83,33 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
           <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-6 border border-red-100/50">
             <AlertCircle className="w-8 h-8 text-red-500" />
           </div>
-          
-          <h2 className="text-[20px] font-bold text-slate-900 tracking-tight mb-2">Unexpected Error</h2>
+
+          <h2 className="text-[20px] font-bold text-slate-900 tracking-tight mb-2">
+            Unexpected Error
+          </h2>
           <p className="text-[14px] text-slate-500 leading-relaxed mb-8">
-            You encountered a technical issue. You can try refreshing or contact support if the issue persists.
+            You encountered a technical issue. You can try refreshing or contact
+            support if the issue persists.
           </p>
 
           <div className="flex flex-col gap-3">
-            <Button 
-              onClick={resetErrorBoundary} 
+            <Button
+              onClick={resetErrorBoundary}
               className="h-11 rounded-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[14px] shadow-sm transition-all"
             >
               Try to Resume
             </Button>
             <div className="flex gap-3">
-              <Button 
-                onClick={() => window.location.reload()} 
-                variant="outline" 
+              <Button
+                onClick={() => window.location.reload()}
+                variant="outline"
                 className="flex-1 h-11 rounded-[10px] border-slate-200 text-slate-600 font-bold text-[13px] hover:bg-slate-50"
               >
                 Reload App
               </Button>
-              <Button 
-                onClick={() => window.location.href = "/"} 
-                variant="outline" 
+              <Button
+                onClick={() => (window.location.href = "/")}
+                variant="outline"
                 className="flex-1 h-11 rounded-[10px] border-slate-200 text-slate-600 font-bold text-[13px] hover:bg-slate-50"
               >
                 Return Home
@@ -104,13 +119,13 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
         </div>
 
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-100">
-          <button 
+          <button
             onClick={() => setShowDetails(!showDetails)}
             className="flex items-center gap-2 text-[11px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors mx-auto"
           >
             {showDetails ? "Hide" : "Show"} Technical Details
           </button>
-          
+
           {showDetails && (
             <div className="mt-4 p-4 bg-slate-900 rounded-[8px] text-left overflow-auto max-h-[200px]">
               <pre className="text-[11px] font-mono text-emerald-400/90 leading-normal">
@@ -128,7 +143,10 @@ function ErrorFallback({ error, resetErrorBoundary }: { error: Error; resetError
 
 function Router() {
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback} onReset={() => queryClient.resetQueries()}>
+    <ErrorBoundary
+      FallbackComponent={ErrorFallback}
+      onReset={() => queryClient.resetQueries()}
+    >
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/dashboard">
@@ -138,7 +156,9 @@ function Router() {
           {() => <ProtectedRoute component={Products} />}
         </Route>
         <Route path="/products/:productId">
-          {(params) => <ProtectedRoute component={ProductDetail} params={params} />}
+          {(params) => (
+            <ProtectedRoute component={ProductDetail} params={params} />
+          )}
         </Route>
         <Route path="/issues">
           {() => <ProtectedRoute component={Issues} />}
@@ -202,6 +222,7 @@ function App() {
           <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
+      <Analytics />
     </ThemeProvider>
   );
 }
